@@ -40,8 +40,10 @@
 ## 使用 Powershell 的坑
 
 - `powershell.exe` 的当前目录是 UNC 路径，dotnet 无法在 UNC 下工作。用 `-File <UNC绝对路径>` 调用脚本，脚本内部用 `$PSScriptRoot` 定位，不要依赖 cwd。
+- 本机 PowerShell 5.1 的 `Start-Process` 会因环境变量 `NO_PROXY`/`no_proxy` 大小写重复键报错（`Item has already been added`）；GUI 进程还会继承 WSL 管道导致调用挂起。启动应用一律用 `scripts/run.ps1`（内部用 `Win32_Process.Create`）。
+- 托盘图标通常位于 Windows 11 的“显示隐藏的图标”溢出面板；验证用 `scripts/tray.ps1`（查图标 rect / 点击）和 `scripts/mouse.ps1`（屏幕坐标点击）。
 - WPF 项目**不要**启用 `UseWindowsForms`：会和 `System.Windows.Application` 名称冲突。托盘用 Win32 `Shell_NotifyIcon` P/Invoke 实现。
-- 脚本文件用 UTF-8 **带 BOM** + CRLF，避免 Windows PowerShell 5.1 中文乱码。
+- 脚本文件用 UTF-8 **带 BOM** + CRLF，避免 Windows PowerShell 5.1 中文乱码；含中文的临时 PowerShell 脚本同样需要 BOM。
 
 ## 提交约定
 

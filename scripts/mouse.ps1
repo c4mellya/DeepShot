@@ -1,0 +1,53 @@
+﻿# Move the mouse and click at absolute screen coordinates (physical pixels).
+# Example: -X 1900 -Y 1120 -Button right
+param(
+    [Parameter(Mandatory=$true)][int]$X,
+    [Parameter(Mandatory=$true)][int]$Y,
+    [ValidateSet('left','right','move')][string]$Button = 'left',
+    [switch]$DoubleClick
+)
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+
+public static class ZeepCutMouse
+{
+    [DllImport("user32.dll")]
+    public static extern bool SetCursorPos(int x, int y);
+
+    [DllImport("user32.dll")]
+    public static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, UIntPtr dwExtraInfo);
+
+    public const uint LEFTDOWN = 0x0002;
+    public const uint LEFTUP = 0x0004;
+    public const uint RIGHTDOWN = 0x0008;
+    public const uint RIGHTUP = 0x0010;
+}
+'@
+
+[ZeepCutMouse]::SetCursorPos($X, $Y) | Out-Null
+Start-Sleep -Milliseconds 150
+
+if ($Button -eq 'move') {
+    Write-Host ("MOVED {0},{1}" -f $X, $Y)
+    exit 0
+}
+
+function Invoke-Click([string]$which) {
+    if ($which -eq 'right') {
+        [ZeepCutMouse]::mouse_event([ZeepCutMouse]::RIGHTDOWN, 0, 0, 0, [UIntPtr]::Zero)
+        Start-Sleep -Milliseconds 60
+        [ZeepCutMouse]::mouse_event([ZeepCutMouse]::RIGHTUP, 0, 0, 0, [UIntPtr]::Zero)
+    } else {
+        [ZeepCutMouse]::mouse_event([ZeepCutMouse]::LEFTDOWN, 0, 0, 0, [UIntPtr]::Zero)
+        Start-Sleep -Milliseconds 60
+        [ZeepCutMouse]::mouse_event([ZeepCutMouse]::LEFTUP, 0, 0, 0, [UIntPtr]::Zero)
+    }
+}
+
+Invoke-Click $Button
+if ($DoubleClick) {
+    Start-Sleep -Milliseconds 80
+    Invoke-Click $Button
+}
+Write-Host ("CLICK {0} at {1},{2}{3}" -f $Button, $X, $Y, $(if ($DoubleClick) { ' (double)' } else { '' }))
