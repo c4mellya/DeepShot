@@ -460,6 +460,9 @@
   **未实测**。
 - 图库窗口没有“删除全部 / 清空历史”入口（PLAN 没要求；T27 的自动清理是另一回事）。
 - 主题（T30）未接：图库颜色写死在 `HistoryUi`，浅色下正常，深色模式下不跟随（符合 T30 之前的状态）。
+- **构建前必须先退出应用**：应用运行时 `scripts/build.ps1` 会报
+  `MSB3021/MSB3027 … ZeepCut.Core.dll is being used by another process`（被 `Zeep Cut (pid)` 锁住），
+  看起来像编译错误其实是文件占用。本轮结尾就踩了一次：`Stop-Process ZeepCut` 后再跑即 0 warning 0 error。
 
 ## 验证证据
 
