@@ -43,8 +43,14 @@ public static class AnnotationDefaults
     /// <summary>最大马赛克强度。</summary>
     public const double MaxMosaicStrength = 1d;
 
-    /// <summary>默认马赛克强度。</summary>
-    public const double DefaultMosaicStrength = 0.75d;
+    /// <summary>
+    /// 默认马赛克强度（1 = 完全像素化）。
+    /// </summary>
+    /// <remarks>
+    /// T17 起默认用 1.0：PLAN 要求马赛克是"真实像素化"，而 0.75 会保留 25% 原像素，
+    /// 细看仍能辨认原文字（削弱打码效果）。强度仍可 0–1 调整，需要"轻打码"时显式设小。
+    /// </remarks>
+    public const double DefaultMosaicStrength = 1d;
 
     /// <summary>钳制粗细到 <see cref="MinThickness"/>–<see cref="MaxThickness"/>。</summary>
     public static int ClampThickness(int value) => Math.Clamp(value, MinThickness, MaxThickness);

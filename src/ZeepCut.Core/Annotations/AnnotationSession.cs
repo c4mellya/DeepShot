@@ -2,7 +2,6 @@ using ZeepCut.Core.Editing;
 using ZeepCut.Core.Geometry;
 
 namespace ZeepCut.Core.Annotations;
-
 /// <summary>
 /// 一次截图标注会话：标注文档 + 撤销历史 + 当前工具设置 + 草稿/文字输入状态。
 /// </summary>
@@ -52,6 +51,26 @@ public sealed class AnnotationSession
 
         History = new EditHistory(historyCapacity);
     }
+
+    /// <summary>
+    /// 带图像范围的构造（T16）：提供 <see cref="Editing"/> 用来选择/移动/缩放/删除已有标注。
+    /// </summary>
+    /// <param name="imageBounds">截图图像范围，通常是 <c>(0,0,width,height)</c>（物理像素）。</param>
+    /// <param name="historyCapacity">撤销步数上限，必须为正数。</param>
+    public AnnotationSession(PixelRect imageBounds, int historyCapacity = EditHistory.DefaultCapacity)
+        : this(historyCapacity)
+    {
+        Editing = new AnnotationEditController(Document, History, imageBounds);
+    }
+
+    /// <summary>
+    /// 标注编辑状态机（选中 / 拖动 / 缩放 / 删除）。用 <see cref="AnnotationSession(int)"/>
+    /// 构造时为 <c>null</c>（纯绘制场景不需要），用它构造时非空。
+    /// </summary>
+    public AnnotationEditController? Editing { get; }
+
+    /// <summary>是否有选中的标注（选中态优先于选区操作与 Esc 取消）。</summary>
+    public bool HasSelection => Editing?.HasSelection == true;
 
     /// <summary>已提交的标注（Z 序底 → 顶）。</summary>
     public AnnotationDocument Document { get; } = new();
@@ -119,6 +138,12 @@ public sealed class AnnotationSession
         }
 
         ActiveTool = tool;
+
+        // 选了绘制工具就退出选中态（否则点选区内会变成"编辑已有标注"而不是画新的）。
+        if (tool.HasValue)
+        {
+            Editing?.Select(null);
+        }
     }
 
     /// <summary>
@@ -242,24 +267,39 @@ public sealed class AnnotationSession
     /// <summary>撤销一步；正在草稿/输入文字时返回 false（不打断当前操作）。</summary>
     public bool Undo()
     {
-        if (_draft is not null || _pendingText is not null)
+        if (_draft is not null || _pendingText is not null || Editing is { IsDragging: true })
         {
             return false;
         }
 
-        return History.Undo();
+        var done = History.Undo();
+
+        // 撤销可能移除了当前选中的标注（例如撤销"添加矩形"），此时取消选中。
+        Editing?.ValidateSelection();
+        return done;
     }
 
     /// <summary>重做一步；正在草稿/输入文字时返回 false。</summary>
     public bool Redo()
     {
-        if (_draft is not null || _pendingText is not null)
+        if (_draft is not null || _pendingText is not null || Editing is { IsDragging: true })
         {
             return false;
         }
 
-        return History.Redo();
+        var done = History.Redo();
+        Editing?.ValidateSelection();
+        return done;
     }
+
+    /// <summary>
+    /// 删除当前选中的标注（一条可撤销记录）；没有选中时返回 <c>null</c>。
+    /// </summary>
+    public string? DeleteSelected() =>
+        _draft is not null || _pendingText is not null ? null : Editing?.DeleteSelected();
+
+    /// <summary>取消选中；没有选中或正在拖拽时返回 false。</summary>
+    public bool ClearSelection() => Editing?.ClearSelection() == true;
 
     private void EnsureIdle(string action)
     {

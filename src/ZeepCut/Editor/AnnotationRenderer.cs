@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Windows;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using ZeepCut.Core.Annotations;
 using ZeepCut.Core.Geometry;
 
@@ -23,7 +24,18 @@ namespace ZeepCut.Editor;
 internal static class AnnotationRenderer
 {
     /// <summary>画一个标注；<paramref name="pixelsPerDip"/> 用于文字排版。</summary>
-    public static void Draw(DrawingContext context, Annotation annotation, double pixelsPerDip)
+    public static void Draw(DrawingContext context, Annotation annotation, double pixelsPerDip) =>
+        Draw(context, annotation, pixelsPerDip, mosaicPixels: null);
+
+    /// <summary>
+    /// 画一个标注。<paramref name="mosaicPixels"/> 提供马赛克区域的**真实像素化**位图
+    /// （预览与导出共用同一个像素化结果）；为 <c>null</c> 时退回块状示意（仅兜底，正常路径不用）。
+    /// </summary>
+    public static void Draw(
+        DrawingContext context,
+        Annotation annotation,
+        double pixelsPerDip,
+        Func<MosaicAnnotation, BitmapSource?>? mosaicPixels)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(annotation);
@@ -55,7 +67,7 @@ internal static class AnnotationRenderer
                 break;
 
             case MosaicAnnotation mosaic:
-                DrawMosaic(context, mosaic);
+                DrawMosaic(context, mosaic, mosaicPixels?.Invoke(mosaic));
                 break;
         }
     }
@@ -195,10 +207,26 @@ internal static class AnnotationRenderer
     }
 
     /// <summary>
-    /// 马赛克预览：整块半透明压暗 + 交替颜色的块状格子。
-    /// 真实像素化在 T17 导出时按区域重采样原图实现；这里只求“看起来是可辨认的块”。
+    /// 马赛克：优先把**真实像素化**的位图铺到区域上（与导出完全一致）；
+    /// 拿不到位图时退回块状示意（半透明压暗 + 交替块），只作为兜底。
     /// </summary>
-    private static void DrawMosaic(DrawingContext context, MosaicAnnotation mosaic)
+    private static void DrawMosaic(
+        DrawingContext context,
+        MosaicAnnotation mosaic,
+        BitmapSource? pixelated)
+    {
+        if (pixelated is not null && !mosaic.Region.IsEmpty)
+        {
+            // 位图尺寸就是区域物理像素，按 1:1 画到区域上（绘制单位 = 物理像素）。
+            // 最近邻由宿主（AnnotationLayer / 导出 DrawingVisual）的 RenderOptions 指定。
+            context.DrawImage(pixelated, ToRect(mosaic.Region));
+            return;
+        }
+
+        DrawMosaicCheckerboard(context, mosaic);
+    }
+
+    private static void DrawMosaicCheckerboard(DrawingContext context, MosaicAnnotation mosaic)
     {
         var region = ToRect(mosaic.Region);
         if (region.IsEmpty)

@@ -6,14 +6,41 @@
 
 - 日期：2026-10-18
 - 当前阶段：阶段二（标注与贴图）
-- 本轮任务：**T14 标注画布 + T15 七种标注工具**（接进真实截图遮罩，全部真实桌面验证）
-- 下一步任务：**T16 标注编辑**（选择已有标注、拖动/删除/改文字、以及 UI 侧的选中框与命中测试；注意 Ctrl+Z/Ctrl+Y 已在 T15 接好，T16 只需补编辑动作）
+- 本轮任务：**T16 标注编辑 + T17 导出渲染**（接进真实截图遮罩，全部真实桌面验证）
+- 下一步任务：**T18 贴图基础**（无边框置顶贴图窗口、拖动、滚轮缩放、关闭、多张并存）。注意 T11 的 `PinWindow` 仍是最小占位，T17 已把贴图输入换成合成图（`AnnotationExportRenderer`），T18 只需在此基础上补交互与集合管理。
 - 构建状态：✅ 编译通过，0 warning 0 error
-- 测试状态：✅ 577 个测试通过（T14 新增 `AnnotationSession` 28 个：`--filter 'FullyQualifiedName~AnnotationSessionTests'` → `Passed: 28`；T1–T13 旧测试全绿）
-- 桌面验证：✅ 主屏 125% 七种工具逐一实测 + 副屏 100% 负坐标两种工具实测 + 撤销/重做（键盘与按钮）+ 选区锁定 + 颜色/粗细
+- 测试状态：✅ 625 个测试通过（T16 新增 `AnnotationEditControllerTests` 32 个、`MosaicPixelatorTests` 16 个；T1–T15 旧测试全绿）
+- 桌面验证：✅ 主屏 125% 七种标注导出（含马赛克真实像素化）+ 副屏 100% 导出尺寸 + 选中/移动/缩放/删除/撤销 + 文字双击重编辑 + 复制/另存为/贴图三条输出路径
 
 ## 已完成
 
+- 2026-10-18 **T16 标注编辑 + T17 导出渲染**（消费 T12/T13/T14/T15，未改动已通过的 Core 类型；只新增类型 + 在既有类型上加成员）：
+  - Core 新增 `src/ZeepCut.Core/Annotations/AnnotationHandle.cs`：`AnnotationHandle`（`None`/`Move`/八向/`StartPoint`/`EndPoint`）与 `AnnotationEditMode`（`None`/`Move`/`Resize`/`StartPoint`/`EndPoint`）。与选区的 `SelectionHandle` 是两套语义，不要混用。
+  - Core 新增 `src/ZeepCut.Core/Annotations/AnnotationEditController.cs`（**T16 状态机**，纯逻辑可单测）：
+    - 选中：`Select`/`ClearSelection`/`HasSelection`/`Selected`/`SelectionBounds`；`HitTestHandle`（手柄半径默认 10px）与 `GetHandleRects`（区域型 8 个、线段型 2 个端点、画笔/文字无手柄）。
+    - 按下：`BeginDrag(point, handleRadius, hitTolerance)` 先试选中标注的手柄，再走 `Document.HitTest`（命中即选中 + 整体平移）；`DragTo` 实时改几何（**不写历史**，用于实时预览）；`EndDrag` 比较初始/最终几何，**一次拖拽 = 一条历史**（先回滚到初始状态再用命令应用最终状态，保证 Execute/Undo 对称）；`CancelDrag` 恢复初始几何且不写历史。
+    - 支持范围（**本轮决策**）：矩形/椭圆/马赛克支持八向缩放；箭头/直线支持整体平移 + 拖两端点；画笔/文字只支持整体平移（不提供缩放，避免点串/字形被拉伸）。所有几何夹取在图像 `[0,W]×[0,H]`，缩放到 `MinimumSize = 4px` 停住（不翻转）。
+    - `DeleteSelected()`（`RemoveAnnotationCommand`）、`SetSelectedText()`（`AnnotationEdits.SetText`）、`ValidateSelection()`（撤销后选中对象已离开文档时取消选中）。
+  - Core 新增 `src/ZeepCut.Core/Annotations/MosaicPixelator.cs`（**T17 马赛克真实像素化**，纯逻辑可单测）：BGRA 字节数组 + 宽高 + 区域 + 块大小（钳制 4–64）+ 强度（钳制 0–1，NaN 回退默认，0 = 不处理）；块网格以**区域左上角**为原点，边缘不完整块只对落在图像内/区域内的像素求平均；逐通道 `original×(1-strength) + average×strength` 四舍五入，alpha 不变；`Apply`（原地，Span）与 `ApplyCopy`；区域越界/为空/在图像外都是安全 no-op；缓冲区不足抛 `ArgumentException`。
+  - Core `src/ZeepCut.Core/Editing/AnnotationCommands.cs` 新增两条命令（**不改动已有命令**）：`ResizeAnnotationCommand`（记录调整前后包围盒）、`SetSegmentEndpointsCommand`（记录前后两端点）；`AnnotationEdits` 增加 `Resize`/`SetEndpoints` 工厂。
+  - Core `AnnotationSession` 增补（T16 接线，**既有行为不变**）：新增构造 `AnnotationSession(PixelRect imageBounds, int historyCapacity = 100)` 创建 `Editing`（`AnnotationEditController`）、`HasSelection`、`DeleteSelected()`、`ClearSelection()`；`Undo`/`Redo` 在拖拽中也返回 false，并在撤销/重做后 `ValidateSelection`；`SetActiveTool(非 null)` 会取消选中（选了绘制工具就不再编辑已有标注）。
+  - Core `AnnotationDefaults.DefaultMosaicStrength` 由 **0.75 改为 1.0**：PLAN 要求马赛克是真实像素化，0.75 会保留 25% 原像素、细看仍能辨认原文字。强度仍可 0–1 调整。
+  - App 新增 `src/ZeepCut/Editor/AnnotationExportRenderer.cs`（**T17 导出渲染**）：
+    - `Render(source, selection, screenBounds, dpi, document)`：`SelectionCrop.ToImageRect` 换算出选区在冻结图内的裁剪矩形 → `CaptureCropper.Crop` → 转 BGRA32；按文档 Z 序遍历，遇到马赛克先把累积标注合成为位图、再对**当前像素**做块平均（所以"马赛克盖在矩形上"与预览一致）；最后校验 `PixelWidth/PixelHeight` **必须等于选区物理像素**，否则抛异常。
+    - DPI：`RenderTargetBitmap(width, height, dpi, dpi, Pbgra32)` + 绘制上下文压 `ScaleTransform(96/dpi)`，于是 1 绘制单位 = 1 物理像素；125% 屏幕不会输出 80% 的 DIP 尺寸。
+    - 只画"选区内的冻结图 + 标注"两样东西；遮罩压暗、选区白框、手柄、尺寸文字、工具栏从不参与渲染。
+  - App `Editor/AnnotationRenderer.cs`：`Draw` 增加接收 `Func<MosaicAnnotation, BitmapSource?>` 的重载；马赛克优先铺**真实像素化位图**，拿不到时退回块状示意（仅兜底）。预览与导出共用同一套绘制代码。
+  - App `Editor/AnnotationLayer.cs`：新增可选参数 `sourceImage` / `cropRect` 与马赛克位图缓存（键 = 可见区域 + 块大小 + 强度），按 `MosaicPixelator` 对冻结图原像素做像素化；`InvalidateMosaicCache()` 供选区变化时清缓存。预览马赛克从此也是真实像素化。
+  - App `Capture/CaptureOverlayWindow.cs`（T16/T17 主战场）：
+    - 会话改为 `new AnnotationSession(new PixelRect(0, 0, image.Width, image.Height))`；新增 `_editorPointerDown`、`_editingText`/`_editingTextOriginal`、双击时间戳字段。
+    - 新增选中态层 `_editorCanvas`（虚线框 `_editorOutline` + 手柄 `_editorHandles`），叠在标注之上、工具栏之下，`IsHitTestVisible=false`；`UpdateEditorVisuals()` 走 `AnnotationCanvasTransform.ToDipRect` 换算。
+    - 鼠标：选择模式（无绘制工具）+ 选区已定稿 + 文档非空时，`BeginAnnotationEditAt` 先试手柄、再试文档命中；拖拽走 `DragTo`/`EndDrag` 并写日志（方式/手柄/终点/包围盒/记录/栈深度）；`LostMouseCapture` 用 `EndDrag` 收尾。
+    - 键盘：`Delete`/`Back` 在有选中时删除（没有选中不吞键）；**Esc 优先级**为 草稿 → 拖拽中取消 → 有选中先取消选中（遮罩保持打开）→ 才是取消截图；双击文字进入重编辑时 Enter/Esc 归输入框（与 T15 同一套两层拦截）。
+    - 双击：`RegisterClick()` **每次按下都记录**时间/位置（400ms、3px 容差），消费后清零避免三击；双击已选/命中的文字标注 → 把原文放回输入框，提交时 `SetSelectedText` 记一条"修改文字"，取消则还原原文本。
+    - 输出：`CropSelection` 替换为 `RenderSelection`，**复制/另存为/贴图三条路径全部走合成渲染**；日志记录 `标注=N 个（马赛克=M 个）` 与 `尺寸匹配选区物理像素=True`。`ICaptureSink` 仍只在成功路径调用一次。
+  - 新增验证脚本：
+    - `scripts/verify-t16t17.ps1`（6 个场景：`export`/`edit`/`textedit`/`save`/`pin`/`sizes`）——全程物理像素坐标、UIA 按 `AutomationProperties.Name` 点按钮、独立进程读剪贴板（`scripts/clipboard.ps1`）、保存对话框用"点击文件名字段 + 剪贴板粘贴 + `BM_CLICK`"驱动。
+    - `scripts/texture-window.ps1`（验证专用，允许 WinForms）：在指定物理矩形画 12px 彩色块 + 密集文字，让马赛克像素化有可比对的高频纹理；用 `SetWindowPos(-4 DPI aware)` 强制物理尺寸。
 - 2026-10-18 环境探测：Windows .NET SDK 10.0.100；WSL 经 UNC 调用 Windows dotnet 构建成功；桌面 GUI 可启动。
   **2026-10-18 T5/T6 复测修正**：主屏 `\\.\DISPLAY1` 物理 2560×1440 @ (0,0)、DPI 120（125%，逻辑 2048×1152）；副屏 `\\.\DISPLAY2` 物理 1080×1920 @ (-1080,0)、DPI 96（100%）。即本机当前是 **125% + 100% 混合 DPI**，此前“两块都是 100%、主屏物理 2048×1152”的记录基于逻辑分辨率，已在本轮更正。
 - 2026-10-18 工程骨架：`ZeepCut.slnx`、Core/App/Tests 三个项目、app.manifest（PerMonitorV2）、图标、构建与验证脚本（build/run/screenshot/keys）。
@@ -289,6 +316,45 @@
   - **箭头**：拖 `(-940,320)→(-640,490)`，日志 `包围盒=(60,60) 300x170`；`secondary-arrow.png`（1080×1920）中箭头从选区内 (140,320) 指向 (440,490)，`secondary-arrow.png` 的 read_image 视图里可见红色箭头与 `选区已锁定（1 个标注）` 标签，位置正确。
   - 两次副屏运行均以 Esc 结束，没有产生任何输出/历史记录。
 
+- 2026-10-18 **T16/T17 构建+测试（最终代码）**：`scripts/build.ps1` → `Build succeeded.`、`0 Warning(s)`、`0 Error(s)`；测试 → `Passed! - Failed: 0, Passed: 625, Skipped: 0, Total: 625`；末尾 `BUILD+TEST OK`。
+  本轮新增 48 个测试：`tests/ZeepCut.Tests/Annotations/AnnotationEditControllerTests.cs`（32 个：选中/命中手柄/移动/缩放/端点/删除/文字/取消/校验/夹取/最小尺寸/一次拖拽一条历史）与 `MosaicPixelatorTests.cs`（16 个：块内均匀、块原点、单像素区域、区域越界、部分越界、块大小上下钳制、不同块大小结果不同、强度 0/NaN/0.5、alpha 不变、越界参数、空区域、`ApplyCopy` 不改输入）。
+- 2026-10-18 **T17 主屏 125% 七种标注导出（真实桌面，DISPLAY1 0,0 2560×1440 DPI=120，pid 57904，证据 `artifacts/t16t17/`）**：
+  - 选区 `(320,240) 760×560`；七种标注依次绘制，日志逐条 `包围盒`（矩形 55,55 190×110 / 椭圆 275,55 180×120 / 箭头 55,215 200×100 / 直线 285,215 170×80 / 画笔 55,320 280×110 41 点 / 文字 285,365 "Zeep Cut T16" / 马赛克 310,200 175×120）。
+  - Enter → 日志 `开始输出（键盘 Enter）... 尺寸=760 × 560（物理像素）` → `导出渲染完成（复制到剪贴板）：... DPI=120 标注=7 个（马赛克=1 个）→ 图像=760x560 Bgra32 尺寸匹配选区物理像素=True` → `耗时=40ms`，遮罩关闭。
+  - 独立进程读剪贴板：`CLIPBOARD IMAGE 760x560`，保存 `primary-export-clipboard.png`。read_image 查看：矩形/椭圆/箭头/直线/画笔/文字 **七种全部在**、位置与预览一致；**无压暗、无选区白框、无手柄、无尺寸文字、无工具栏**。
+  - **马赛克是真像素化（定量核验）**：`primary-export-clipboard.png` 中马赛克区域 `(310,200) 175×120` 按 12px 网格切块 → **140 个块内部 0 个非均匀**（每块内像素完全相同）；块颜色来自下方原图（彩色块被平均成 `(185,47,47)`、`(70,157,65)`、`(247,247,247)` 等），不是半透明方块示意；马赛克下方的直线被平均成粉色块（原线 `(255,59,48)` → 块内 `(239,149,144)`），证明处理的是"当前像素"而不是覆盖色。
+  - **无压暗/无边框定量核验**：把导出图与"马赛克绘制前"的全屏截图按选区原点对齐比较，顶部右侧 60×40 区域 **最大通道差 11、均值 0.35**；底部条带（工具栏可能遮挡处）`0/6480` 像素差异 >12。即导出图就是原图 + 标注。
+  - 放大证据：`mosaic-zoom.png`（马赛克 3× 最近邻放大，可见清晰 12px 块）、`primary-export-01-all-seven.png`（遮罩内七种标注 + 工具栏）。
+- 2026-10-18 **T17 导出尺寸（主屏 125% 与副屏 100% 各一次，真实桌面）**：
+  - 主屏 125%（DPI=120，物理 2560×1440）：选区 `(1200,300) 512×384` → Enter → 日志 `导出渲染完成 ... DPI=120 ... → 图像=512x384 Pbgra32 尺寸匹配选区物理像素=True`；独立进程读剪贴板 **`512x384`**（= 选区物理像素，不是 DIP 的 410×307）。
+  - 副屏 100%（DPI=96，物理 1080×1920，原点 **-1080,0**）：选区 `(-1000,240) 700×640` → 日志 `选区=(-1000,240) 700x640 屏幕=(-1080,0) 1080x1920 DPI=96 ... → 图像=700x640 尺寸匹配选区物理像素=True`；独立进程读剪贴板 **`700x640`**，负坐标原点换算正确。
+  - 证据：`primary-sizes-clipboard.png`、`secondary-sizes-clipboard.png`。
+- 2026-10-18 **T17 另存为 PNG 走合成渲染（真实桌面，主屏 125%）**：画矩形 + 马赛克 → 点工具栏“另存为” → 日志 `保存对话框已打开` → 自动化填入 `...\artifacts\t16t17\primary-save-as.png` 并点保存 → `保存对话框已关闭：DialogResult=True` → `导出渲染完成（另存为）：标注=2 个（马赛克=1 个）→ 图像=760x560 Bgra32 尺寸匹配选区物理像素=True` → `文件已保存 ... 格式=Png 尺寸=760x560` → 遮罩关闭。
+  独立校验文件 `760x560, 43300 bytes`，read_image 查看：矩形 + **真实像素化的马赛克**（覆盖在彩色块上，被平均成蓝/黄/白块），无压暗/边框/工具栏。证据 `primary-save-as.png`、`primary-save-as-view.png`。
+- 2026-10-18 **T17 贴图走合成渲染（真实桌面，主屏 125%）**：画矩形 + 马赛克 → 点“贴图” → 日志 `导出渲染完成（贴图）：标注=2 个（马赛克=1 个）→ 图像=760x560 ... 尺寸匹配选区物理像素=True` → `创建贴图窗口 ... 图像=760x560` → `贴图窗口物理矩形与选区一致 (320,240) 760x560`；截图 `primary-pin-crop.png` 可见贴图窗口显示的是**合成图**（矩形 + 真实像素化马赛克），不是纯裁剪。
+- 2026-10-18 **T16 选中/移动/缩放/删除/撤销（真实桌面，主屏 125%，pid 57904，场景 `edit`）**：
+  - 画矩形 `(55,55) 220×150` → 点“选择” → 点标注内部 `(165,130)` → 日志 `开始编辑标注：类型=Rectangle 手柄=内部/平移 ... 包围盒=(55,55) 220x150`（抬起时 `记录=无变化`，选中不产生历史）。截图 `primary-edit-02-selected-crop.png`：**青色虚线框 + 8 个白色手柄**。
+  - 拖动移动 `(165,130)→(255,190)` → 日志 `标注编辑抬起：方式=Move ... 包围盒=(145,115) 220x150 记录=移动矩形 撤销栈=2`（= 位移 +90/+60，**一次拖拽只记一条**）。截图 `primary-edit-03-moved.png`。
+  - 拖右下手柄 `(365,265)→(425,305)` → 日志 `方式=Resize 手柄=BottomRight ... 包围盒=(145,115) 280x190 记录=调整矩形大小 撤销栈=3`（= +60/+40）。截图 `primary-edit-04-resized-crop.png`：虚线框与手柄跟随新尺寸。
+  - `Delete` → 日志 `删除标注（Delete）：类型=Rectangle 记录=删除矩形 文档标注数=0 撤销栈=4 选区锁定=False`；截图 `primary-edit-05-deleted.png` 标注消失、遮罩仍在。
+  - `Ctrl+Z`×3 → 日志依次 `撤销（Ctrl+Z）：删除矩形` → `调整矩形大小` → `移动矩形`（文档标注数始终 1，撤销栈 3→2→1，重做栈 1→2→3）；截图 06/07/08 依次显示"标注恢复 → 尺寸恢复 → 位置恢复"，证明每一步都是一条独立历史。
+  - 再次点击选中 → `Esc` → 日志 `Esc：取消标注选中态（遮罩保持打开）`，**没有** `取消本次截图`；截图 `primary-edit-10-esc-deselected.png` 虚线框消失、遮罩与选区仍在；之后第二次 Esc 才 `取消本次截图（Esc）`。**选中态优先于关闭遮罩成立**。
+- 2026-10-18 **T16 文字双击重编辑（真实桌面，主屏 125%，场景 `textedit`）**：
+  - 文字工具点 `(375,295)` → 输入 `first text` → Enter → 日志 `文字提交（Enter）：长度=10 内容="first text" 已提交=True`。
+  - 点“选择”后双击文字 → 日志 `重新编辑文字：图像坐标=(55,55) 原内容="first text" 输入框DIP=(300,236) 宽=360 字号=18`；截图 `primary-textedit-02-dblclick-editor-crop.png` 显示输入框内预填原文。
+  - `Ctrl+A` + 输入 `second T16 text` + Enter → 日志 `文字重新编辑提交（Enter）：长度=15 内容="second T16 text" 记录=修改文字 文档标注数=1 撤销栈=2`。
+  - `Ctrl+Z` → 截图 `primary-textedit-04-undo-text-crop.png` 文字回到 `first text`；`Ctrl+Y` → `primary-textedit-05-redo-text-crop.png` 又变成 `second T16 text`。文字修改**可撤销/重做**。
+- 2026-10-18 **未验证（T16/T17 相关）**：
+  - 手柄缩放只在**矩形**上真实验证（椭圆/马赛克走同一套 `Resize` 分支，Core 单测覆盖 `MosaicAnnotation` 缩放，但未在桌面逐一拖马赛克/椭圆手柄）。
+  - 箭头/直线的**端点拖动**只有 Core 单测（`SegmentEndpoints_DragStartAndEnd_RecordsOneStep`、`SegmentEndpoints_AreClampedToImage`），未在桌面拖动线段端点。
+  - 画笔/文字只支持整体平移，没有缩放（本轮决策）；未验证"拖动时贴边夹取"的桌面手感（Core 单测覆盖 `MoveDrag_IsClampedToImageBounds`）。
+  - 未做标注的**属性编辑**（选中后改颜色/粗细/字号），PLAN 只要求"选中、移动、删除及修改文字"，属性编辑留作可选增强。
+  - 未做**标注复制/粘贴**、右键菜单、层级调整（置顶/置底）的 UI 入口（Core `BringToFront`/`SendToBack` 已存在）。
+  - 马赛克只在**单屏 125%** 下做了像素级定量核验；副屏 100% 只验证导出尺寸（`700x640`）与矩形标注，未在副屏重复马赛克像素核验。
+  - JPEG 另存为未在本轮重新跑（T11 已验证编码路径；T17 只验证 PNG 与复制/贴图，三者共用 `RenderSelection`）。
+  - 双击判定用 `Environment.TickCount64` + 400ms/3px 阈值；**未**接入 WPF 原生 `ClickCount`（遮罩用 `PreviewMouseLeftButtonDown`，原生双击会给第二次事件 `ClickCount=2`，但本轮选择自实现以便 Core 可测）。三击、慢速双击、不同 DPI 下的手感未逐一实测。
+  - 拖拽期间的实时预览只在 125% 主屏观察；`LostMouseCapture` 兜底（Alt+Tab 中断拖拽）只做了代码处理，未真实注入验证。
+  - 150% 缩放、三屏未测试（本机只有 125% + 100% 双屏）。
 - 2026-10-18 **未验证（T14/T15 相关）**：
   - 没有做“选择/移动/删除已有标注、改已提交文字”——那是 T16；本轮只有新建标注与整体撤销/重做。
   - 画笔只验证了平滑开启（默认 `Smooth=true`）；`Smooth=false` 的折线渲染与导出（T17）未在桌面验证。
@@ -330,6 +396,17 @@
 ## 已知问题 / 风险
 
 - **T14 决策：选区一旦开始标注就锁定**。`AnnotationSession.IsSelectionLocked` 为真（文档里有标注，或正在拖草稿/输入文字）后，遮罩隐藏 8 个手柄、忽略选区外按下、光标不再显示移动/调整箭头，并在选区右上方显示 `选区已锁定（N 个标注）`。原因：标注坐标是“相对选区图像原点”的，移动/调整选区会让已有标注与画面错位。全部标注被撤销（文档空且无草稿）后自动解锁。
+- **T16 决策：选中态是"第三态"，优先于选区操作与 Esc**。`AnnotationSession.ActiveTool == null`（工具栏“选择”）+ 选区已定稿 + 文档非空时，点选区内会进入编辑：先命中选中标注的手柄（半径 10px），再走 `AnnotationDocument.HitTest`（容差 4px）。此时 Esc 的顺序是 **草稿 → 拖拽中取消 → 取消选中 → 取消截图**；有选中时 Esc 只取消选中，遮罩保持打开（已实测）。
+- **T16 支持范围（有意收窄）**：矩形/椭圆/马赛克支持八向缩放；箭头/直线支持整体平移 + 拖两端点；**画笔/文字只支持整体平移**（不给缩放，避免点串被拉伸、字形被压扁）。选“选择”以外的工具会自动取消选中（`SetActiveTool` 里做的），所以"想编辑已有标注"必须先点“选择”。
+- **T16 一次拖拽 = 一条历史**：拖拽过程中 `DragTo` 直接改标注做实时预览、不写历史；`EndDrag` 发现几何变化时先**回滚到初始几何**，再用 `ResizeAnnotationCommand`/`MoveAnnotationCommand`/`SetSegmentEndpointsCommand` 应用一次最终几何。这样 `Execute`/`Undo` 永远对称，且撤销一次就整段回退（已实测：撤销 3 次依次回退删除/缩放/移动）。改这段时不要图省事在 `DragTo` 里 `History.Execute`。
+- **T16 双击是自实现（400ms / 3px）**：`RegisterClick()` 必须在**每一次**按下时调用（第一次也要记时间戳，否则第二次进不了判定窗口 —— 本轮踩过这个坑，第一版只记录文字分支，导致双击永远不成立）。消费后清零避免三击触发两次。
+- **T17 导出坐标只有一个原点**：标注坐标是"相对选区左上角"的物理像素（T14 的 `AnnotationCanvasTransform`），而裁剪图左上角也正好是选区左上角，所以导出**不需要**再减 `imageRect.Left/Top`。本轮第一版多减了一次，会在选区原点非 (0,0) 时整体偏移 —— 已在 `AnnotationExportRenderer.Composite` 里去掉并加注释。
+- **T17 马赛克按 Z 序处理"当前像素"**：走到马赛克时，先把之前累积的标注合成为位图，再对这份像素做块平均；所以"马赛克盖在矩形/直线上"会把这些标注一起糊掉（与预览一致，已实测直线被平均成粉色块）。如果以后要求"只糊原图、不糊标注"，需要改成两遍合成（先算原图马赛克层、再按 Z 序合成），并补测试。
+- **T17 马赛克默认强度改为 1.0**（原 0.75）：0.75 会保留 25% 原像素，密排文字细看仍可辨认，削弱打码效果。块平均本身是"块的算术平均"，不是模糊；强度 <1 就是与原像素的线性混合。需要"轻打码"时显式设小，`AnnotationDefaults.ClampMosaicStrength` 仍钳 0–1。
+- **T17 预览马赛克与导出共用同一算法**：`AnnotationLayer` 拿冻结图 + 选区裁剪矩形，按 `MosaicPixelator` 算出区域的像素化位图并缓存（键 = 可见区域 + 块大小 + 强度），再由 `AnnotationRenderer` 按 1:1 铺上去。也就是说预览不再是"半透明棋盘示意"，看到什么导出就是什么。缓存不会自动失效 —— 选区变化会重建 `AnnotationLayer`，但**同一选区内修改块大小/强度**目前只能靠 `InvalidateMosaicCache()`，UI 还没有调整入口（T16 未做属性编辑）。
+- **T17 导出 DPI 做法**：`RenderTargetBitmap` 的像素尺寸直接取选区物理像素，dpi 参数用目标屏 DPI，绘制上下文压 `ScaleTransform(96/dpi)`。**不要**用 DIP 尺寸建 RenderTargetBitmap 再乘缩放，125% 下会得到 80% 的像素数（本轮验收点就是"导出尺寸 = 选区物理像素"，已在 125%/100% 各实测一次）。
+- **验证马赛克必须有高频纹理**：桌面壁纸/纯色背景上做马赛克，像素化与"半透明方块"肉眼无法区分（本轮前两次就落在纯色区，看不出效果）。`scripts/texture-window.ps1` 专门生成 12px 彩色块 + 密集文字，做马赛克验证时先起这个窗口。注意它是 WinForms（验证脚本允许），且 Windows 在 125% 下会把 WinForms 尺寸按 DIP 缩，必须用 `SetWindowPos` 强制物理矩形。
+- **视觉层不只选区白框会漏进导出**：导出只画"裁剪图 + 标注"，`_dim`/`_border`/`_handles`/`_sizeBadge`/`_toolbar`/`_editorCanvas`/`_lockBadge` 都是遮罩窗口的兄弟元素，不参与 `AnnotationExportRenderer`。已用"导出图 vs 遮罩出现前的全屏截图"逐像素比对确认（底部条带 0/6480 差异 >12）。
 - **选了绘制工具后就禁止拖动改选区**（即使还没落笔），必须先点工具栏“选择”才能重新框选/调整。这是为了避免“想画一笔却把选区挪走”。代价是切换多一次点击；如果以后觉得碍事，可以改成“只有已落笔才禁止改选区”，但要同时处理“选区变了已有标注怎么跟着变”。
 - **标注层是选区大小的独立元素**（`AnnotationHost` 内有 `AnnotationLayer`），绘制在 `OnRender` 里压入 `ScaleTransform(96/dpi)`，所以 125% 屏幕上 100 物理像素 = 80 DIP；这与 T11 的裁剪（纯物理像素）是两套坐标，改渲染时不要混。
 - **文字输入框的 Enter 拦截有两层**：遮罩 `PreviewKeyDown`（先收到）和 `TextBox.PreviewKeyDown`（兜底），都是为了满足 PLAN 的“文字输入时 Enter 优先用于文本编辑”。两层都只处理 `Key.Enter`，Shift+Enter 不拦截（留给换行）。改键盘处理时两层要一起看。
@@ -428,4 +505,12 @@
 - T15 **文字 Enter 两层拦截**：遮罩 `PreviewKeyDown` 先判断 `_session.IsTextEditing`，为真时 Enter/Esc 只归文字（Shift+Enter 留给换行）；`TextBox.PreviewKeyDown` 再兜一层。实测输入 `Zeep Cut T15` 后按 Enter，日志只有 `文字提交（Enter）… 已提交=True`，之后没有任何 `开始输出/输出完成`，遮罩保持打开并继续画了矩形 —— PLAN 的“文字输入时 Enter 不误触发复制”成立。
 - T15 马赛克只做块状预览（半透明压暗 + `BlockSize` 交替块），真实像素化放 T17；画笔默认 `Smooth=true` 用二次贝塞尔中点平滑；箭头头部长度 `max(10, thickness*4)` 且不超过线段长度，杆画到头部底边前 35% 避免粗线穿出尖端。
 - T15 撤销/重做有两个入口（Ctrl+Z/Ctrl+Y 与工具栏按钮），都统一走 `AnnotationSession.Undo/Redo` → `EditHistory`；草稿/文字输入期间返回 false，不打断当前操作。日志会打印来源（`Ctrl+Z` / `工具栏按钮“撤销”`）与栈深度。
+- T16 编辑状态机放 Core `AnnotationEditController`，与 `AnnotationSession` 用**同一个** `AnnotationDocument` 与 `EditHistory` 实例（`AnnotationSession(PixelRect imageBounds)` 构造时创建）。这样选中/拖动/缩放/删除与"画标注"共用一条撤销栈，Ctrl+Z 不需要区分来源。**不要**为编辑再建第二个 `EditHistory`（会与 T13 的"各自建历史"建议冲突，但这里同一窗口同一文档，共用才对）。
+- T16 的 `EndDrag` 用"回滚 + 命令"两段式来保证"一次拖拽一条历史"且命令对称；`CancelDrag` 只回滚、不写历史。`Session.Undo/Redo` 在拖拽中也返回 false（不打断当前操作）。
+- T16 手柄语义与选区分开：`AnnotationHandle`（标注）≠ `SelectionHandle`（选区）。选区手柄的"边跟随指针"特性（T9 已知会内缩）**不适用于**标注缩放：标注缩放以拖拽开始时的包围盒为基准，不会因为按下点内缩而先跳一下。
+- T17 导出渲染放 `src/ZeepCut/Editor/AnnotationExportRenderer.cs`（WPF 层），马赛克像素算法放 Core `MosaicPixelator`（可单测）。分工理由：`RenderTargetBitmap`/`DrawingVisual` 必须有 WPF，而块平均只是字节运算，放 Core 才能覆盖边界条件。
+- T17 把"预览马赛克 = 导出的马赛克"当成硬要求：`AnnotationRenderer` 接受 `Func<MosaicAnnotation, BitmapSource?>`，预览层用冻结图算、导出层用当前合成位图算，绘制代码只有一份。拿不到位图时退回块状示意仅作兜底（正常路径不会走到）。
+- T17 输出三条路径（复制/另存为/贴图）统一走 `RenderSelection` → `AnnotationExportRenderer.Render`；`ICaptureSink` 的调用点与"只在成功路径调用一次"的语义没变（T11 的接缝保持完好）。
+- T17 导出前做**尺寸断言**：`PixelWidth/PixelHeight` 必须等于选区物理像素，否则抛异常并留在截图状态。这比"输出后再检查"更早暴露 DPI 换算错误。
+- T17 验证新增 `scripts/verify-t16t17.ps1`（6 场景）与 `scripts/texture-window.ps1`（高频纹理，仅验证用）。保存对话框仍走 T11 的"点击文件名字段 + 剪贴板粘贴 + `BM_CLICK`"路径（DirectUI 无 ValuePattern，IME 会改写 `C:\...`）。
 - T15 验证脚本的两个本机坑（写进脚本注释）：`SendKeys` 在本机 IME 下会吃掉空格/数字，改为 `SendInput + KEYEVENTF_UNICODE` 逐字输入且 `INPUT` 必须 `Size=40`；`SetCursorPos` 在遮罩激活瞬间会被丢弃，移动后必须 `GetCursorPos` 回读校验并重试。

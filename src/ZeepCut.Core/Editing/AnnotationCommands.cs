@@ -140,6 +140,70 @@ public sealed class MoveAnnotationCommand : IEditCommand
 }
 
 /// <summary>
+/// 缩放标注（区域型：矩形/椭圆/马赛克）：记录调整前后的包围盒，撤销写回旧包围盒。
+/// </summary>
+/// <remarks>
+/// 一次拖拽手柄只产生一条命令（T16）：UI 在拖拽过程中直接改标注做实时预览，
+/// 抬起时先回滚到初始包围盒、再用本命令应用最终包围盒，保证 Execute/Undo 对称。
+/// </remarks>
+public sealed class ResizeAnnotationCommand : IEditCommand
+{
+    private readonly Annotation _annotation;
+    private readonly Geometry.PixelRect _before;
+    private readonly Geometry.PixelRect _after;
+
+    /// <param name="annotation">要缩放的标注（必须支持 Resize）。</param>
+    /// <param name="before">调整前的包围盒。</param>
+    /// <param name="after">调整后的包围盒。</param>
+    public ResizeAnnotationCommand(Annotation annotation, Geometry.PixelRect before, Geometry.PixelRect after)
+    {
+        ArgumentNullException.ThrowIfNull(annotation);
+        _annotation = annotation;
+        _before = before;
+        _after = after;
+    }
+
+    public string Description => $"调整{AddAnnotationCommand.KindName(_annotation.Kind)}大小";
+
+    public void Execute() => _annotation.Resize(_after);
+
+    public void Undo() => _annotation.Resize(_before);
+}
+
+/// <summary>
+/// 重新设置线段标注（箭头/直线）的两个端点：撤销时写回原端点。
+/// </summary>
+public sealed class SetSegmentEndpointsCommand : IEditCommand
+{
+    private readonly SegmentAnnotation _segment;
+    private readonly Geometry.PixelPoint _beforeStart;
+    private readonly Geometry.PixelPoint _beforeEnd;
+    private readonly Geometry.PixelPoint _afterStart;
+    private readonly Geometry.PixelPoint _afterEnd;
+
+    public SetSegmentEndpointsCommand(
+        SegmentAnnotation segment,
+        Geometry.PixelPoint beforeStart,
+        Geometry.PixelPoint beforeEnd,
+        Geometry.PixelPoint afterStart,
+        Geometry.PixelPoint afterEnd)
+    {
+        ArgumentNullException.ThrowIfNull(segment);
+        _segment = segment;
+        _beforeStart = beforeStart;
+        _beforeEnd = beforeEnd;
+        _afterStart = afterStart;
+        _afterEnd = afterEnd;
+    }
+
+    public string Description => $"调整{AddAnnotationCommand.KindName(_segment.Kind)}端点";
+
+    public void Execute() => _segment.SetEndpoints(_afterStart, _afterEnd);
+
+    public void Undo() => _segment.SetEndpoints(_beforeStart, _beforeEnd);
+}
+
+/// <summary>
 /// 清空文档：撤销时按原顺序把全部对象插回（恢复原 Z 序与 CreationOrder）。
 /// </summary>
 public sealed class ClearAnnotationsCommand : IEditCommand
@@ -222,6 +286,19 @@ public static class AnnotationEdits
     /// <summary>平移标注。</summary>
     public static IEditCommand Move(Annotation target, int deltaX, int deltaY) =>
         new MoveAnnotationCommand(target, deltaX, deltaY);
+
+    /// <summary>缩放区域型标注到新的包围盒。</summary>
+    public static IEditCommand Resize(Annotation target, Geometry.PixelRect before, Geometry.PixelRect after) =>
+        new ResizeAnnotationCommand(target, before, after);
+
+    /// <summary>设置线段标注的两个端点。</summary>
+    public static IEditCommand SetEndpoints(
+        SegmentAnnotation target,
+        Geometry.PixelPoint beforeStart,
+        Geometry.PixelPoint beforeEnd,
+        Geometry.PixelPoint afterStart,
+        Geometry.PixelPoint afterEnd) =>
+        new SetSegmentEndpointsCommand(target, beforeStart, beforeEnd, afterStart, afterEnd);
 
     /// <summary>修改颜色（含透明度）。</summary>
     public static IEditCommand SetColor(Annotation target, AnnotationColor color) =>

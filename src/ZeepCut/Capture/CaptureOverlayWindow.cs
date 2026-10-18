@@ -8,6 +8,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
+using System.Windows.Threading;
 using Microsoft.Win32;
 using ZeepCut.Core.Annotations;
 using ZeepCut.Core.Capture;
@@ -69,6 +70,18 @@ public sealed class CaptureOverlayWindow : Window
     private static readonly Color ToolSelectedColor = Color.FromArgb(0x66, 0x00, 0xA2, 0xFF);
     private static readonly Color SwatchSelectedStrokeColor = Color.FromRgb(0xFF, 0xFF, 0xFF);
     private static readonly Color SwatchStrokeColor = Color.FromArgb(0x66, 0xFF, 0xFF, 0xFF);
+    private static readonly Color EditorOutlineColor = Color.FromRgb(0x00, 0xC8, 0xFF);
+
+    /// <summary>选中态虚线框线宽（DIP）与手柄边长（DIP）。</summary>
+    private const double EditorOutlineThickness = 1.5;
+    private const double EditorHandleSize = 7;
+
+    /// <summary>手柄命中半径与文档命中容差（物理像素）。</summary>
+    private const int EditorHandleRadius = 8;
+    private const int EditorHitTolerance = 4;
+
+    /// <summary>双击判定窗口（毫秒），用于文字标注重新进入编辑。</summary>
+    private const int DoubleClickMilliseconds = 400;
 
     /// <summary>文字输入框相对点击点的偏移（DIP），避免框盖住正在输入的基线。</summary>
     private const double TextEditorOffsetY = 4;
@@ -80,8 +93,11 @@ public sealed class CaptureOverlayWindow : Window
     private readonly SelectionController _selection;
     private readonly ICaptureSink _sink;
 
-    /// <summary>标注会话：文档 + 撤销历史 + 工具设置 + 草稿/文字输入状态（T14/T15）。</summary>
-    private readonly AnnotationSession _session = new();
+    /// <summary>
+    /// 标注会话：文档 + 撤销历史 + 工具设置 + 草稿/文字输入状态（T14/T15）
+    /// + 选择/移动/缩放/删除状态机（T16，<see cref="AnnotationSession.Editing"/>）。
+    /// </summary>
+    private readonly AnnotationSession _session;
 
     private readonly Path _dim;
     private readonly Rectangle _border;
@@ -116,6 +132,25 @@ public sealed class CaptureOverlayWindow : Window
 
     private bool _annotationPointerDown;
 
+    /// <summary>正在拖动选中标注（T16 移动/缩放/端点）。</summary>
+    private bool _editorPointerDown;
+
+    /// <summary>双击正在重新编辑的文字标注（T16）；没有时为 null。</summary>
+    private TextAnnotation? _editingText;
+
+    /// <summary>重新编辑文字前的原内容（取消/提交对比用）。</summary>
+    private string _editingTextOriginal = string.Empty;
+
+    /// <summary>上一次点击的时间/物理坐标（双击判定用）。</summary>
+    private long _lastEditorClickAt;
+    private int _lastEditorClickX;
+    private int _lastEditorClickY;
+
+    /// <summary>选中态可视化：虚线框 + 手柄。</summary>
+    private readonly Canvas _editorCanvas;
+    private readonly Path _editorOutline;
+    private readonly List<(AnnotationHandle Handle, Rectangle Element)> _editorHandles = new();
+
     private int _lastPhysicalX;
     private int _lastPhysicalY;
     private bool _pointerDown;
@@ -140,6 +175,10 @@ public sealed class CaptureOverlayWindow : Window
         _capture = capture;
         _candidates = candidates;
         _sink = sink;
+
+        // 标注坐标是图像内物理像素，图像范围就是冻结图尺寸（T16 缩放/移动的夹取边界）。
+        _session = new AnnotationSession(
+            new PixelRect(0, 0, capture.Image.PixelWidth, capture.Image.PixelHeight));
         _transform = new DpiTransform(capture.Dpi);
         _selection = new SelectionController(
             capture.Bounds,
@@ -242,6 +281,41 @@ public sealed class CaptureOverlayWindow : Window
             Visibility = Visibility.Collapsed,
         };
 
+        // --- T16 选中态层：虚线框 + 手柄，画在标注之上、工具栏之下，不参与命中测试。 ---
+        _editorOutline = new Path
+        {
+            Stroke = CreateFrozenBrush(EditorOutlineColor),
+            StrokeThickness = EditorOutlineThickness,
+            StrokeDashArray = new DoubleCollection { 4, 3 },
+            StrokeDashCap = PenLineCap.Flat,
+            IsHitTestVisible = false,
+            Visibility = Visibility.Collapsed,
+        };
+
+        _editorCanvas = new Canvas { IsHitTestVisible = false, ClipToBounds = true };
+        _editorCanvas.Children.Add(_editorOutline);
+        foreach (var handle in Enum.GetValues<AnnotationHandle>())
+        {
+            if (handle is AnnotationHandle.None or AnnotationHandle.Move)
+            {
+                continue;
+            }
+
+            var element = new Rectangle
+            {
+                Width = EditorHandleSize,
+                Height = EditorHandleSize,
+                Fill = Brushes.White,
+                Stroke = CreateFrozenBrush(Color.FromArgb(0xCC, 0x10, 0x3A, 0x50)),
+                StrokeThickness = 1,
+                IsHitTestVisible = false,
+                Visibility = Visibility.Collapsed,
+            };
+
+            _editorHandles.Add((handle, element));
+            _editorCanvas.Children.Add(element);
+        }
+
         _toolbar = CreateToolbar();
         var chromeLayer = new Canvas();
         chromeLayer.Children.Add(_toolbar);
@@ -271,6 +345,7 @@ public sealed class CaptureOverlayWindow : Window
         root.Children.Add(_dim);
         root.Children.Add(annotationCanvas);
         root.Children.Add(visualLayer);
+        root.Children.Add(_editorCanvas);
         root.Children.Add(chromeLayer);
         root.Children.Add(textLayer);
         Content = root;
@@ -455,6 +530,23 @@ public sealed class CaptureOverlayWindow : Window
             return;
         }
 
+        // T16 重新编辑已有文字时，Enter/Esc 同样只归输入框。
+        if (_editingText is not null)
+        {
+            if (e.Key == Key.Escape)
+            {
+                e.Handled = true;
+                CancelExistingTextEdit("Esc");
+            }
+            else if (e.Key == Key.Enter && (Keyboard.Modifiers & ModifierKeys.Shift) != ModifierKeys.Shift)
+            {
+                e.Handled = true;
+                CommitExistingTextEdit("Enter");
+            }
+
+            return;
+        }
+
         var isCtrl = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
         if (isCtrl && e.Key is Key.Z or Key.Y)
         {
@@ -473,6 +565,17 @@ public sealed class CaptureOverlayWindow : Window
 
         switch (e.Key)
         {
+            case Key.Delete:
+            case Key.Back:
+                // T16：只有存在选中标注时才拦截 Delete，否则保持原有行为（不吞键）。
+                if (_session.Editing?.HasSelection == true)
+                {
+                    e.Handled = true;
+                    DeleteSelectedAnnotation(e.Key.ToString());
+                }
+
+                break;
+
             case Key.Escape:
                 e.Handled = true;
                 if (_session.IsDrafting)
@@ -480,6 +583,22 @@ public sealed class CaptureOverlayWindow : Window
                     _session.CancelDraft();
                     ReleaseAnnotationPointer();
                     AppLog.Info("Editor", "取消正在拖拽的标注草稿（Esc）");
+                    UpdateVisuals();
+                    return;
+                }
+
+                if (_session.Editing is { IsDragging: true } dragging && dragging.CancelDrag())
+                {
+                    AppLog.Info("Editor", "取消正在拖拽的标注编辑（Esc），几何恢复为拖拽前");
+                    UpdateVisuals();
+                    return;
+                }
+
+                // T16：有选中标注时 Esc 先取消选中，不关闭遮罩（选中态优先）。
+                if (_session.HasSelection)
+                {
+                    _session.ClearSelection();
+                    AppLog.Info("Editor", "Esc：取消标注选中态（遮罩保持打开）");
                     UpdateVisuals();
                     return;
                 }
@@ -521,6 +640,17 @@ public sealed class CaptureOverlayWindow : Window
         Focus();
         Keyboard.Focus(this);
         ClearStatus();
+
+        // T16：选择模式（没有绘制工具）下，点选区内先尝试编辑已有标注。
+        if (CanEditAnnotation() && _canvas is { } editCanvas)
+        {
+            if (BeginAnnotationEditAt(editCanvas, position))
+            {
+                e.Handled = true;
+                UpdateVisuals(position);
+                return;
+            }
+        }
 
         if (CanDrawAnnotation())
         {
@@ -595,6 +725,37 @@ public sealed class CaptureOverlayWindow : Window
 
     private void OnPreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
+        if (_editorPointerDown)
+        {
+            _editorPointerDown = false;
+            if (IsMouseCaptured)
+            {
+                ReleaseMouseCapture();
+            }
+
+            var dip = e.GetPosition(this);
+            if (_canvas is { } dragCanvas && _session.Editing is { } editor)
+            {
+                var imagePoint = dragCanvas.ToImage(dip.X, dip.Y);
+                editor.DragTo(imagePoint);
+                var mode = editor.Mode;
+                var handle = editor.ActiveHandle;
+                var bounds = editor.SelectionBounds;
+                var description = editor.EndDrag();
+
+                AppLog.Info(
+                    "Editor",
+                    $"标注编辑抬起：方式={mode} 手柄={handle} 终点图像={imagePoint} 包围盒={bounds} " +
+                    $"记录={(description ?? "无变化")} 撤销栈={_session.History.UndoCount} " +
+                    $"重做栈={_session.History.RedoCount} 文档标注数={_session.Count}");
+                _annotationLayer?.InvalidateVisual();
+            }
+
+            e.Handled = true;
+            UpdateVisuals(dip);
+            return;
+        }
+
         if (_annotationPointerDown)
         {
             _annotationPointerDown = false;
@@ -669,6 +830,14 @@ public sealed class CaptureOverlayWindow : Window
         _lastPhysicalX = physicalX;
         _lastPhysicalY = physicalY;
 
+        if (_editorPointerDown && _canvas is { } editorCanvas)
+        {
+            _session.Editing?.DragTo(editorCanvas.ToImage(position.X, position.Y));
+            _annotationLayer?.InvalidateVisual();
+            UpdateVisuals(position);
+            return;
+        }
+
         if (_annotationPointerDown && _canvas is { } canvas)
         {
             _session.UpdateDraft(canvas.ToImageClamped(position.X, position.Y));
@@ -707,6 +876,18 @@ public sealed class CaptureOverlayWindow : Window
     private void OnLostMouseCapture(object sender, MouseEventArgs e)
     {
         // 未收到 MouseUp 就丢失捕获（例如 Alt+Tab）时，用最后位置定稿，避免卡在 Dragging。
+        if (_editorPointerDown)
+        {
+            _editorPointerDown = false;
+            var description = _session.Editing?.EndDrag();
+            AppLog.Warn(
+                "Editor",
+                $"标注编辑拖拽被中断（捕获丢失），已用最后位置提交：记录={description ?? "无变化"}");
+            _annotationLayer?.InvalidateVisual();
+            UpdateVisuals();
+            return;
+        }
+
         if (_annotationPointerDown)
         {
             FinishAnnotationDrag("捕获丢失");
@@ -759,6 +940,294 @@ public sealed class CaptureOverlayWindow : Window
         var screenX = _capture.Bounds.Left + _transform.DipToPixel(dip.X);
         var screenY = _capture.Bounds.Top + _transform.DipToPixel(dip.Y);
         return canvas.Selection.Contains(screenX, screenY);
+    }
+
+    // --- T16 标注编辑：选择 / 移动 / 缩放 / 拖端点 / 删除 / 改文字。 ---
+
+    /// <summary>
+    /// 是否可以把鼠标按下解释为"编辑已有标注"：选区已定稿、当前是选择模式（没有绘制工具）、
+    /// 文档里有标注，且不在拖拽/输入中。
+    /// </summary>
+    private bool CanEditAnnotation() =>
+        _canvas.HasValue &&
+        _session.Editing is { IsDragging: false } &&
+        _session.ActiveTool is null &&
+        _session.Count > 0 &&
+        !_session.IsTextEditing &&
+        !_session.IsDrafting &&
+        _selection.IsCaptureReady &&
+        _selection.State == SelectionState.Selected;
+
+    /// <summary>
+    /// 选择模式下的按下：命中手柄 → 缩放/拖端点；命中标注 → 选中并准备整体平移；
+    /// 命中已选中的文字标注且是双击 → 重新编辑文本。
+    /// </summary>
+    private bool BeginAnnotationEditAt(AnnotationCanvasTransform canvas, Point dip)
+    {
+        var editor = _session.Editing;
+        if (editor is null)
+        {
+            return false;
+        }
+
+        var imagePoint = canvas.ToImage(dip.X, dip.Y);
+
+        // 只有落在选区内才处理，避免在选区外误选。
+        if (!IsInsideSelectionPhysical(canvas, dip))
+        {
+            if (editor.HasSelection)
+            {
+                editor.ClearSelection();
+                AppLog.Info("Editor", "点在选区外：取消标注选中态");
+                return true;
+            }
+
+            return false;
+        }
+
+        var previouslySelected = editor.Selected;
+        var hitHandle = editor.HitTestHandle(imagePoint, EditorHandleRadius);
+        var hitAnnotation = _session.Document.HitTest(imagePoint, EditorHitTolerance);
+
+        // 每次按下都要记录点击时间/位置，否则"第一次点击"不会进入双击判定窗口。
+        var isDoubleClick = RegisterClick();
+
+        // 双击文字标注：进入重新编辑（不移动）。第二次点击时它已在选中态，
+        // 因此先按"命中的是文字"判定，再补一次选中即可。
+        if (isDoubleClick && hitAnnotation is TextAnnotation text && hitHandle == AnnotationHandle.None)
+        {
+            if (!ReferenceEquals(text, previouslySelected))
+            {
+                editor.Select(text);
+            }
+
+            BeginExistingTextEdit(canvas, text);
+            return true;
+        }
+
+        var started = editor.BeginDrag(imagePoint, EditorHandleRadius, EditorHitTolerance);
+        if (!started)
+        {
+            AppLog.Info("Editor", $"选择模式按下：图像={imagePoint}，未命中任何标注，取消选中");
+            return editor.HasSelection is false && previouslySelected is not null;
+        }
+
+        _editorPointerDown = true;
+        CaptureMouse();
+        var kind = editor.Selected?.Kind.ToString() ?? "无";
+        AppLog.Info(
+            "Editor",
+            $"开始编辑标注：类型={kind} 手柄={(hitHandle == AnnotationHandle.None ? "内部/平移" : hitHandle)} " +
+            $"图像={imagePoint} 包围盒={editor.SelectionBounds} 文档标注数={_session.Count}");
+        return true;
+    }
+
+    /// <summary>删除选中标注（一条可撤销记录）。</summary>
+    private void DeleteSelectedAnnotation(string source)
+    {
+        var editor = _session.Editing;
+        if (editor is null)
+        {
+            return;
+        }
+
+        var kind = editor.Selected?.Kind.ToString() ?? "无";
+        var description = _session.DeleteSelected();
+        AppLog.Info(
+            "Editor",
+            $"删除标注（{source}）：类型={kind} 记录={description ?? "无"} 文档标注数={_session.Count} " +
+            $"撤销栈={_session.History.UndoCount} 选区锁定={_session.IsSelectionLocked}");
+
+        _annotationLayer?.InvalidateVisual();
+        UpdateVisuals();
+    }
+
+    /// <summary>
+    /// 记录本次按下并返回它是否构成双击：两次按下间隔小于
+    /// <see cref="DoubleClickMilliseconds"/> 且物理位置相差不超过 3 像素。
+    /// 每次按下都必须调用（包括第一次），否则第一次不会进入双击判定窗口。
+    /// </summary>
+    private bool RegisterClick()
+    {
+        var now = Environment.TickCount64;
+        var isDouble = _lastEditorClickAt != 0 &&
+                       now - _lastEditorClickAt <= DoubleClickMilliseconds &&
+                       Math.Abs(_lastEditorClickX - _lastPhysicalX) <= 3 &&
+                       Math.Abs(_lastEditorClickY - _lastPhysicalY) <= 3;
+
+        if (isDouble)
+        {
+            // 消费掉这次双击，避免三击又触发一次。
+            _lastEditorClickAt = 0;
+            return true;
+        }
+
+        _lastEditorClickAt = now;
+        _lastEditorClickX = _lastPhysicalX;
+        _lastEditorClickY = _lastPhysicalY;
+        return false;
+    }
+
+    /// <summary>双击文字标注：把它的文字放回输入框，提交时用命令改文本（可撤销）。</summary>
+    private void BeginExistingTextEdit(AnnotationCanvasTransform canvas, TextAnnotation annotation)
+    {
+        _editingText = annotation;
+        _editingTextOriginal = annotation.Text;
+        var editor = EnsureTextEditor();
+
+        // 先清空再赋初值，避免 TextChanged 里把同一段文字重复写回（不影响结果，只是干净）。
+        editor.TextChanged -= OnExistingTextChanged;
+        editor.Text = annotation.Text;
+        editor.TextChanged += OnExistingTextChanged;
+
+        var origin = canvas.ToDip(annotation.Position);
+        var available = canvas.SelectionDip.Width - (origin.X - canvas.SelectionDip.Left) - 8;
+        var width = Math.Clamp(available, TextEditorMinWidth, 360);
+        _textEditorHost!.Width = width;
+        Canvas.SetLeft(_textEditorHost, origin.X);
+        Canvas.SetTop(_textEditorHost, origin.Y + TextEditorOffsetY);
+        _textEditorHost.Visibility = Visibility.Visible;
+        editor.FontSize = Math.Max(8, canvas.ToDipLength(annotation.FontSize));
+        _textEditorHost.UpdateLayout();
+
+        AppLog.Info(
+            "Editor",
+            $"重新编辑文字：图像坐标={annotation.Position} 原内容=\"{TextPreview(annotation.Text)}\" " +
+            $"输入框DIP=({origin.X:0.##},{origin.Y:0.##}) 宽={width:0.##} 字号={annotation.FontSize}" +
+            "（Enter 提交、Esc 取消，均不触发复制/关闭遮罩）");
+
+        _textEditorHost.Focus();
+        editor.Focus();
+        Keyboard.Focus(editor);
+        editor.CaretIndex = editor.Text.Length;
+    }
+
+    /// <summary>重新编辑文字时的实时预览：直接改标注文本（提交/取消时再纠正）。</summary>
+    private void OnExistingTextChanged(object? sender, TextChangedEventArgs e)
+    {
+        if (_editingText is null)
+        {
+            return;
+        }
+
+        _editingText.Text = _textEditor?.Text ?? string.Empty;
+        _annotationLayer?.InvalidateVisual();
+    }
+
+    private void CommitExistingTextEdit(string source)
+    {
+        var annotation = _editingText;
+        if (annotation is null)
+        {
+            return;
+        }
+
+        var text = _textEditor?.Text ?? string.Empty;
+        _editingText = null;
+        _textEditor?.TextChanged -= OnExistingTextChanged;
+        HideTextEditor();
+        RestoreOverlayFocus();
+
+        // 实时预览期间已经把 Text 改成了新内容；先还原成原值，再由命令记录"原值 → 新值"，
+        // 否则 SetSelectedText 会因为"没有变化"而不记录，撤销就失效了。
+        annotation.Text = _editingTextOriginal;
+        var description = _session.Editing?.SetSelectedText(text);
+        AppLog.Info(
+            "Editor",
+            $"文字重新编辑提交（{source}）：长度={text.Length} 内容=\"{TextPreview(text)}\" " +
+            $"记录={description ?? "无变化"} 文档标注数={_session.Count} 撤销栈={_session.History.UndoCount}");
+
+        _annotationLayer?.InvalidateVisual();
+        UpdateVisuals();
+    }
+
+    private void CancelExistingTextEdit(string source)
+    {
+        var annotation = _editingText;
+        if (annotation is null)
+        {
+            return;
+        }
+
+        annotation.Text = _editingTextOriginal;
+        _editingText = null;
+        _textEditor?.TextChanged -= OnExistingTextChanged;
+        HideTextEditor();
+        RestoreOverlayFocus();
+        _annotationLayer?.InvalidateVisual();
+        AppLog.Info(
+            "Editor",
+            $"文字重新编辑取消（{source}）：保留原内容=\"{TextPreview(annotation.Text)}\"，不产生记录");
+        UpdateVisuals();
+    }
+
+    /// <summary>把选中标注的虚线框与手柄画到窗口 DIP 坐标。</summary>
+    private void UpdateEditorVisuals()
+    {
+        var editor = _session.Editing;
+        var canvas = _canvas;
+
+        if (editor is null || canvas is null || !editor.HasSelection || !_selection.IsCaptureReady)
+        {
+            _editorOutline.Visibility = Visibility.Collapsed;
+            foreach (var (_, element) in _editorHandles)
+            {
+                element.Visibility = Visibility.Collapsed;
+            }
+
+            return;
+        }
+
+        var bounds = editor.SelectionBounds;
+        if (bounds.IsEmpty)
+        {
+            // 退化标注（单点画笔等）：用 2px 的小框示意。
+            bounds = new PixelRect(bounds.Left, bounds.Top, Math.Max(2, bounds.Width), Math.Max(2, bounds.Height));
+        }
+
+        var dip = canvas.Value.ToDipRect(bounds);
+        var geometry = new RectangleGeometry(new Rect(dip.Left, dip.Top, dip.Width, dip.Height));
+        _editorOutline.Data = geometry;
+        _editorOutline.Visibility = Visibility.Visible;
+
+        var visibleHandles = new HashSet<AnnotationHandle>();
+        foreach (var (handle, rect) in editor.GetHandleRects())
+        {
+            var handleDip = canvas.Value.ToDipRect(rect);
+            var element = FindEditorHandle(handle);
+            if (element is null)
+            {
+                continue;
+            }
+
+            Canvas.SetLeft(element, handleDip.Left);
+            Canvas.SetTop(element, handleDip.Top);
+            element.Width = Math.Max(4, handleDip.Width);
+            element.Height = Math.Max(4, handleDip.Height);
+            element.Visibility = Visibility.Visible;
+            visibleHandles.Add(handle);
+        }
+
+        foreach (var (handle, element) in _editorHandles)
+        {
+            if (!visibleHandles.Contains(handle))
+            {
+                element.Visibility = Visibility.Collapsed;
+            }
+        }
+    }
+
+    private Rectangle? FindEditorHandle(AnnotationHandle handle)
+    {
+        foreach (var (candidate, element) in _editorHandles)
+        {
+            if (candidate == handle)
+            {
+                return element;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>在选区内的 DIP 位置开始画标注（拖拽草稿或文字输入）。</summary>
@@ -1005,6 +1474,9 @@ public sealed class CaptureOverlayWindow : Window
                 _session.CancelDraft();
             }
 
+            // T16：选区失效时选中态也失效。
+            _session.Editing?.Select(null);
+
             return;
         }
 
@@ -1017,7 +1489,14 @@ public sealed class CaptureOverlayWindow : Window
         var layer = _annotationLayer;
         if (layer is null || layer.Dpi != _capture.Dpi)
         {
-            layer = new AnnotationLayer(_session.Document, _capture.Dpi, () => _session.Preview);
+            // 传入冻结图 + 选区裁剪矩形：马赛克预览用同一套 Core 像素化算法（与导出一致）。
+            var cropRect = SelectionCrop.ToImageRect(_selection.Selection, _capture.Bounds);
+            layer = new AnnotationLayer(
+                _session.Document,
+                _capture.Dpi,
+                () => _session.Preview,
+                _capture.Image,
+                cropRect);
             _annotationLayer = layer;
             _annotationHost.Children.Clear();
             _annotationHost.Children.Add(layer);
@@ -1092,6 +1571,7 @@ public sealed class CaptureOverlayWindow : Window
         UpdateSizeBadge(client, highlight);
         UpdateToolbar(client, highlight);
         UpdateToolSelectionVisuals();
+        UpdateEditorVisuals();
         UpdateLockBadge(client, highlight);
 
         var pointer = pointerDip ?? new Point(
@@ -1285,6 +1765,31 @@ public sealed class CaptureOverlayWindow : Window
             return;
         }
 
+        // T16：选择模式下悬停选中标注的手柄时给出缩放/移动光标。
+        if (_session.Editing is { HasSelection: true } editor && _canvas is { } editCanvas)
+        {
+            var imagePoint = editCanvas.ToImage(pointerDip.X, pointerDip.Y);
+            var hoverHandle = editor.HitTestHandle(imagePoint, EditorHandleRadius);
+            if (hoverHandle != AnnotationHandle.None)
+            {
+                Cursor = hoverHandle switch
+                {
+                    AnnotationHandle.TopLeft or AnnotationHandle.BottomRight => Cursors.SizeNWSE,
+                    AnnotationHandle.TopRight or AnnotationHandle.BottomLeft => Cursors.SizeNESW,
+                    AnnotationHandle.Left or AnnotationHandle.Right => Cursors.SizeWE,
+                    AnnotationHandle.Top or AnnotationHandle.Bottom => Cursors.SizeNS,
+                    _ => Cursors.SizeAll,
+                };
+                return;
+            }
+
+            if (_session.Document.HitTest(imagePoint, EditorHitTolerance) is not null)
+            {
+                Cursor = Cursors.SizeAll;
+                return;
+            }
+        }
+
         if (_pointerDown || _selection.State == SelectionState.Dragging)
         {
             Cursor = Cursors.Cross;
@@ -1406,7 +1911,7 @@ public sealed class CaptureOverlayWindow : Window
         var stopwatch = Stopwatch.StartNew();
         try
         {
-            var image = CropSelection(CaptureAction.Copy);
+            var image = RenderSelection(CaptureAction.Copy);
             Clipboard.SetImage(image);
             stopwatch.Stop();
             CompleteCapture(CaptureAction.Copy, image, stopwatch.Elapsed, filePath: null);
@@ -1482,7 +1987,7 @@ public sealed class CaptureOverlayWindow : Window
         var stopwatch = Stopwatch.StartNew();
         try
         {
-            var image = CropSelection(CaptureAction.SaveAs);
+            var image = RenderSelection(CaptureAction.SaveAs);
             CaptureImageEncoder.Save(image, path, format);
             stopwatch.Stop();
             AppLog.Info(
@@ -1509,7 +2014,7 @@ public sealed class CaptureOverlayWindow : Window
         var stopwatch = Stopwatch.StartNew();
         try
         {
-            var image = CropSelection(CaptureAction.Pin);
+            var image = RenderSelection(CaptureAction.Pin);
             var pin = new PinWindow(image, _selection.Selection, _capture.Bounds, _capture.Dpi);
             pin.Show();
             stopwatch.Stop();
@@ -1545,15 +2050,44 @@ public sealed class CaptureOverlayWindow : Window
         return true;
     }
 
-    /// <summary>按选区裁剪冻结图；失败会抛异常，由各动作的 catch 提示并留在截图状态。</summary>
-    private BitmapSource CropSelection(CaptureAction action)
+    /// <summary>
+    /// 合成导出图（T17）：选区内的冻结图 + 全部标注，尺寸 = 选区物理像素。
+    /// 遮罩压暗、选区边框、手柄、工具栏、尺寸文字都不参与渲染。
+    /// 失败会抛异常，由各动作的 catch 提示并留在截图状态。
+    /// </summary>
+    private BitmapSource RenderSelection(CaptureAction action)
     {
-        var image = CaptureCropper.Crop(_capture.Image, _selection.Selection, _capture.Bounds);
+        var image = AnnotationExportRenderer.Render(
+            _capture.Image,
+            _selection.Selection,
+            _capture.Bounds,
+            _capture.Dpi,
+            _session.Document);
+
+        var expectedWidth = _selection.Selection.Width;
+        var expectedHeight = _selection.Selection.Height;
         AppLog.Info(
             "Output",
-            $"裁剪完成（{LoggingCaptureSink.Describe(action)}）：选区={_selection.Selection} " +
-            $"屏幕={_capture.Bounds} → 图像={image.PixelWidth}x{image.PixelHeight} {image.Format}");
+            $"导出渲染完成（{LoggingCaptureSink.Describe(action)}）：选区={_selection.Selection} " +
+            $"屏幕={_capture.Bounds} DPI={_capture.Dpi} 标注={_session.Count} 个" +
+            $"（马赛克={CountMosaics()} 个）→ 图像={image.PixelWidth}x{image.PixelHeight} {image.Format} " +
+            $"尺寸匹配选区物理像素={image.PixelWidth == expectedWidth && image.PixelHeight == expectedHeight}");
+
         return image;
+    }
+
+    private int CountMosaics()
+    {
+        var count = 0;
+        foreach (var annotation in _session.Document)
+        {
+            if (annotation is MosaicAnnotation)
+            {
+                count++;
+            }
+        }
+
+        return count;
     }
 
     /// <summary>成功收尾：写完成记录（T24 历史的接缝）→ 关闭遮罩。</summary>
