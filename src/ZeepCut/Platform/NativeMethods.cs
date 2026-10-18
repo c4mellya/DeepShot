@@ -76,6 +76,22 @@ internal static class NativeMethods
     public const uint SWP_NOZORDER = 0x0004;
     public const uint SWP_NOACTIVATE = 0x0010;
 
+    /// <summary>SetWindowPos 标志：不改变尺寸/位置（只调整 Z 序或样式）。</summary>
+    public const uint SWP_NOMOVE = 0x0002;
+    public const uint SWP_NOSIZE = 0x0001;
+
+    /// <summary>SetWindowPos 的 hWndInsertAfter 特殊值。</summary>
+    public static readonly IntPtr HWND_TOP = IntPtr.Zero;
+
+    /// <summary>SetWindowLongPtr 的窗口样式索引（GWL_STYLE）。</summary>
+    public const int GWL_STYLE = -16;
+
+    /// <summary>WS_POPUP：贴图窗口用它去掉标题栏与边框。</summary>
+    public const int WS_POPUP = unchecked((int)0x80000000);
+
+    /// <summary>WS_EX_NOACTIVATE：贴图点选时不抢前台焦点（T18 可选行为）。</summary>
+    public const int WS_EX_NOACTIVATE = 0x08000000;
+
     /// <summary>GetDpiForMonitor 的有效 DPI 类型。</summary>
     public const int MDT_EFFECTIVE_DPI = 0;
 
@@ -194,6 +210,36 @@ internal static class NativeMethods
     [DllImport("user32.dll", SetLastError = true)]
     public static extern IntPtr MonitorFromPoint(Point pt, uint dwFlags);
 
+    /// <summary>按窗口句柄找所在屏幕（贴图跨屏移动后重新取 DPI）。</summary>
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
+
+    /// <summary>系统度量：虚拟桌面（所有屏幕的并集）物理矩形，用于拖动时把贴图留在可见范围。</summary>
+    [DllImport("user32.dll")]
+    public static extern int GetSystemMetrics(int nIndex);
+
+    public const int SM_XVIRTUALSCREEN = 76;
+    public const int SM_YVIRTUALSCREEN = 77;
+    public const int SM_CXVIRTUALSCREEN = 78;
+    public const int SM_CYVIRTUALSCREEN = 79;
+
+    /// <summary>SetClassLongPtr 的 GCL_STYLE 索引（CS_DROPSHADOW 给无边框窗口加系统投影）。</summary>
+    public const int GCL_STYLE = -26;
+
+    /// <summary>窗口类样式：在无边框弹窗周围画一层轻微系统投影。</summary>
+    public const int CS_DROPSHADOW = 0x00020000;
+
+    [DllImport("user32.dll", EntryPoint = "SetClassLongPtrW", SetLastError = true)]
+    private static extern IntPtr SetClassLongPtr64(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+
+    [DllImport("user32.dll", EntryPoint = "SetClassLongW", SetLastError = true)]
+    private static extern uint SetClassLong32(IntPtr hWnd, int nIndex, uint dwNewLong);
+
+    /// <summary>跨 32/64 位安全地修改窗口类样式（贴图用它加 CS_DROPSHADOW）。</summary>
+    public static bool SetWindowClassStyle(IntPtr hWnd, int nIndex, int value) => Environment.Is64BitProcess
+        ? SetClassLongPtr64(hWnd, nIndex, new IntPtr(value)) != IntPtr.Zero
+        : SetClassLong32(hWnd, nIndex, unchecked((uint)value)) != 0;
+
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     public static extern bool GetMonitorInfo(IntPtr hMonitor, ref MonitorInfoEx lpmi);
 
@@ -294,6 +340,26 @@ internal static class NativeMethods
 
     [DllImport("user32.dll")]
     public static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+
+    /// <summary>
+    /// 64 位版本（GWL_EXSTYLE / GWL_STYLE 在 x64 上应走 SetWindowLongPtr）。
+    /// user32 在 64 位系统导出 SetWindowLongPtrW；32 位系统回退到 SetWindowLongW。
+    /// </summary>
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", SetLastError = true)]
+    private static extern IntPtr SetWindowLongPtr64(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
+    private static extern IntPtr GetWindowLongPtr64(IntPtr hWnd, int nIndex);
+
+    /// <summary>跨 32/64 位安全的窗口样式读取。</summary>
+    public static int GetWindowStyle(IntPtr hWnd, int nIndex) => Environment.Is64BitProcess
+        ? unchecked((int)GetWindowLongPtr64(hWnd, nIndex).ToInt64())
+        : GetWindowLong(hWnd, nIndex);
+
+    /// <summary>跨 32/64 位安全的窗口样式写入。</summary>
+    public static bool SetWindowStyle(IntPtr hWnd, int nIndex, int value) => Environment.Is64BitProcess
+        ? SetWindowLongPtr64(hWnd, nIndex, new IntPtr(value)) != IntPtr.Zero
+        : SetWindowLong(hWnd, nIndex, value) != 0;
 
     [DllImport("user32.dll", SetLastError = true)]
     public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);

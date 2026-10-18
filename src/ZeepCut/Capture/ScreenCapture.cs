@@ -98,6 +98,20 @@ public static class ScreenCapture
     /// </summary>
     private static int GetEffectiveDpi(IntPtr monitor)
     {
+        if (TryGetMonitorDpi(monitor, out var dpi))
+        {
+            return dpi;
+        }
+
+        return 96;
+    }
+
+    /// <summary>
+    /// 通过 <c>GetDpiForMonitor</c> 读取指定屏幕的 DPI；失败时写 WARN 日志并返回 false。
+    /// 遮罩与贴图都走这里，保证同一块屏幕的换算基准一致（贴图跨屏拖动时重新取 DPI）。
+    /// </summary>
+    public static bool TryGetMonitorDpi(IntPtr monitor, out int dpi)
+    {
         var result = NativeMethods.GetDpiForMonitor(
             monitor,
             NativeMethods.MDT_EFFECTIVE_DPI,
@@ -106,11 +120,13 @@ public static class ScreenCapture
 
         if (result == 0 && dpiX > 0)
         {
-            return (int)dpiX;
+            dpi = (int)dpiX;
+            return true;
         }
 
         AppLog.Warn("Capture", $"GetDpiForMonitor 失败（HRESULT=0x{result:X8}），按 96 DPI 处理");
-        return 96;
+        dpi = 96;
+        return false;
     }
 
     /// <summary>把虚拟桌面坐标中的物理像素矩形复制为冻结的 <see cref="BitmapSource"/>。</summary>

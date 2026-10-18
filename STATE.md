@@ -6,14 +6,38 @@
 
 - 日期：2026-10-18
 - 当前阶段：阶段二（标注与贴图）
-- 本轮任务：**T16 标注编辑 + T17 导出渲染**（接进真实截图遮罩，全部真实桌面验证）
-- 下一步任务：**T18 贴图基础**（无边框置顶贴图窗口、拖动、滚轮缩放、关闭、多张并存）。注意 T11 的 `PinWindow` 仍是最小占位，T17 已把贴图输入换成合成图（`AnnotationExportRenderer`），T18 只需在此基础上补交互与集合管理。
+- 本轮任务：**T18 贴图基础 + T19 贴图增强**（在 T11 的 `PinWindow` 占位基础上扩展，未重写）
+- 下一步任务：**T20 贴图全局操作**（托盘“全部隐藏/显示”不销毁实例；退出时全部关闭已在 T18 顺手做完）。`PinWindows`（`src/ZeepCut/Pins/PinWindows.cs`）已是唯一贴图注册表，T20 在它上面加 `HideAll`/`ShowAll`/`ToggleAll` + 托盘菜单接线即可；T21 剪贴板贴图也走 `PinWindows.Create`。
 - 构建状态：✅ 编译通过，0 warning 0 error
-- 测试状态：✅ 625 个测试通过（T16 新增 `AnnotationEditControllerTests` 32 个、`MosaicPixelatorTests` 16 个；T1–T15 旧测试全绿）
-- 桌面验证：✅ 主屏 125% 七种标注导出（含马赛克真实像素化）+ 副屏 100% 导出尺寸 + 选中/移动/缩放/删除/撤销 + 文字双击重编辑 + 复制/另存为/贴图三条输出路径
+- 测试状态：✅ 657 个测试通过（T18/T19 新增 `PinStateTests` 32 个：缩放上下限、锚点计算、透明度下限、锁定后拖动被拒绝；T1–T17 旧测试全绿）
+- 桌面验证：✅ 主屏 125% 与副屏 100% 均实测拖动 / 滚轮缩放 / Ctrl+滚轮透明度 / 锁定后再拖动无效 / 右键菜单五项 / 多张并存 / 跨屏拖动 / 退出关闭全部
 
 ## 已完成
 
+- 2026-10-18 **T18 贴图基础 + T19 贴图增强**（在 T11 的 `Pins/PinWindow.cs` 占位上**扩展**，未推翻重写；未改动已通过的 T12–T17 类型）：
+  - Core 新增 `src/ZeepCut.Core/Pins/PinState.cs`（**T18/T19 状态与限制规则**，纯逻辑、无 WPF/Win32 依赖、不可变 record struct）：
+    - 字段：`SourceWidth/SourceHeight`（原图物理像素）、`Scale`、`TopLeft`（屏幕物理像素，副屏可为负）、`Opacity`、`IsLocked`。派生：`DisplayWidth/DisplayHeight`、`Bounds`（`PixelRect`）、`MinimumScale`（由“宽高都 ≥ 40px”反推）、`CanDrag`、`IsOriginalSize`。
+    - 常量：`MinimumDisplaySize = 40`、`MaximumScale = 8.0`、`MinimumOpacity = 0.2`、`MaximumOpacity = 1.0`、`OpacityStep = 0.1`、`ZoomStep = 1.1`。
+    - 缩放：`ScaleTo(scale, anchor)` / `ZoomBy(factor, anchor)` —— **以锚点（鼠标位置）为基准保持画面点不动**；锚点先夹进旧矩形（指针在窗口外按最近边处理，不会甩飞）；倍率非法（NaN/∞/≤0）或已在上/下限时原样返回；2×2 这类极小原图**最小尺寸优先于 8 倍上限**（否则会缩到看不见）。
+    - 原始大小：`ResetToOriginal()` 以**当前中心点**为锚点回到 1:1，避免贴图跳走。
+    - 透明度：`WithOpacity` / `AdjustOpacity` 静默夹到 [0.2, 1.0]；NaN/∞ 保持原值。
+    - 锁定：`WithLock` / `ToggleLock`；`DragTo`/`DragBy` 在锁定时**返回原状态**（拒绝移动），`TryDragTo` 额外报告是否真的移动；`PlaceAt` 是程序化摆放，不受锁定限制。
+  - App `src/ZeepCut/Pins/PinWindow.cs` 扩展（无边框、`Topmost`、`ShowInTaskbar=false`、`WS_EX_TOOLWINDOW`、`CS_DROPSHADOW` 轻微投影 + 1 DIP 深色边框）：
+    - 1:1 物理像素：窗口位置尺寸按 `DpiTransform(当前屏 DPI)` 从物理像素换算；`Loaded` 与每次拖动结束用 `GetWindowRect` + `SetWindowPos` 复核物理矩形。**跨屏拖动时用 `MonitorFromWindow` 重新取 DPI**（实测 120 → 96 后物理尺寸仍为 300×240）。
+    - 拖动：左键按下记起点（屏幕物理坐标），`MouseMove` 走 `PinState.DragTo` 后一次性应用物理矩形；锁定状态下按下直接拒绝并写日志；`LostMouseCapture` 兜底收尾。
+    - 滚轮缩放：以**光标位置**为锚点（T18 决策），每档 ×1.1，日志记录倍率/锚点/尺寸/位置，到限时记“已到限制”。
+    - Ctrl+滚轮透明度：每档 ±0.1，下限 20%（日志记录前后值），到下限继续滚只记日志不变。
+    - 锁定视觉：边框变橙色 2 DIP + 左上角 `已锁定 W×H` 徽标 + 光标改箭头；**锁定后仍响应滚轮/Ctrl+滚轮/右键菜单**。
+    - 右键菜单（WPF `ContextMenu`，即时按状态生成）：原始大小（勾选项）/ 锁定位置·解锁位置（`IsChecked` 反映状态）/ 复制 / 另存为… / 关闭。复制用 `Clipboard.SetImage` 并单独 catch `COMException`；另存为复用 T11 的 `CaptureImageFileName` + `CaptureImageEncoder`，显示期间临时 `Topmost=false`（T11 的已知坑）。
+    - 关闭：Esc（`PreviewKeyDown`）或右上 × 按钮；贴图小于 3 倍按钮尺寸（<66px）时自动隐藏 × 按钮，Esc/右键仍可关闭。
+    - 标题改为 `Zeep Cut 贴图 {pid}`：窗口标题带 pid，验证脚本不会把它和遮罩（`Zeep Cut 截图遮罩`）混为一谈。
+  - App 新增 `src/ZeepCut/Pins/PinWindows.cs`（**贴图集合**，T20/T21 从这里取实例）：`Create(image, selection, screenBounds, dpi)` 创建 + Show + 登记；`All`/`Count`；`NotifyClosed`（窗口关闭时自动注销）；`CloseAll()`（退出时用）。
+  - `Capture/CaptureOverlayWindow.cs`：`TriggerPin` 改调 `PinWindows.Create`（不再直接 `new PinWindow`），成功路径与焦点交接不变。
+  - `App.xaml.cs`：托盘“退出”与 `OnExit` 都调用新增的 `DisposePins()` → `PinWindows.CloseAll()`（PLAN：退出不恢复贴图）。
+  - `Platform/NativeMethods.cs` 新增：`MonitorFromWindow`、`GetSystemMetrics` 常量、`GCL_STYLE`/`CS_DROPSHADOW`、`SetWindowClassStyle`、`GetWindowStyle`/`SetWindowStyle`（64 位走 `Get/SetWindowLongPtrW`，32 位回退）、`WS_POPUP`/`WS_EX_NOACTIVATE`、`SWP_NOMOVE`/`SWP_NOSIZE`/`HWND_TOP`。
+  - `Capture/ScreenCapture.cs`：把原来的私有 `GetEffectiveDpi` 拆出公开的 `TryGetMonitorDpi(monitor, out dpi)`，遮罩与贴图共用同一个 DPI 读取入口（贴图跨屏时靠它重新取 DPI）。
+  - 新增 `tests/ZeepCut.Tests/Pins/PinStateTests.cs`（32 个测试）。
+  - 新增验证脚本 `scripts/verify-t18t19.ps1`（7 个场景：`basic`/`lock`/`menu`/`multi`/`limits`/`crossscreen`/`keep`）。
 - 2026-10-18 **T16 标注编辑 + T17 导出渲染**（消费 T12/T13/T14/T15，未改动已通过的 Core 类型；只新增类型 + 在既有类型上加成员）：
   - Core 新增 `src/ZeepCut.Core/Annotations/AnnotationHandle.cs`：`AnnotationHandle`（`None`/`Move`/八向/`StartPoint`/`EndPoint`）与 `AnnotationEditMode`（`None`/`Move`/`Resize`/`StartPoint`/`EndPoint`）。与选区的 `SelectionHandle` 是两套语义，不要混用。
   - Core 新增 `src/ZeepCut.Core/Annotations/AnnotationEditController.cs`（**T16 状态机**，纯逻辑可单测）：
@@ -142,6 +166,52 @@
 
 ## 验证证据
 
+- 2026-10-18 **T18/T19 构建+测试（最终代码）**：`scripts/build.ps1` → `Build succeeded.`、`0 Warning(s)`、`0 Error(s)`；测试 →
+  `Passed! - Failed: 0, Passed: 657, Skipped: 0, Total: 657`；末尾 `BUILD+TEST OK`。
+  本轮新增 32 个测试（`--filter 'FullyQualifiedName~ZeepCut.Tests.Pins'`）：缩放 1x/2x/0.5x 尺寸跟随、超上限钳到 8x、低于下限钳到 40px、
+  2×2 原图最小尺寸优先、NaN/∞/≤0 倍率原样返回、已到限原样返回、锚点在左上/中心/内部/窗口外（夹到最近边）四组、`ZoomBy` 连续 100/200 档停在上下限、
+  `ResetToOriginal` 保持中心、透明度 0 钳到 0.2、>1 钳到 1、NaN 保持原值、连续 -0.1/+0.1 停在 0.2/1.0、透明度不影响 Bounds、
+  锁定后 `DragTo`/`DragBy` 被拒绝、`TryDragTo` 报告是否移动、锁定仍可缩放/调透明度、`ToggleLock` 幂等、`ClampScaleFor` 双方向取较大者、负坐标副屏。
+- 2026-10-18 **T18/T19 主屏 125%（DISPLAY1 0,0 2560×1440 DPI=120，pid 59188，脚本 `scripts/verify-t18t19.ps1`，证据 `artifacts/t18t19/primary/`）**：
+  - **基本贴图（`basic`，选区 (360,320) 640×420）**：点工具栏“贴图”后窗口枚举
+    `hwnd=0x7D1222 360,320 640x420 exstyle=0x00000088(TOOLWINDOW)` —— 位置尺寸与选区**完全一致**；
+    `WS_EX_TOOLWINDOW` 置位（不在任务栏/Alt+Tab 出现按钮），且 `ShowInTaskbar=false`。日志 `贴图窗口：物理=(360,320) 640x420 DPI=120（WPF PixelsPerDip=1.25）`。
+    截图 `primary-basic-01-created.png`；放大 `zoom-pin-corner.png` 可见 1px 深灰边框（像素探测：x=360 为 113,113,114，x=361 回到图片内容 216,216,218；右边缘 x=999 为 104,104,105）。
+  - **拖动**：从 (680,530) 拖到 (800,620) → 窗口 rect `480,410 640x420`（位移 **+120/+90**，与鼠标完全一致），日志 `拖动结束（左键抬起）` + `拖动结束物理矩形=(480,410) 640x420 与状态一致=True`；截图 `primary-basic-02-dragged.png`。
+  - **滚轮缩放（光标锚点）**：锚点 (600,500) 反向滚 2 档 → `1x → 0.909x → 0.826x`、尺寸 `640x420 → 529x347`、位置 `(480,411) → (501,426)`（左上角按锚点比例外移）；
+    正向滚 4 档 → `0.826x → 1.331x`、`774x508`。每档日志都记录 `锚点=(600,500)` 与尺寸/位置；截图 `primary-basic-03-zoom-out.png`、`-04-zoom-in.png`。
+  - **Ctrl+滚轮透明度（定量）**：从 1.0 连续下调，日志逐条 `1 → 0.9 → … → 0.2`，到 0.2 后继续滚 4 次全部输出 `0.2 → 0.2（下限=0.2）`（**不会变成完全看不见**）；
+    同一屏幕区域 (470,410) 300×200 的平均亮度实测：正常 `238.0` → 0.4 时 `142.9` → 到下限 `47.5` → 调回后 `238.0`（截图中贴图明显变淡但内容仍可辨认）。
+    证据 `primary-basic-05-opacity-04.png` / `-06-opacity-floor.png` / `-07-opacity-restored.png`。
+  - **右键菜单**：五项目均通过 UIA 真实点中（`MENU ITEM '原始大小' 847,650 166x27` 等）：
+    - `原始大小`：1.21x `774x508` → 1x `640x420`（窗口 rect `522,436 640x420`），中心点不变。
+    - `复制`：独立进程读剪贴板 → **`CLIPBOARD IMAGE 640x420`**（`primary-basic-clipboard.png`）。
+    - `另存为…`：真实 Win32 对话框（点击文件名字段 + 剪贴板粘贴 + `BM_CLICK`）→ **`PIN SAVED FILE ... 640x420 3941 bytes`**；`primary-menu-pin-saved.png` 与同次截图的贴图区域（去掉 6px 边框）逐像素比较 **mean 通道差 0.23、62000 采样中仅 106 个 >30 的差异像素**，即贴图就是原图 1:1，没有缩放模糊。
+    - `关闭` / `锁定位置` / `解锁位置`：见下。
+  - **Esc 关闭**：`SENT {ESC}` 后 `PINS after-esc: count=0`；日志 `贴图窗口关闭（Esc）` → `贴图窗口已关闭` → `贴图已从集合移除：剩余 0 张`；截图 `primary-basic-09-after-esc.png`。
+- 2026-10-18 **T18/T19 锁定（主屏 125%，场景 `lock`）**：
+  - 右键 `锁定位置` → 日志 `右键“锁定位置”：锁定 False → True，位置=(360,320)`；截图 `primary-lock-02-locked.png`，放大 `zoom-locked-corner.png` 可见橙色边框 + `已锁定 640×420` 徽标。
+  - **锁定后拖动被拒绝**：从窗口中心拖 (680,530)→(840,650)，日志 `贴图已锁定，忽略拖动`，窗口 rect 前后都是 `360,320 640x420`（**完全没动**，已用窗口 rect 对比，不是靠肉眼看截图）；`primary-lock-03-drag-rejected.png`。
+  - **锁定后仍可缩放**：滚 3 档 → `640x420 → 852x559`（`primary-lock-04-zoom-while-locked.png`），说明锁定只禁用拖动。
+  - 右键 `解锁位置` → `锁定 True → False`；再拖 (773,586)→(873,656) → rect `347,307 852x559` → `447,377 852x559`（**位移 +100/+70 生效**）。
+  - 右上 × 点击后 `count=0`，日志只有 `贴图窗口关闭（右上 ×）`、没有 Esc 记录；`primary-lock-07-after-close.png`。
+- 2026-10-18 **T18/T19 多张并存（主屏 125%，场景 `multi`）**：
+  - 依次创建 320×240 @ (360,320) 与 360×260 @ (720,360) → `PINS pin-2: count=2`，两张独立窗口（不同 hwnd、不同 WPF 窗口类 GUID）；截图 `primary-multi-02-second.png`。
+  - 拖动第二张 (900,490)→(820,630) → 第二张 `640,500 360x260`（-80/+140），**第一张仍是 `360,320 320x240`（未受影响）**；`primary-multi-03-dragged-second.png`。
+  - 点第一张的 × → `PINS after-close-first: count=1`，只剩第二张；`primary-multi-04-closed-first.png`。再 Esc 关掉最后一张 → `count=0`。
+- 2026-10-18 **T19 尺寸上下限（主屏 125%，场景 `limits`，原图 200×150）**：
+  - 连续反向滚 24 档 → 窗口停在 **`53x40`**（高度正好 40px 下限，宽度按比例 53px，没有再缩小也没有消失）；`primary-limits-02-min.png`。
+  - 连续正向滚 60 档 → 窗口停在 **`1600x1200`（= 200×150 × 8）**，日志重复输出 `滚轮缩放已到限制：缩放=8x 尺寸=1600x1200（下限=40px 上限=8x）`；`primary-limits-03-max.png`。
+  - 右键 `原始大小` → `200x150`（位置 `539,332`，中心点保持），再点 × 关闭 → `count=0`。
+- 2026-10-18 **T18 跨屏拖动与 DPI 重算（主屏 125% → 副屏 100%，场景 `crossscreen`）**：
+  - 副屏创建贴图（场景 `basic -Target secondary`）：`hwnd=0xDC12C8 -1000,320 640x420` —— 负坐标原点正确，尺寸 = 选区物理像素；
+    拖动 (680,530)→(800,620) 得到 `-880,410 640x420`；滚轮/透明度/菜单/剪贴板（640×420）与主屏表现一致；证据 `artifacts/t18t19/secondary/`（截图尺寸 1080×1920，来源为 `-1080,0` 副屏）。
+    副屏贴图边框像素探测：x=80 为 `140,71,71`、x=81 起为图片内容；右边缘 x=719 为 `62,51,50`。
+  - 主屏 (120,400) 300×240 的贴图**拖到副屏**：拖动结束 rect **`-380,460 300x240`**（物理尺寸完全不变，只移动 -500/+60）；
+    日志 `拖动：贴图所在屏幕 DPI 120 → 96，按新 DPI 重新换算 DIP 尺寸` → `拖动结束物理矩形=(-380,460) 300x240 与状态一致=True`。
+    在副屏上再正向滚 2 档 → `363x290`（= 300×240 × 1.21，物理像素仍然正确）；证据 `primary-cross-01/02/03-*.png`。
+- 2026-10-18 **退出关闭全部贴图（真实桌面）**：先创建 2 张贴图（`exit-01-two-pins-before-exit.png`），再用托盘菜单“退出”（UIA/坐标点击真实菜单项）→
+  日志 `退出：用户选择托盘菜单“退出”` → `退出：关闭全部贴图 2 张` → 两条 `贴图窗口已关闭` → `退出完成 (exit code=0)`，`Get-Process ZeepCut` 无输出（进程结束）。
 - 2026-10-18 T5/T6 构建+测试：`powershell.exe -NoProfile -ExecutionPolicy Bypass -File '\\wsl.localhost\Ubuntu\home\camellya\workspace\Zeep-Cut\scripts\build.ps1'` →
   `Build succeeded.`、`0 Warning(s)`、`0 Error(s)`；测试 → `Passed! - Failed: 0, Passed: 254, Skipped: 0, Total: 254`；脚本末尾 `BUILD+TEST OK`。
 - 2026-10-18 真实显示器与 DPI（PerMonitorV2 探针 `SetProcessDpiAwarenessContext(-4)`）：
@@ -345,6 +415,22 @@
   - `Ctrl+A` + 输入 `second T16 text` + Enter → 日志 `文字重新编辑提交（Enter）：长度=15 内容="second T16 text" 记录=修改文字 文档标注数=1 撤销栈=2`。
   - `Ctrl+Z` → 截图 `primary-textedit-04-undo-text-crop.png` 文字回到 `first text`；`Ctrl+Y` → `primary-textedit-05-redo-text-crop.png` 又变成 `second T16 text`。文字修改**可撤销/重做**。
 - 2026-10-18 **T16/T17 最终冒烟（提交后重新构建 + 重启，真实桌面）**：重新构建 `0 Warning(s)` / `625 passed`，启动 pid 8624。主屏 125% 七种标注 + 马赛克 → Enter → 独立进程读剪贴板 **`760x560`**，马赛克区域 **140 个块 0 个非均匀**（证据 `artifacts/t16t17/final-smoke/primary-export-clipboard.png`）；副屏 100% 选区 `(-1000,240) 640×480` → 剪贴板 **`700x640`**（脚本里副屏默认 700×640 的选择，与 `-SelW/-SelH` 的组合一致）。提交后行为与提交前一致。
+- 2026-10-18 **未验证（T18/T19 相关）**：
+  - **全局显示/隐藏（T20）未做**：托盘“显示/隐藏全部贴图”仍是“尚未实现”提示；`PinWindows` 只有 `Create`/`All`/`Count`/`CloseAll`，没有 `HideAll`/`ShowAll`。按本轮范围留给 T20。
+  - **剪贴板贴图（T21）未做**：Alt+S 与托盘“从剪贴板贴图”仍是占位日志（`PasteFromClipboardPlaceholder`）。贴图自身的右键“复制”已验证，但“从剪贴板创建贴图”没有入口。
+  - **历史联动（T22）未做**：贴图不写历史（T24 才有历史），也没有“从历史贴图”入口。
+  - **透明度只在 20%/40%/100% 三个点做了像素级亮度定量**（238.0 → 142.9 → 47.5 → 238.0）；中间档位（0.3/0.5/0.7/0.9）只从日志确认数值，没有逐档截图。
+  - **贴图窗口的投影（`CS_DROPSHADOW`）只在主屏截图中确认**：贴图右/下外沿能看到一条比桌面略暗的过渡带，但投影是系统绘制的，没有做像素级基线对比；贴图靠 1px 深色边框与桌面区分这一点是逐像素验证过的。
+  - **滚动缩放的锚点在“窗口外”的分支只在 Core 单测覆盖**（`ScaleTo_AnchorOutside_ClampsToNearestEdge`），桌面验证时鼠标一直在窗口内。
+  - **缩放上限 8x 下超屏的贴图没有被夹回屏幕**：`limits` 场景把 200×150 放大到 1600×1200 时窗口左上角跑到 `-161,-193`（部分在屏幕外）。这是**有意为之**（缩放以鼠标为锚点，不做屏幕夹取，否则贴图会在放大时被推着走）；若以后要求“贴图不能移出屏幕”，应在 `PinState` 加屏幕夹取并补测试，而不是改 UI。
+  - **贴图右键菜单里没有“透明度”项**：PLAN 的右键菜单只要求原始大小/复制/另存为/锁定/关闭，透明度走 Ctrl+滚轮，没有做菜单快捷项。
+  - **另存为只验证了 PNG**：贴图另存为沿用了 T11 的编码器（PNG/JPEG 同一入口），本轮只跑 PNG。
+  - **多贴图上限未测**：本轮最多同时 3 张（`keep` 场景 2 张 + 遗留 1 张），没有做大数量（10+）的内存/性能测试。
+  - **贴图不响应 Alt+F4/系统关闭菜单**：无系统菜单（`WindowStyle=None`），只有 Esc/×/右键关闭；Alt+F4 由 WPF 默认处理，未单独验证。
+  - **锁定徽标只覆盖左上角小区域**，贴图很小（40px）时徽标会盖住大半画面（这时 × 按钮会自动隐藏），未做自动收纳。
+  - 150% 缩放、三屏以上未测试（本机只有 125% + 100% 双屏）。
+  - **验证脚本的两个坑（写进脚本注释）**：①`Find-PinWindows` 返回 1 个元素时 PowerShell 会把数组拆开，所有调用点必须用 `@(...)` 包住再用 `.Count`/`[0]`（本轮踩过：`$pins[0]` 取到的是 PSCustomObject 的属性值 `0x5A`，被当成 hwnd 打印出 `hwnd=0x5A rect?`）；②自定义 C# 辅助类里**不能同时**定义 `public const uint WHEEL` 和 `public static void Wheel(...)`，PowerShell 解析 `[Class]::Wheel` 会失败并报“does not contain a method named 'Wheel'”。
+  - **托盘菜单的自动化仍不稳**：`scripts/tray.ps1` 未声明 PerMonitorV2，返回的 icon rect 是虚拟化 DIP（本机 1871,30 对应物理 2339,37）；用真实物理坐标或 `PostMessage(WM_TRAYICON, WM_RBUTTONUP)` 打开菜单后，本轮用“菜单窗口 `#32768` 的 rect 底部 -12px”点击“退出”成功，但这是位置推算而不是 UIA 命中菜单项。
 - 2026-10-18 **未验证（T16/T17 相关）**：
   - 手柄缩放只在**矩形**上真实验证（椭圆/马赛克走同一套 `Resize` 分支，Core 单测覆盖 `MosaicAnnotation` 缩放，但未在桌面逐一拖马赛克/椭圆手柄）。
   - 箭头/直线的**端点拖动**只有 Core 单测（`SegmentEndpoints_DragStartAndEnd_RecordsOneStep`、`SegmentEndpoints_AreClampedToImage`），未在桌面拖动线段端点。
@@ -404,6 +490,15 @@
 - **T17 导出坐标只有一个原点**：标注坐标是"相对选区左上角"的物理像素（T14 的 `AnnotationCanvasTransform`），而裁剪图左上角也正好是选区左上角，所以导出**不需要**再减 `imageRect.Left/Top`。本轮第一版多减了一次，会在选区原点非 (0,0) 时整体偏移 —— 已在 `AnnotationExportRenderer.Composite` 里去掉并加注释。
 - **T17 马赛克按 Z 序处理"当前像素"**：走到马赛克时，先把之前累积的标注合成为位图，再对这份像素做块平均；所以"马赛克盖在矩形/直线上"会把这些标注一起糊掉（与预览一致，已实测直线被平均成粉色块）。如果以后要求"只糊原图、不糊标注"，需要改成两遍合成（先算原图马赛克层、再按 Z 序合成），并补测试。
 - **T17 马赛克默认强度改为 1.0**（原 0.75）：0.75 会保留 25% 原像素，密排文字细看仍可辨认，削弱打码效果。块平均本身是"块的算术平均"，不是模糊；强度 <1 就是与原像素的线性混合。需要"轻打码"时显式设小，`AnnotationDefaults.ClampMosaicStrength` 仍钳 0–1。
+- **贴图的所有几何规则都在 Core `PinState`，UI 不另算**：缩放倍率、显示尺寸、最小 40px / 最大 8 倍、透明度下限 20%、锁定拒绝拖动、锚点比例，全部在 `src/ZeepCut.Core/Pins/PinState.cs`。`PinWindow` 只做 DIP 换算、`SetWindowPos`、事件接线和视觉。**不要在 `PinWindow` 里写 `Math.Clamp` 之类的新规则**，否则桌面行为与单测会分叉。改规则时先改 `PinState` 并补 `PinStateTests`。
+- **贴图的坐标是真·物理像素，位置尺寸都按“当前所在屏幕”的 DPI 换算**：窗口物理矩形由 `PinState.Bounds` 决定，`DpiTransform(当前屏 DPI)` 换算成 WPF DIP；每次拖动/缩放后用 `GetWindowRect` + `SetWindowPos` 复核。**拖动跨屏时必须重新取 DPI**（`MonitorFromWindow` → `ScreenCapture.TryGetMonitorDpi`），否则从 125% 屏拖到 100% 屏会整体放大 25%。已在桌面实测 120→96 后物理尺寸不变。
+- **贴图滚轮缩放的锚点是鼠标位置，且不把贴图夹回屏幕**：这是 T18 的明确决策（另一种做法是以窗口中心为锚，无法“放大鼠标下的细节”）。副作用是放大到很大时窗口可以伸出屏幕（实测 8x 时左上角到了 `-161,-193`），这是有意的 —— 夹取会让贴图在放大过程中被推着走。`ResetToOriginal` 反过来以**中心点**为锚，避免“原始大小”把贴图甩走。
+- **贴图锁定只禁止拖动，不禁用其它一切**：PLAN 要求“锁定贴图仍响应鼠标，通过右键解锁，不穿透鼠标”。所以锁定后滚轮缩放、Ctrl+滚轮透明度、右键菜单全部照常，只有 `DragTo`/`DragBy` 返回原状态。视觉上用橙色边框 + `已锁定 W×H` 徽标提示，光标从 `SizeAll` 变回 `Arrow`。
+- **贴图窗用 `CS_DROPSHADOW` + 1 DIP 边框区分桌面**：不启用 `AllowsTransparency`（会让内容变成分层窗口，1:1 像素显示与性能都更麻烦），也不自绘阴影。窗口类样式里加 `CS_DROPSHADOW` 拿系统投影，内容层再叠一个 1 DIP 深色边框（实测像素：边缘 113,113,114，紧邻内容 216,216,218）。
+- **贴图窗口标题带 pid**（`Zeep Cut 贴图 {pid}`）：验证脚本靠标题前缀区分遮罩（`Zeep Cut 截图遮罩`）与贴图；不带 pid 时按前缀匹配会把两者混在一起。另外 `Find-PinWindows` 必须过滤掉 `GetWindowRect` 失败/零尺寸的窗口（WPF 还有若干同名隐藏辅助窗口）。
+- **`PinWindows` 是贴图唯一入口**：`CaptureOverlayWindow.TriggerPin` 走 `PinWindows.Create`，退出走 `PinWindows.CloseAll`，窗口 `Closed` 里回调 `NotifyClosed` 自动注销。T20/T21 不要再 `new PinWindow(...)`，否则集合会漏登记，全局隐藏/关闭会漏掉那张。
+- **另存为对话框必须临时取消 Topmost**（贴图与遮罩同一个坑）：贴图本身是 `Topmost`，直接 `ShowDialog(this)` 会让 Win32 文件对话框自行返回。`PinWindow.SaveAs` 里 `Topmost=false` → `ShowDialog` → `finally` 恢复并 `Activate()`。
+- **贴图很小（<66px）时自动隐藏右上 × 按钮**：22 DIP 的按钮在 40px 贴图上会盖住大半内容。Esc 与右键“关闭”仍然可用，所以不会出现关不掉的小贴图。
 - **T17 预览马赛克与导出共用同一算法**：`AnnotationLayer` 拿冻结图 + 选区裁剪矩形，按 `MosaicPixelator` 算出区域的像素化位图并缓存（键 = 可见区域 + 块大小 + 强度），再由 `AnnotationRenderer` 按 1:1 铺上去。也就是说预览不再是"半透明棋盘示意"，看到什么导出就是什么。缓存不会自动失效 —— 选区变化会重建 `AnnotationLayer`，但**同一选区内修改块大小/强度**目前只能靠 `InvalidateMosaicCache()`，UI 还没有调整入口（T16 未做属性编辑）。
 - **T17 导出 DPI 做法**：`RenderTargetBitmap` 的像素尺寸直接取选区物理像素，dpi 参数用目标屏 DPI，绘制上下文压 `ScaleTransform(96/dpi)`。**不要**用 DIP 尺寸建 RenderTargetBitmap 再乘缩放，125% 下会得到 80% 的像素数（本轮验收点就是"导出尺寸 = 选区物理像素"，已在 125%/100% 各实测一次）。
 - **验证马赛克必须有高频纹理**：桌面壁纸/纯色背景上做马赛克，像素化与"半透明方块"肉眼无法区分（本轮前两次就落在纯色区，看不出效果）。`scripts/texture-window.ps1` 专门生成 12px 彩色块 + 密集文字，做马赛克验证时先起这个窗口。注意它是 WinForms（验证脚本允许），且 Windows 在 125% 下会把 WinForms 尺寸按 DIP 缩，必须用 `SetWindowPos` 强制物理矩形。
@@ -515,3 +610,9 @@
 - T17 导出前做**尺寸断言**：`PixelWidth/PixelHeight` 必须等于选区物理像素，否则抛异常并留在截图状态。这比"输出后再检查"更早暴露 DPI 换算错误。
 - T17 验证新增 `scripts/verify-t16t17.ps1`（6 场景）与 `scripts/texture-window.ps1`（高频纹理，仅验证用）。保存对话框仍走 T11 的"点击文件名字段 + 剪贴板粘贴 + `BM_CLICK`"路径（DirectUI 无 ValuePattern，IME 会改写 `C:\...`）。
 - T15 验证脚本的两个本机坑（写进脚本注释）：`SendKeys` 在本机 IME 下会吃掉空格/数字，改为 `SendInput + KEYEVENTF_UNICODE` 逐字输入且 `INPUT` 必须 `Size=40`；`SetCursorPos` 在遮罩激活瞬间会被丢弃，移动后必须 `GetCursorPos` 回读校验并重试。
+- T18/T19 贴图的缩放/透明度/锁定/锚点规则全部下沉到 Core `PinState`（32 个单测），`PinWindow` 只做 DIP 换算、Win32 摆放与事件接线。理由：这些规则是"贴图手感"的核心，靠桌面截图对比很难回归；放 Core 后改一条上限/下限就有测试兜住。
+- T18 选定**鼠标位置为缩放锚点**（不是窗口中心）：滚轮时"鼠标下的像素不动"更符合贴图的使用方式（放大看细节）。右键"原始大小"是唯一以**中心点**为锚的操作，避免恢复尺寸时贴图跳走。缩放**不做屏幕夹取**（放大到 8x 允许伸出屏幕）。
+- T19 锁定语义按 PLAN 收窄成"只禁止拖动"：滚轮缩放、Ctrl+滚轮透明度、右键菜单在锁定下全部可用（已在桌面逐项实测）；锁定状态用橙色边框 + `已锁定 W×H` 徽标表达，光标从 `SizeAll` 变 `Arrow`。
+- T18 贴图集合 `PinWindows` 是唯一注册表（`Create`/`All`/`Count`/`CloseAll`/`NotifyClosed`），托盘退出与 `OnExit` 都调 `CloseAll()`（PLAN：退出不恢复贴图）。T20 的全局隐藏/显示、T21 的剪贴板贴图、T22 的历史联动都从这里取实例。
+- T18 贴图窗口不启用 `AllowsTransparency`，靠 `CS_DROPSHADOW`（系统投影）+ 1 DIP 深色边框与桌面区分；这样内容仍是 1:1 物理像素直出，不受分层窗口影响。
+- T18 验证脚本 `scripts/verify-t18t19.ps1` 用 `Find-PinWindows`（标题前缀 + 可见 + 非零矩形 + 按屏幕位置排序）识别贴图窗口，右键菜单项通过 UIA 按 `Name` 命中（原始大小/复制/另存为…/锁定位置/解锁位置/关闭），不硬编码菜单坐标。

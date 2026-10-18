@@ -2003,7 +2003,10 @@ public sealed class CaptureOverlayWindow : Window
         }
     }
 
-    /// <summary>贴图：本轮创建最小可用的占位贴图窗口（T18–T22 完善），成功后结束截图。</summary>
+    /// <summary>
+    /// 贴图（T18）：把合成图创建成一张独立的置顶贴图窗口，成功后结束截图。
+    /// 多张并存由 <see cref="PinWindows"/> 管理；本轮不接剪贴板贴图（T21）。
+    /// </summary>
     private void TriggerPin(string source)
     {
         if (!TryBeginOutput(source, CaptureAction.Pin))
@@ -2015,8 +2018,7 @@ public sealed class CaptureOverlayWindow : Window
         try
         {
             var image = RenderSelection(CaptureAction.Pin);
-            var pin = new PinWindow(image, _selection.Selection, _capture.Bounds, _capture.Dpi);
-            pin.Show();
+            var pin = PinWindows.Create(image, _selection.Selection, _capture.Bounds, _capture.Dpi);
             stopwatch.Stop();
             CompleteCapture(CaptureAction.Pin, image, stopwatch.Elapsed, filePath: null);
 

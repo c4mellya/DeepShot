@@ -6,6 +6,7 @@ using ZeepCut.Core.Capture;
 using ZeepCut.Core.Geometry;
 using ZeepCut.Core.Shortcuts;
 using ZeepCut.Output;
+using ZeepCut.Pins;
 using ZeepCut.Platform;
 
 namespace ZeepCut;
@@ -350,6 +351,7 @@ public partial class App : Application
     {
         AppLog.Info("App", "退出：用户选择托盘菜单“退出”");
         DisposeCaptureOverlay();
+        DisposePins();
         DisposeGlobalHotkey();
         DisposeTrayIcon();
         Shutdown();
@@ -368,6 +370,9 @@ public partial class App : Application
         overlay.Closed -= OnCaptureOverlayClosed;
         overlay.Cancel();
     }
+
+    /// <summary>退出时关闭全部贴图（PLAN：退出不恢复贴图，也不销毁历史）。</summary>
+    private void DisposePins() => PinWindows.CloseAll();
 
     private void DisposeGlobalHotkey()
     {
@@ -398,6 +403,7 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         DisposeCaptureOverlay();
+        DisposePins();
         DisposeGlobalHotkey();
         DisposeTrayIcon();
 
