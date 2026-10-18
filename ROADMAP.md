@@ -11,7 +11,7 @@
 
 - [x] **T1 Core 几何与屏幕模型**：`PixelRect`、`MonitorInfo`、`DisplaySpace`、`DpiTransform`。
   要求：含负坐标屏幕的点查找；选区夹取到目标屏幕；物理像素↔DIP 换算。xUnit 覆盖。
-- [ ] **T2 Core 选区状态机**：`SelectionState`，支持任意方向拖拽生成正矩形、最小尺寸、鼠标抬起定稿。
+- [x] **T2 Core 选区状态机**：`SelectionState`，支持任意方向拖拽生成正矩形、最小尺寸、鼠标抬起定稿。
 - [ ] **T3 应用外壳**：单实例 Mutex、隐藏主窗口、退出生命周期、全局未处理异常日志。
 - [ ] **T4 托盘**：Win32 `Shell_NotifyIcon` 托盘图标 + 右键菜单（截图/贴图/显示隐藏/历史/设置/检查更新/退出），无 WinForms。
 - [ ] **T5 全局热键**：`RegisterHotKey` 注册 Alt+A / Alt+S，冲突时托盘通知提示，退出时注销。
