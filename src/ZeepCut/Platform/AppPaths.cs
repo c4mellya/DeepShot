@@ -24,6 +24,12 @@ public static class AppPaths
     /// <summary>缩略图目录：<c>%LOCALAPPDATA%\ZeepCut\thumbs</c>（T23 历史启用）。</summary>
     public static string ThumbsDirectory => Path.Combine(DataRoot, "thumbs");
 
+    /// <summary>
+    /// 屏幕捕获调试目录：<c>%LOCALAPPDATA%\ZeepCut\logs\capture-debug</c>。
+    /// T6 只用于把捕获结果落盘验证，后续接入历史后可移除或保留为诊断用途。
+    /// </summary>
+    public static string CaptureDebugDirectory => Path.Combine(LogsDirectory, "capture-debug");
+
     /// <summary>启动时创建全部数据目录；目录已存在时不做任何事。</summary>
     public static void EnsureCreated()
     {
@@ -31,6 +37,7 @@ public static class AppPaths
         Directory.CreateDirectory(LogsDirectory);
         Directory.CreateDirectory(ImagesDirectory);
         Directory.CreateDirectory(ThumbsDirectory);
+        Directory.CreateDirectory(CaptureDebugDirectory);
     }
 
     /// <summary>

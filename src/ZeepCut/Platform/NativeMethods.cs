@@ -14,6 +14,15 @@ internal static class NativeMethods
     public const int WM_LBUTTONDBLCLK = 0x0203;
     public const int WM_RBUTTONUP = 0x0205;
 
+    /// <summary>全局热键触发消息。</summary>
+    public const int WM_HOTKEY = 0x0312;
+
+    /// <summary>RegisterHotKey 标志：按住不放时不重复产生 WM_HOTKEY（Win7+）。</summary>
+    public const uint MOD_NOREPEAT = 0x4000;
+
+    /// <summary>热键已被其他窗口/进程占用。</summary>
+    public const int ERROR_HOTKEY_ALREADY_REGISTERED = 1409;
+
     /// <summary>键盘/辅助技术选中托盘图标时的回调（NOTIFYICON_VERSION_4）。</summary>
     public const int NIN_SELECT = 0x0400;
     public const int NIN_KEYSELECT = 0x0401;
@@ -24,11 +33,17 @@ internal static class NativeMethods
     public const int ERROR_CLASS_ALREADY_EXISTS = 1410;
 
     public const uint NIM_ADD = 0;
+    public const uint NIM_MODIFY = 1;
     public const uint NIM_DELETE = 2;
 
     public const uint NIF_MESSAGE = 0x00000001;
     public const uint NIF_ICON = 0x00000002;
     public const uint NIF_TIP = 0x00000004;
+    public const uint NIF_INFO = 0x00000010;
+
+    public const uint NIIF_INFO = 0x00000001;
+    public const uint NIIF_WARNING = 0x00000002;
+    public const uint NIIF_ERROR = 0x00000003;
 
     public const uint MF_STRING = 0x00000000;
     public const uint MF_SEPARATOR = 0x00000800;
@@ -38,6 +53,12 @@ internal static class NativeMethods
     public const uint TPM_RETURNCMD = 0x0100;
 
     public const int IDI_APPLICATION = 32512;
+
+    public const uint MONITOR_DEFAULTTONEAREST = 0x00000002;
+    public const uint MONITORINFOF_PRIMARY = 0x00000001;
+
+    public const uint SRCCOPY = 0x00CC0020;
+    public const uint CAPTUREBLT = 0x40000000;
 
     /// <summary>窗口过程委托；必须保持存活，否则原生回调会崩溃。</summary>
     public delegate IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
@@ -87,6 +108,31 @@ internal static class NativeMethods
         public int Y;
     }
 
+    /// <summary>Win32 RECT：right/bottom 为开边界。</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct Rect
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+
+        public readonly int Width => Right - Left;
+
+        public readonly int Height => Bottom - Top;
+    }
+
+    /// <summary>MONITORINFOEXW：包含物理像素矩形、工作区、主屏标志与设备名。</summary>
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    public struct MonitorInfoEx
+    {
+        public int cbSize;
+        public Rect rcMonitor;
+        public Rect rcWork;
+        public uint dwFlags;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string szDevice;
+    }
+
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     public static extern IntPtr GetModuleHandle(string? lpModuleName);
 
@@ -122,6 +168,51 @@ internal static class NativeMethods
 
     [DllImport("user32.dll", SetLastError = true)]
     public static extern bool GetCursorPos(out Point lpPoint);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern IntPtr MonitorFromPoint(Point pt, uint dwFlags);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern bool GetMonitorInfo(IntPtr hMonitor, ref MonitorInfoEx lpmi);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern IntPtr GetDC(IntPtr hWnd);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC);
+
+    [DllImport("gdi32.dll", SetLastError = true)]
+    public static extern IntPtr CreateCompatibleDC(IntPtr hdc);
+
+    [DllImport("gdi32.dll", SetLastError = true)]
+    public static extern IntPtr CreateCompatibleBitmap(IntPtr hdc, int width, int height);
+
+    [DllImport("gdi32.dll", SetLastError = true)]
+    public static extern IntPtr SelectObject(IntPtr hdc, IntPtr hgdiobj);
+
+    [DllImport("gdi32.dll", SetLastError = true)]
+    public static extern bool BitBlt(
+        IntPtr hdcDest,
+        int xDest,
+        int yDest,
+        int width,
+        int height,
+        IntPtr hdcSrc,
+        int xSrc,
+        int ySrc,
+        uint rop);
+
+    [DllImport("gdi32.dll", SetLastError = true)]
+    public static extern bool DeleteObject(IntPtr hObject);
+
+    [DllImport("gdi32.dll", SetLastError = true)]
+    public static extern bool DeleteDC(IntPtr hdc);
 
     [DllImport("user32.dll", SetLastError = true)]
     public static extern IntPtr CreatePopupMenu();

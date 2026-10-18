@@ -1,6 +1,8 @@
 using System.Windows;
 using System.Windows.Threading;
+using ZeepCut.Capture;
 using ZeepCut.Core;
+using ZeepCut.Core.Shortcuts;
 using ZeepCut.Platform;
 
 namespace ZeepCut;
@@ -13,9 +15,17 @@ public partial class App : Application
 {
     private const string SingleInstanceMutexName = @"Local\ZeepCut.SingleInstance";
 
+    // 首版默认快捷键；T29 设置窗口接入后改为从设置读取。
+    private const string ScreenshotShortcutText = "Alt+A";
+    private const string PinShortcutText = "Alt+S";
+
+    private readonly Dictionary<ShortcutSpec, Action> _hotkeyActions = new();
+    private readonly List<string> _hotkeyRegistrationFailures = new();
+
     private Mutex? _singleInstanceMutex;
     private bool _ownsSingleInstanceMutex;
     private TrayIcon? _trayIcon;
+    private GlobalHotkey? _globalHotkey;
 
     public App()
     {
@@ -55,7 +65,8 @@ public partial class App : Application
                 return;
             }
 
-            AppLog.Info("App", "启动完成：应用在系统托盘中运行");
+            StartGlobalHotkeys();
+            AppLog.Info("App", "启动完成：应用在系统托盘中运行，全局热键已处理");
         }
         catch (Exception ex)
         {
@@ -113,11 +124,11 @@ public partial class App : Application
         switch (command)
         {
             case TrayMenuCommand.Screenshot:
-                StartCapturePlaceholder();
+                StartCapture("托盘菜单");
                 break;
 
             case TrayMenuCommand.PasteFromClipboard:
-                PasteFromClipboardPlaceholder();
+                PasteFromClipboardPlaceholder("托盘菜单");
                 break;
 
             case TrayMenuCommand.ToggleAllPins:
@@ -142,13 +153,122 @@ public partial class App : Application
         }
     }
 
-    // TODO(T5–T11): 接入全局热键、屏幕捕获与冻结遮罩流程。本轮仅保留菜单入口。
-    private void StartCapturePlaceholder() =>
-        AppLog.Info("Capture", "截图命令：占位入口，尚未接入截图流程");
+    /// <summary>
+    /// 创建全局热键接收窗口并注册默认快捷键。单个注册失败只提示该快捷键，
+    /// 不影响另一个继续注册（ALT+S 仍可用）。
+    /// </summary>
+    private void StartGlobalHotkeys()
+    {
+        _hotkeyRegistrationFailures.Clear();
 
-    // TODO(T18–T22): 读取剪贴板图片并创建贴图窗口。本轮仅保留菜单入口。
-    private void PasteFromClipboardPlaceholder() =>
-        AppLog.Info("Pins", "从剪贴板贴图命令：占位入口，尚未实现");
+        try
+        {
+            _globalHotkey = new GlobalHotkey();
+            _globalHotkey.Pressed += OnGlobalHotkeyPressed;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("Hotkey", "全局热键消息窗口创建失败，快捷键不可用", ex);
+            NotifyUser("全局热键不可用", $"无法创建热键消息窗口：{ex.Message}");
+            return;
+        }
+
+        RegisterHotkey(ScreenshotShortcutText, () => StartCapture("全局热键 " + ScreenshotShortcutText));
+        RegisterHotkey(PinShortcutText, () => PasteFromClipboardPlaceholder("全局热键 " + PinShortcutText));
+
+        if (_hotkeyRegistrationFailures.Count > 0)
+        {
+            // 托盘气球可能被系统通知设置抑制；再弹一次启动提示，确保用户知道快捷键不可用。
+            var details = string.Join(Environment.NewLine, _hotkeyRegistrationFailures);
+            AppLog.Warn("Hotkey", $"启动时共有 {_hotkeyRegistrationFailures.Count} 个热键注册失败，已提示用户");
+            MessageBox.Show(
+                details,
+                AppInfo.Name,
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+    }
+
+    private void RegisterHotkey(string text, Action action)
+    {
+        if (!ShortcutSpec.TryParse(text, out var shortcut, out var parseError) || shortcut is null)
+        {
+            var message = $"快捷键配置“{text}”无效：{parseError}";
+            AppLog.Error("Hotkey", message);
+            NotifyUser("快捷键配置无效", message);
+            _hotkeyRegistrationFailures.Add(message);
+            return;
+        }
+
+        var result = _globalHotkey!.Register(shortcut);
+        if (!result.Success)
+        {
+            var message = result.DescribeFailure();
+            AppLog.Warn("Hotkey", message);
+            NotifyUser("全局热键注册失败", message);
+            _hotkeyRegistrationFailures.Add(message);
+            return;
+        }
+
+        _hotkeyActions[shortcut] = action;
+    }
+
+    private void OnGlobalHotkeyPressed(ShortcutSpec shortcut)
+    {
+        if (_hotkeyActions.TryGetValue(shortcut, out var action))
+        {
+            action();
+            return;
+        }
+
+        AppLog.Warn("Hotkey", $"热键 {shortcut.Format()} 没有绑定动作");
+    }
+
+    /// <summary>T6 调试入口：捕获鼠标所在屏幕并存 PNG，用于真实桌面验证。</summary>
+    private void StartCapture(string trigger)
+    {
+        AppLog.Info("Capture", $"截图触发：{trigger}");
+        try
+        {
+            var capture = ScreenCapture.CaptureMonitorUnderCursor();
+            var path = ScreenCapture.SaveDebugPng(capture);
+            AppLog.Info(
+                "Capture",
+                $"T6 捕获完成：屏幕={capture.DeviceName} 主屏={capture.IsPrimary} " +
+                $"物理矩形={capture.Bounds} 图像={capture.PixelWidth}x{capture.PixelHeight} 文件={path}");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("Capture", "屏幕捕获失败", ex);
+            NotifyUser("截图失败", $"屏幕捕获失败：{ex.Message}");
+        }
+    }
+
+    // TODO(T18–T22): 读取剪贴板图片并创建贴图窗口。本轮仅保留热键与菜单入口。
+    private void PasteFromClipboardPlaceholder(string trigger) =>
+        AppLog.Info("Pins", $"从剪贴板贴图触发（{trigger}）：占位入口，T21/T22 实现");
+
+    /// <summary>托盘通知优先；系统拒绝通知时退回 MessageBox，保证失败不会静默。</summary>
+    private void NotifyUser(string title, string message)
+    {
+        if (_trayIcon?.ShowNotification(title, message, warning: true) == true)
+        {
+            return;
+        }
+
+        try
+        {
+            MessageBox.Show(
+                message,
+                AppInfo.Name,
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("App", "显示失败提示时出错", ex);
+        }
+    }
 
     private void ShowNotImplemented(string feature)
     {
@@ -163,8 +283,23 @@ public partial class App : Application
     private void ExitFromTray()
     {
         AppLog.Info("App", "退出：用户选择托盘菜单“退出”");
+        DisposeGlobalHotkey();
         DisposeTrayIcon();
         Shutdown();
+    }
+
+    private void DisposeGlobalHotkey()
+    {
+        if (_globalHotkey is null)
+        {
+            _hotkeyActions.Clear();
+            return;
+        }
+
+        _globalHotkey.Pressed -= OnGlobalHotkeyPressed;
+        _globalHotkey.Dispose();
+        _globalHotkey = null;
+        _hotkeyActions.Clear();
     }
 
     private void DisposeTrayIcon()
@@ -181,6 +316,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        DisposeGlobalHotkey();
         DisposeTrayIcon();
 
         if (_ownsSingleInstanceMutex && _singleInstanceMutex is not null)

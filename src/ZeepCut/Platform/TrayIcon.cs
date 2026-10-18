@@ -87,6 +87,37 @@ public sealed class TrayIcon : IDisposable
         return false;
     }
 
+    /// <summary>
+    /// 通过通知区域弹出气球/Toast。返回 false 表示系统拒绝（例如图标已移除），
+    /// 调用方应改用其他方式提示，不能静默失败。
+    /// </summary>
+    public bool ShowNotification(string title, string message, bool warning = true)
+    {
+        if (_disposed || !_iconAdded)
+        {
+            AppLog.Warn("Tray", $"无法显示通知（图标未添加）：{title} - {message}");
+            return false;
+        }
+
+        var data = CreateData();
+        data.uFlags = NativeMethods.NIF_INFO;
+        data.szInfoTitle = title;
+        data.szInfo = message;
+        data.dwInfoFlags = warning ? NativeMethods.NIIF_WARNING : NativeMethods.NIIF_INFO;
+        data.uTimeoutOrVersion = 10000;
+
+        if (!NativeMethods.Shell_NotifyIcon(NativeMethods.NIM_MODIFY, ref data))
+        {
+            AppLog.Warn(
+                "Tray",
+                $"Shell_NotifyIcon(NIM_MODIFY/NIF_INFO) 失败，Win32Error={Marshal.GetLastWin32Error()}；通知内容：{title} - {message}");
+            return false;
+        }
+
+        AppLog.Info("Tray", $"已显示通知：{title} - {message}");
+        return true;
+    }
+
     public void Dispose()
     {
         if (_disposed)
