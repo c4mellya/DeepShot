@@ -1,3 +1,4 @@
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Threading;
@@ -5,8 +6,10 @@ using ZeepCut.Capture;
 using ZeepCut.Core;
 using ZeepCut.Core.Capture;
 using ZeepCut.Core.Geometry;
+using ZeepCut.Core.History;
 using ZeepCut.Core.Pins;
 using ZeepCut.Core.Shortcuts;
+using ZeepCut.History;
 using ZeepCut.Output;
 using ZeepCut.Pins;
 using ZeepCut.Platform;
@@ -35,10 +38,20 @@ public partial class App : Application
     private CaptureOverlayWindow? _captureOverlay;
 
     /// <summary>
-    /// 截图成功输出的接收端。T11 只写一条完成日志；T24 换成历史写入实现即可，
-    /// 遮罩与动作代码不需要改动。
+    /// 历史写入器（T23/T24）：启动时初始化数据库，之后由 <see cref="HistoryCaptureSink"/>
+    /// 与 <see cref="HistoryPinRecorder"/> 共用。初始化失败时为 null，历史功能整体降级
+    /// （截图/贴图照常工作，只是不记录）。
     /// </summary>
-    private readonly ICaptureSink _captureSink = new LoggingCaptureSink();
+    private HistoryStore? _historyStore;
+
+    /// <summary>
+    /// 截图成功输出的接收端（T24）：写一条历史。历史不可用时退回只写日志的
+    /// <see cref="LoggingCaptureSink"/>（复制/保存/贴图本身不受影响）。
+    /// </summary>
+    private ICaptureSink _captureSink = new LoggingCaptureSink();
+
+    /// <summary>T24：截图历史的 sink 实例（用于读取 <c>LastFailure</c> 并提示用户）。</summary>
+    private HistoryCaptureSink? _historyCaptureSink;
 
     public App()
     {
@@ -63,6 +76,8 @@ public partial class App : Application
             AppPaths.EnsureCreated();
             AppLog.Initialize();
             AppLog.Info("App", "生命周期：无主窗口，托盘常驻（ShutdownMode=OnExplicitShutdown）");
+
+            InitializeHistory();
 
             _trayIcon = new TrayIcon();
             _trayIcon.CommandInvoked += OnTrayCommandInvoked;
@@ -101,6 +116,72 @@ public partial class App : Application
 
             Shutdown(1);
         }
+    }
+
+    /// <summary>
+    /// T23：启动时初始化历史数据库（首次运行建库建表，已有库做版本检查），
+    /// 并把 T24 的写入实现接到截图与贴图两条路径上。
+    /// </summary>
+    /// <remarks>
+    /// 历史初始化失败**不阻塞启动**（PLAN：历史缺失不阻塞本地功能）：只写 ERROR 日志、
+    /// 弹一次提示，然后截图 sink 退回 T11 的 <see cref="LoggingCaptureSink"/>，
+    /// 贴图 recorder 退回 <see cref="LoggingPinHistoryRecorder"/>。
+    /// </remarks>
+    private void InitializeHistory()
+    {
+        try
+        {
+            // 数据库固定放在数据根目录：%LOCALAPPDATA%\ZeepCut\history.db（ARCHITECTURE §7）。
+            var repository = new HistoryRepository(
+                AppPaths.DataRoot,
+                Path.Combine(AppPaths.DataRoot, HistoryRepository.DatabaseFileName));
+            var schema = repository.Initialize();
+
+            _historyStore = new HistoryStore(repository);
+            _historyCaptureSink = new HistoryCaptureSink(_historyStore);
+            _captureSink = _historyCaptureSink;
+            PinWindows.SetHistoryRecorder(new HistoryPinRecorder(_historyStore));
+
+            AppLog.Info(
+                "History",
+                $"历史库已就绪：{repository.DatabasePath} " +
+                $"版本 {schema.VersionBefore} → {schema.VersionAfter} " +
+                $"新建={schema.Created} 迁移步数={schema.MigratedSteps} " +
+                $"记录数={_historyStore.Count()} 图片目录={repository.ImagesDirectory}");
+
+            if (schema.IsNewerThanSupported)
+            {
+                AppLog.Warn(
+                    "History",
+                    $"历史库版本 {schema.VersionBefore} 高于本程序支持的 {schema.VersionAfter}，" +
+                    "本次只读不降级（可能缺少新版本才有的列）");
+            }
+        }
+        catch (Exception ex)
+        {
+            _historyStore = null;
+            _historyCaptureSink = null;
+            _captureSink = new LoggingCaptureSink();
+            PinWindows.SetHistoryRecorder(new LoggingPinHistoryRecorder());
+
+            AppLog.Error("History", "历史库初始化失败，本次运行不记录历史（截图/贴图不受影响）", ex);
+            NotifyUser(
+                "历史功能不可用",
+                $"无法初始化历史数据库，本次运行的截图与贴图不会被记录：\n{ex.Message}");
+        }
+    }
+
+    /// <summary>截图/贴图历史写入失败时提示一次（主操作已经成功，只提"历史没记上"）。</summary>
+    private void NotifyHistoryFailureIfAny(string action)
+    {
+        var failure = _historyCaptureSink?.LastFailure;
+        if (string.IsNullOrEmpty(failure))
+        {
+            return;
+        }
+
+        AppLog.Warn("History", $"{action}已成功，但历史保存失败：{failure}");
+        ToastWindow.Show($"{action}已成功，但历史保存失败（详见日志）。");
     }
 
     /// <summary>
@@ -308,8 +389,13 @@ public partial class App : Application
                 "Capture",
                 $"截图结束：屏幕={overlay.ScreenBounds} DPI={overlay.ScreenDpi} " +
                 $"选区={overlay.Selection} 已定稿={overlay.IsSelectionReady} " +
-                $"已取消={overlay.WasCancelled} 完成动作={(overlay.CompletedAction?.ToString() ?? "无")}" +
-                "（历史记录 T24 启用，成功记录已由 ICaptureSink 写入日志）");
+                $"已取消={overlay.WasCancelled} 完成动作={(overlay.CompletedAction?.ToString() ?? "无")}");
+
+            // T24：历史写入失败不影响已经成功的复制/保存/贴图，只单独提示一次。
+            if (overlay.CompletedAction is { } completed)
+            {
+                NotifyHistoryFailureIfAny(LoggingCaptureSink.Describe(completed));
+            }
         }
 
         _captureOverlay = null;

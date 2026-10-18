@@ -5,18 +5,116 @@
 ## 本轮快照
 
 - 日期：2026-10-18
-- 当前阶段：阶段二（标注与贴图）→ **阶段二贴图部分已完成**（T18–T22 全部完成）
-- 本轮任务：**T20 贴图全局操作 + T21 剪贴板贴图 + T22 历史联动接缝**
-- 下一步任务：**T23 历史存储**（SQLite 元数据 + `images/`/`thumbs/` 图片文件 + 相对路径 + 启动初始化与迁移）。
-  T22 已经把接缝做好：`IPinHistoryRecorder`（`src/ZeepCut/Pins/PinHistoryRecorder.cs`）目前只有
-  `LoggingPinHistoryRecorder`（只写日志）；T24 时新增一个 SQLite 实现并调
-  `PinWindows.SetHistoryRecorder(...)` 即可，剪贴板贴图流程与 `PinWindow` 都不用改。
-  `PinWindows.CreateFromHistory(...)` 已留好方法（本轮无调用方，历史图库 T25/T28 接入）。
+- 当前阶段：阶段三（历史与设置）→ **历史存储与写入已完成**（T23 / T24）
+- 本轮任务：**T23 历史存储 + T24 历史写入**
+- 下一步任务：**T25 历史图库**（日期分组缩略图、预览、复制、另存为、贴图、删除）。
+  T23/T24 已把底座铺好，T25 基本只需要写 UI：
+  - `HistoryRepository`（Core）已提供 `GetList(HistoryQuery)`（名称搜索 / 收藏过滤 / 分页 / 三种排序）、
+    `GetById`、`GetAllNames`、`Count`、`Delete`、`Update`、`SetFavorite`、`UpdateImage`、
+    `ReadImageBytes`、`ReadThumbnailBytes`、`GetImageAbsolutePath`。
+  - `HistoryStore`（App）已提供 `GetPage` / `Count` / `TryLoad(相对路径)` / `TryLoadPreview(record)`
+    （内部用 `BitmapCacheOption.OnLoad`，读完即释放句柄，可直接用于图库缩略图列表）。
+  - `PinWindows.CreateFromHistory(image, bounds, screenBounds, dpi)` 已存在（T22 留的接缝），
+    历史图库的“贴图”按钮直接调它即可（Source=History → 不新增历史）。
+  - **T27 的 30 天清理规则还没写**：`HistoryRecord.CreatedAtUtc` + `IsFavorite` 已按 PLAN 语义就位
+    （改名/覆盖只更新 `UpdatedAtUtc`，不延长 CreatedAtUtc），但 `HistoryRules` 类与清理动作留给 T27。
 - 构建状态：✅ 编译通过，0 warning 0 error
-- 测试状态：✅ **704 个测试通过**（T20/T21/T22 新增 47 个：`PinCollectionStateTests` 22、`PinPlacementTests` 18、`PinSourceTests` 7）
-- 桌面验证：✅ 主屏 125% + 副屏 100% 均实测：托盘“隐藏全部贴图/显示全部贴图”往返（贴图消失/恢复、
-  hwnd 与物理矩形完全一致、缩放与透明度像素级一致）、Alt+S 从剪贴板贴图（DIB / PNG 流 / 文件拖放三种格式）、
-  空剪贴板与纯文本剪贴板有明确提示且不崩溃、退出关闭全部贴图、无贴图时菜单项灰显
+- 测试状态：✅ **860 个测试通过**（本轮新增 **156**：`HistoryRecordTests` 44、`HistoryNameTests` 38、
+  `HistoryRepositoryTests` 43、`HistoryQueryTests` 31）
+- 桌面验证：✅ 主屏 125% 实测：复制 / 另存为 / 贴图各恰好写 1 条记录、Esc 取消不写、
+  外部剪贴板贴图写 `Source=Clipboard`、`images/*.png` + `thumbs/*.png` 真实存在（尺寸正确）、
+  图片/缩略图文件**未被锁**（可改名/复制/删除）、历史写失败时复制仍成功且弹 Toast 提示
+
+## 已完成
+
+- 2026-10-18 **T23 历史存储 + T24 历史写入**（全新 Core 存储层 + 替换 T11/T22 的两个日志占位实现；
+  未改动任何已通过的 Core 类型，也没有动 PLAN 范围之外的东西）：
+
+  **Core `src/ZeepCut.Core/History/`（纯逻辑 + SQLite，可无桌面单测）**
+  - `HistoryRecord.cs`：不可变 `record`（`Id`/`Name`/`CreatedAtUtc`/`UpdatedAtUtc`/`IsFavorite`/
+    `RelativeImagePath`/`RelativeThumbnailPath`/`Width`/`Height`/`Source`）。
+    - 构造即校验：空 Guid / 空图片路径抛 `ArgumentException`；名称为空回退 `截图`；
+      空缩略图路径归一为 `null`；负宽高夹到 0；本地时间自动转 UTC。
+    - **时间精度统一到毫秒**：`NormalizeUtc` 截断到 ms，因为 SQLite 里只存 3 位小数 ——
+      不截断会出现“写进去的对象与读回来的对象不相等”，所有记录比较都会假失败。
+    - 修改都返回新实例：`WithName` / `WithFavorite` / `WithImage`（T28 覆盖编辑用，保留 Id/名称/创建时间/收藏）。
+    - `CreateDefaultName(本地时间)` = `截图_yyyy-MM-dd_HHmmss`（复用 T11 的 `CaptureFileName`，去掉扩展名）。
+    - `FormatUtc`/`TryParseUtc`：库里的 ISO-8601（`2026-10-18T12:30:15.456Z`）。
+  - `HistoryName.cs`：默认名称（`截图_` / 剪贴板用 `贴图_`）、名称清洗（Windows 非法字符→`_`、
+    去掉结尾点/空格、超长截断到 80、**顺手去掉用户输入的 `.png` 等已知图片扩展名**）、
+    `CreateUniqueName`（同名时追加 ` (2)`/` (3)`，大小写不敏感如 Windows）、`MatchesSearch`
+    （大小写不敏感子串；空关键字命中全部）。
+  - `HistoryPaths.cs`：布局常量（`images/`、`thumbs/`）+ 文件命名
+    `{yyyyMMdd-HHmmss-fff}-{guid8}.png`、缩略图 `xxx.thumb.png`、`ToAbsolute(数据根, 相对路径)`、
+    `Normalize`（统一 `/`）、`IsSafeImageRelativePath`（拒绝绝对路径/盘符/`..` 逃逸 ——
+    库被手工改坏时图库不会去读 `C:\Windows\…`）、`EnsureUniqueRelativePath`（文件名占用时 `-2`/`-3`）。
+  - `HistorySource.cs`：`HistorySource{Screenshot, Clipboard, History}` + 中文描述 + 存储值
+    （枚举名，稳定可读）。**与贴图的 `PinSource` 是两套枚举，不要合并**：前者说“这条历史怎么来的”，
+    后者说“这次贴图要不要新增历史”。
+  - `HistorySchema.cs`：**版本机制**——版本号存 `PRAGMA user_version`（本版 `CurrentVersion = 1`）；
+    新库直接建表 + 建索引 + 写版本；老库版本低时按 `Migrations` 顺序补齐；版本**高于**程序支持时
+    只 WARN、不降级、不改数据（回退装旧版的场景）。建表/建索引/迁移在**同一个事务**里。
+    索引 4 条：`CreatedAtUtc DESC`、`IsFavorite`、`Name`、`(IsFavorite, CreatedAtUtc DESC)`。
+    连接字符串集中在 `HistoryRepositoryConnection`：`ReadWriteCreate` + `Private` 缓存 +
+    `DefaultTimeout=10`，打开后 `PRAGMA journal_mode=WAL` + `busy_timeout=10000`。
+    **加列方式**：`CurrentVersion` +1、往 `Migrations` 里补一条 SQL，**不要改 v1 的建表语句**
+    （否则老库与新库结构会分叉）。
+  - `HistoryRepository.cs`：存储层本体（**只管字节与行，不碰 WPF 图像**）。
+    - `Initialize()`：建 `images/`、`thumbs/`、`<root>/history.db`，返回
+      `HistorySchemaResult{VersionBefore, VersionAfter, Created, MigratedSteps}` 供启动日志用；幂等。
+    - `Add(record, imageBytes, thumbnailBytes?)`：先写图片（可选缩略图），再插元数据；
+      路径被占用时自动顺延文件名；**入库失败会删掉刚写的文件**（不留孤儿）；
+      缩略图字节为 null 时 `RelativeThumbnailPath` 置 null（图库要能容忍）。
+    - 查询：`GetList(HistoryQuery)`（名称 Like 搜索 + 收藏过滤 + 排序 + `LIMIT/OFFSET`，
+      返回 `HistoryPage{Items, TotalCount, HasMore, NextPage()}`）、`GetById`、`GetAllNames`、`Count`。
+    - 修改：`Update`（整行元数据）、`SetFavorite`、`UpdateImage`（**先写 `.tmp` → 校验长度 →
+      `File.Move(overwrite)` → 再改元数据**，失败时旧图还在，T28 直接复用）。
+    - 删除：`Delete(id)` 先删行再删两个文件（文件已不在也算成功）。
+    - **句柄**：写用 `FileShare.None` 的短命 `FileStream`；读一次性读成 `byte[]` 立刻关闭
+      （`ReadImageBytes`/`ReadThumbnailBytes` 都不返回流）。**不要**在这里返回 `BitmapImage`
+      或长期持有的流 —— 那会锁住文件，覆盖/清理会失败（已用真实桌面改名/删除验证）。
+    - 所有失败都包成 `HistoryStoreException`，调用方只记日志。
+  - `HistoryQuery.cs`：`HistoryQuery`（`SearchText`/`FavoriteFilter`/`Sort`/`Offset`/`Limit`，
+    默认第 1 页 100 条、创建时间倒序）、`HistorySort`、`HistoryFavoriteFilter`、
+    `BuildLikePattern`（转义 `%`/`_`/`\`，否则搜“100%”会匹配全库）、`HistoryPage`。
+
+  **App `src/ZeepCut/History/`（WPF 图像编解码，不参与 Core 单测）**
+  - `HistoryThumbnail.cs`：`MaxEdge = 320`；`EncodePng`；`Scale`（`TransformedBitmap` 等比缩放，
+    小图不放大）；`CreatePngBytes`。返回 `byte[]`，不留流。
+  - `HistoryStore.cs`：`Add(BitmapSource, name, createdAtLocal, source, createThumbnail)` =
+    编码 PNG + 缩略图 + 仓储写入 + 一条明细日志；**缩略图生成失败只 WARN 并置空，不让整条历史失败**。
+    `TryLoad(相对路径)` 用 `BitmapCacheOption.OnLoad` + `IgnoreImageCache` 读成冻结位图
+    （读后即可删文件）；`TryLoadPreview(record)` 优先缩略图、回退原图；`GetPage`/`Count` 给 T25 用。
+
+  **T24 把两个日志占位实现换成真实写入**
+  - `src/ZeepCut/Output/HistoryCaptureSink.cs`（`ICaptureSink` 实现）：
+    1) 仍写 T11 那条 `输出完成：动作=…` INFO（挂掉历史也有成功记录）；
+    2) 再写一条历史，名称 `截图_…`、`Source=Screenshot`、同名自动 ` (2)`；
+    3) **吞掉所有异常**，写 ERROR + `LastFailure`，绝不向遮罩抛（否则用户会看到“复制失败”，
+       而剪贴板里其实已经有图了）。
+  - `src/ZeepCut/Pins/HistoryPinRecorder.cs`（`IPinHistoryRecorder` 实现）：只有
+    `PinSource.Clipboard` 才写（规则仍由 Core `PinSourceText.ShouldRecordHistory` 判定），
+    名称 `贴图_…`、`Source=Clipboard`；内部截图与历史贴图只写一条“不记录”的日志（与 T22 一致）。
+  - `src/ZeepCut/App.xaml.cs`：新增 `InitializeHistory()`（启动时建库 + 接两个 sink；
+    失败则整条历史功能降级为 `LoggingCaptureSink` + `LoggingPinHistoryRecorder` 并弹一次提示）；
+    `NotifyHistoryFailureIfAny(action)` 在遮罩关闭后检查 `LastFailure`，弹 Toast
+    “X 已成功，但历史保存失败（详见日志）”。`_captureSink` 从 `readonly` 改为可替换字段。
+  - `LoggingCaptureSink` / `LoggingPinHistoryRecorder` **保留**：前者是历史不可用时的降级实现，
+    其 `Describe` 仍被遮罩与历史 sink 复用；后者是降级与调试旁路。
+
+  **测试**（`tests/ZeepCut.Tests/History/`，全部用独立临时目录 + 独立 history.db，测完连 WAL/SHM 一起删）：
+  - `HistoryRecordTests`（44）：字段/校验/名称清洗/时间归一与 UTC 往返/不可变修改方法/
+    `WithImage` 保留身份/相等性/来源解析（含 `"99"` 越界数字）/`RecordFactory`。
+  - `HistoryNameTests`（38）：默认名称、前缀、非法字符、扩展名剥离、超长截断、
+    同名顺延（大小写不敏感）、搜索匹配、路径生成与回环、`IsSafeImageRelativePath` 拒绝逃逸。
+  - `HistoryRepositoryTests`（43）：建库（含 images/thumbs）、**重复初始化幂等且不丢数据**、
+    未来版本不回退、写图片可读回、缩略图有/无两路、全字段往返、空字节被拒、
+    路径撞名顺延、时间倒序/正序/名称排序、搜索（含 `100%` 转义）、收藏过滤、
+    搜索+收藏组合、分页（offset/limit/NextPage）、limit 与 offset 钳制、空库空页、
+    改名/收藏/覆盖图片、删除（行+两个文件）、文件已丢时的删除、
+    **`FilesAreNotLockedAfterAddAndRead`（写完读完能立即改名/复制/删除）**、跨连接重开、参数校验。
+  - `HistoryQueryTests`（31）：默认值、空白/负数/上限钳制、`BuildLikePattern` 转义、
+    `HistoryPage` 的 HasMore/NextPage/Empty、`ToString`。
 
 ## 已完成
 
@@ -235,6 +333,76 @@
   - 新增验证脚本 `scripts/verify-t14t15.ps1`（11 个场景：rect/ellipse/arrow/line/freehand/text/mosaic/all/undo-redo/lock/color/buttons），UIA 按 `AutomationProperties.Name` 点工具/颜色/粗细/撤销重做按钮，全程物理像素坐标。
 
 ## 验证证据
+
+- 2026-10-18 **T23/T24 构建+测试（最终代码）**：`powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+  '\\wsl.localhost\Ubuntu\home\camellya\workspace\Zeep-Cut\scripts\build.ps1'` → `Build succeeded.`、
+  `0 Warning(s)`、`0 Error(s)`；测试 → `Passed! - Failed: 0, Passed: 860, Skipped: 0, Total: 860`；末尾 `BUILD+TEST OK`。
+  本轮新增 156 个测试（过滤实测 `--filter 'FullyQualifiedName~ZeepCut.Tests.History'` → `Passed: 156`）。
+- 2026-10-18 **T23/T24 真实桌面验证（主屏 DISPLAY1 0,0 2560×1440 DPI=120/125%，脚本
+  `scripts/verify-t23t24.ps1`，证据 `artifacts/t23t24/`）**：每次场景前杀掉进程、删掉
+  `history.db*` 与 `images/*.png`、`thumbs/*.png`，再 `scripts/run.ps1` 重启，保证“冷启动 + 空库”。
+  - **首次运行建库**（pid 58484/44868/59864）：日志
+    `历史库已就绪：C:\Users\19427\AppData\Local\ZeepCut\history.db 版本 1 → 1 新建=True 迁移步数=0 记录数=0 图片目录=…\images`；
+    目录下出现 `history.db`（+ WAL/SHM）、`images/`、`thumbs/`。
+    `PRAGMA user_version` = **1**；`sqlite_master` 里 `history` 表 10 列与 ARCHITECTURE 约定一致
+    （`Id TEXT PRIMARY KEY NOT NULL, Name, CreatedAtUtc, UpdatedAtUtc, IsFavorite INTEGER DEFAULT 0,
+    RelativeImagePath, RelativeThumbnailPath NULL, Width, Height, Source`），
+    索引 **4 条**（`IX_history_CreatedAtUtc`、`IX_history_IsFavorite`、`IX_history_Name`、
+    `IX_history_Favorite_Created`）。**重复启动不会重建/清空**（重启后记录数与图片文件都在）。
+  - **截图 → 复制（Enter）= 恰好 1 条**（场景 `copy`，选区 `(360,320) 640×420`）：
+    日志 `输出完成：动作=复制到剪贴板 …` → `历史写入完成：名称=截图_2026-10-18_084354 来源=截图
+    尺寸=640x420 图片=images/20261018-084354-099-0c075c79.png 缩略图=thumbs/…thumb.png …`
+    → `截图已记录到历史：动作=复制到剪贴板 …`。数据库（python3 sqlite3 从 WSL 直接查）：
+    `('截图_2026-10-18_084008','2026-10-18T12:40:08.337Z',0,640,420,'Screenshot','images/20261018-084008-337-00dc8005.png','thumbs/…thumb.png')`
+    —— **名称/尺寸/UTC 时间/来源/两个相对路径全部正确**（本地 08:40:08，UTC 12:40:08）。
+    `images/*.png` 实测 **640×420 @ 48824 bytes**，`thumbs/*.png` **320×210 @ 26612 bytes**
+    （最长边正好 320，等比不变形）。read_image 打开历史图片 `artifacts/t23t24/history-image-copy.png`：
+    内容就是选区里的 DSH/资源管理器画面，非黑图/非缩略图。
+  - **Esc 取消不记录**（场景 `cancel`）：拖选后 Esc → 日志
+    `取消本次截图（Esc）… 不写入历史` → `遮罩窗口已关闭 … 已取消=True` → `截图结束 … 完成动作=无`；
+    **数据库行数不变**（3→3），**images/thumbs 文件数不变**，且整段日志里没有
+    `输出完成` / `历史写入完成`。
+  - **截图 → 另存为 = 只有 1 条（不是两条）**（场景 `save`，真实 Win32 对话框）：
+    `保存对话框已打开` → 自动化填入路径并保存 → `文件已保存 … 格式=Png 尺寸=640x420`
+    → `输出完成：动作=另存为 …` → **只有一条** `历史写入完成：名称=截图_2026-10-18_084024 …`。
+    数据库该轮新增 **1 行**（不是 2），另存为文件本身也真实存在。
+  - **截图 → 贴图 = 只记 1 条（不重复）**（场景 `pin`）：日志顺序是
+    `贴图历史联动：来源=内部截图 不记录（…）` → `输出完成：动作=贴图` → `历史写入完成：名称=截图_…`；
+    数据库新增 **1 行**（Source=Screenshot），不是 2 行。贴图窗口 `0x16E0E9C 360,320 640x420`。
+  - **Alt+S 外部剪贴板贴图 = 1 条 Source=Clipboard**（场景 `clipboard`，剪贴板放 300×200 PNG）：
+    日志 `剪贴板图片读取成功：格式=Bitmap/DIB 尺寸=300x200` → `贴图历史联动：来源=外部剪贴板 已记录一次
+    名称=贴图_2026-10-18_084332 …`；数据库该行
+    `('贴图_2026-10-18_084332','…T12:43:32.425Z',0,300,200,'Clipboard','images/20261018-084332-425-6f120e91.png','thumbs/…')`
+    —— **名称前缀是 `贴图_`、来源是 `Clipboard`、尺寸 300×200 与原图一致**；
+    图片内容 read_image 核对为蓝底 + 黄/红块 + `T23 CLIP` 文字（`artifacts/t23t24/history-clipboard.png`）。
+  - **一次会话串起全部动作（场景 `all`，4 步累计计数全部符合预期）**：复制 → 取消 → 另存为 → 贴图 → 外部剪贴板，
+    每步后 `images`/`thumbs` 计数依次 **1 / 1 / 2 / 3 / 4**，即
+    **取消不增、另存为 +1、贴图 +1、剪贴板 +1**；结束时 2 张贴图并存
+    （`0x1C1AD2 360,320 640x420`、`0x2001330 1416,816 240x160`）。数据库最终 4 行：
+    3×`Screenshot` + 1×`Clipboard`，名称/尺寸/时间/来源/两个相对路径逐行核对无误。
+  - **图片文件没有被锁（PLAN：读图注意释放句柄）**（场景 `lock`，应用持续运行）：
+    `LOCK PROBE RENAME IMAGE: OK` → `LOCK PROBE COPY IMAGE: OK 48648 bytes` →
+    `LOCK PROBE DELETE IMAGE: OK (no lock held by the app)`；缩略图 `LOCK PROBE COPY THUMB: OK 26500 bytes`。
+    即写入/读取完成后，历史图片与缩略图都能被**另一个进程改名、复制、删除**。
+  - **历史写失败不影响主操作（真实失败注入）**：
+    - **启动初始化失败**：把 `%LOCALAPPDATA%\ZeepCut\history.db` 换成一个**同名目录**再启动 →
+      日志 `[ERROR] [History] 历史库初始化失败，本次运行不记录历史（截图/贴图不受影响）：
+      HistoryStoreException: 初始化历史库失败：SQLite Error 14: 'unable to open database file'.`，
+      并弹出提示框（`#32770 [Zeep Cut]`，截图 `artifacts/t23t24/dbfail-startup-dialog.png`）；
+      **应用仍照常启动、托盘与热键正常**，截图 sink 自动降级为 `LoggingCaptureSink`。
+      恢复真库文件后重启 → `历史库已就绪 … 新建=True`，功能立即恢复。
+    - **单次写入失败**：把 `images/` 换成同名文件后做一次复制 →
+      日志 `[ERROR] [History] 历史保存失败（复制到剪贴板 本身已成功，不影响剪贴板/文件/贴图）：
+      IOException: Cannot create '…\images' because a file or directory with the same name already exists.`
+      → `[WARN] [History] 复制到剪贴板已成功，但历史保存失败：…` → Toast
+      **`复制到剪贴板已成功，但历史保存失败（详见日志）。`**（截图 `artifacts/t23t24/writefail-toast.png`）。
+      **复制本身没有失败**：独立进程 `scripts/clipboard.ps1` 立刻读到 `CLIPBOARD IMAGE 640x420`。
+      还原 `images/` 后再次复制 → 正常 `历史写入完成`（自愈，无需重启）。
+  - **数据库查询方式（WSL 侧）**：`history.db` 处于 WAL 模式，Windows 侧（PowerShell）读到的视图不可靠；
+    本轮所有数据库核对都是先 `cp history.db history.db-wal history.db-shm` 到 `/tmp` 再用
+    `python3 -c "import sqlite3; …"` 查（`/mnt/c` 上直接开库会报 `disk I/O error`）。
+    **下一位接手者核对历史库照这个做法**，不要用 python3 直接开 `/mnt/c/...`。
+
 
 - 2026-10-18 **T20/T21/T22 构建+测试（最终代码）**：`powershell.exe -NoProfile -ExecutionPolicy Bypass -File
   '\\wsl.localhost\Ubuntu\home\camellya\workspace\Zeep-Cut\scripts\build.ps1'` → `Build succeeded.`、
@@ -641,6 +809,66 @@
   - 仅验证了 Esc 关闭；Alt+F4 / 托盘退出关闭遮罩路径只从代码上处理，未逐一真实验证（退出时 `DisposeCaptureOverlay` 会视作取消）。
   - 受保护内容、HDR、安全桌面等特殊捕获场景按 PLAN 不承诺，未测试。
 ## 已知问题 / 风险
+
+- **T23 时间精度必须截到毫秒**：SQLite 文本里只有 `yyyy-MM-ddTHH:mm:ss.fffZ` 三位小数，而 `DateTime`
+  有 100ns 精度。`HistoryRecord.NormalizeUtc` 统一截断，否则“写进去的 record 与读回来的 record”
+  永远不相等（单测 `NormalizeUtc_TruncatesToMilliseconds_BecauseThatIsWhatSqliteStores` 是这条规则的护栏）。
+  改时间格式时必须同步这条规则。
+- **T23 数据库版本只升不降**：`HistorySchema.EnsureSchema` 遇到 `user_version` 高于
+  `CurrentVersion` 时**不降级、不改数据**，只写 WARN。加列请走 `Migrations`（版本 +1），
+  **不要直接改 `CreateTableV1`** —— 老用户的库不会重跑建表语句，改了只会让新老库结构分叉。
+- **T23 图片与缩略图必须“用完即关”**：仓储只返回 `byte[]`，App 侧读图一律
+  `BitmapCacheOption.OnLoad`。如果以后图库为了滑动性能缓存 `BitmapImage` 或 `FileStream`，
+  会重新锁住文件，导致 T27 清理与 T28 覆盖删除失败。**不要**在 `HistoryStore.TryLoad` 之外另开
+  读文件的路子；要更高性能就缓存已冻结的 `BitmapSource`（它不再持有文件句柄）。
+- **T23 相对路径要校验**：`HistoryPaths.IsSafeImageRelativePath` 只允许 `images/...` 且拒绝
+  `..`/盘符/绝对路径。图库读文件前应走 `HistoryPaths.ToAbsolute`，不要自己 `Path.Combine`
+  用户可控字符串。
+- **T24 历史失败一律吞掉，只提示**：`HistoryCaptureSink` / `HistoryPinRecorder` 里
+  `catch (Exception)` 是**有意**的——PLAN 要求“历史缺失不阻塞本地功能”，而遮罩的
+  `CompleteCapture` 之后就要 `Close()`。如果让异常冒出去，用户会看到“复制失败”但实际上图已经在剪贴板里。
+  真实注入验证过（`images/` 被占）复制仍成功、Toast 明确说“已成功，但历史保存失败”。
+- **T24 “一次完成只一条”依赖单点调用**：只有 `CaptureOverlayWindow.CompleteCapture` 调
+  `_sink.OnCaptureCompleted`，且遮罩成功路径只走一次；`PinWindows.RecordHistory` 对内部截图
+  直接跳过（Core 规则 `PinSourceText.ShouldRecordHistory`）。**新增输出动作时不要另外再写历史**，
+  否则会出现一次操作两条记录（本轮专门验证了另存为与贴图各只 +1）。
+- **T24 名称去重是“查一遍已有名称再顺延”**：`HistoryCaptureSink`/`HistoryPinRecorder` 调
+  `GetAllNames()` + `HistoryName.CreateUniqueName`。同一秒内并发写入理论上可能撞名（单机 UI 单线程，
+  实际不会发生）；若要绝对唯一，应在库里给 `Name` 加唯一索引并重试。查名失败时**直接用默认名称继续写**
+  （不因为查不到名字而丢记录）。
+- **验证脚本的 Esc 坑（T23/T24 新增，重要）**：本机用 `SendKeys '{ESC}'` 或 `SendInput(VK_ESCAPE)`
+  **送不到遮罩**（Enter 却能到），表现为“Esc 没反应”。`scripts/verify-t23t24.ps1` 改用
+  `PostMessage(WM_KEYDOWN/WM_KEYUP, VK_ESCAPE, lParam 带 scan=0x01)` 直接投递给遮罩 hwnd，
+  走的是同一条 WPF `PreviewKeyDown` 路径，结果确定。**下一位写 Esc 相关验证时直接用
+  `Send-EscToOverlay`**（脚本里已有），不要再试 SendKeys。另外 `$Target` 是 `ValidateSet` 参数，
+  PowerShell 变量名大小写不敏感，**不要把临时变量叫 `$target`**（本轮踩过：赋值直接抛
+  `ValidateSetFailure`）。
+- **历史库在 WSL 侧核对要先复制**：`history.db` 是 WAL 模式，`python3` 直接在 `/mnt/c/...` 上开库
+  会 `disk I/O error`；Windows 侧 PowerShell 读到的视图也不可靠。正确做法：
+  `cp history.db history.db-wal history.db-shm /tmp/x/` 再查（本轮全部数据库证据都是这样取的）。
+
+## 未验证（T23/T24 相关）
+
+- **副屏（负坐标 100%）没有跑历史写入**：本轮所有场景都在主屏 125% 完成。负坐标只影响
+  **选区裁剪**（T11/T17 已验证），历史写入只用输出图与本地时间，不接触屏幕坐标 ——
+  但“副屏截图写出的历史尺寸/时间正确”这条**未实测**。
+- **缩略图生成失败的降级路径只有代码与单测**：真实注入缩略图编码失败（例如内存不足）未做，
+  `TryCreateThumbnailBytes` 的 `catch → null` 分支没有桌面证据。
+- **`HistoryStore.TryLoad` / `TryLoadPreview` 没有 UI 调用方**（图库是 T25），因此
+  “`BitmapCacheOption.OnLoad` 读图后文件不被锁”这条只在仓储层的字节路径上验证过
+  （`FilesAreNotLockedAfterAddAndRead` + 桌面改名/删除）。等 T25 真的用 `TryLoad` 渲染缩略图时，
+  需要再实测一次“图库打开着某条记录、同时删除它的文件”。
+- **数据库损坏（`SQLITE_CORRUPT`）与只读目录未注入**：只验证了“库路径不可打开”
+  （同名目录 → `SQLite Error 14`）这一种初始化失败。损坏库的恢复策略（备份+重建）尚未实现。
+- **多进程并发写历史未验证**：单实例 Mutex 保证只有一个应用进程，但“图库窗口读取时后台写入”
+  这种同进程并发也没压测过（WAL + 10s busy_timeout 只是配置层面的保证）。
+- **1000+ 条记录的性能未测**：分页与索引已就位，本轮最多 5 条记录。
+- **`HistoryQuery.SearchText` 的 `LIKE '%x%'` 用不上索引**：几千条规模无感，T26 若变慢需改 FTS；
+  本轮没有做性能基线。
+- **`Name` 排序用 `COLLATE NOCASE`**：只对 ASCII 大小写不敏感，中文按 UTF-8 码点排序，
+  没有做 ICU/拼音排序（PLAN 未要求）。
+- **覆盖编辑（`WithImage` / `UpdateImage`）只有单测，没有 UI 与桌面验证**：那是 T28。
+
 
 - **T14 决策：选区一旦开始标注就锁定**。`AnnotationSession.IsSelectionLocked` 为真（文档里有标注，或正在拖草稿/输入文字）后，遮罩隐藏 8 个手柄、忽略选区外按下、光标不再显示移动/调整箭头，并在选区右上方显示 `选区已锁定（N 个标注）`。原因：标注坐标是“相对选区图像原点”的，移动/调整选区会让已有标注与画面错位。全部标注被撤销（文档空且无草稿）后自动解锁。
 - **T16 决策：选中态是"第三态"，优先于选区操作与 Esc**。`AnnotationSession.ActiveTool == null`（工具栏“选择”）+ 选区已定稿 + 文档非空时，点选区内会进入编辑：先命中选中标注的手柄（半径 10px），再走 `AnnotationDocument.HitTest`（容差 4px）。此时 Esc 的顺序是 **草稿 → 拖拽中取消 → 取消选中 → 取消截图**；有选中时 Esc 只取消选中，遮罩保持打开（已实测）。

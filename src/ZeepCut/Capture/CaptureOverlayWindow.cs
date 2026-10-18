@@ -2098,7 +2098,7 @@ public sealed class CaptureOverlayWindow : Window
         return count;
     }
 
-    /// <summary>成功收尾：写完成记录（T24 历史的接缝）→ 关闭遮罩。</summary>
+    /// <summary>成功收尾：写完成记录（T24：<see cref="HistoryCaptureSink"/> 写一条历史）→ 关闭遮罩。</summary>
     private void CompleteCapture(
         CaptureAction action,
         BitmapSource image,
@@ -2127,7 +2127,7 @@ public sealed class CaptureOverlayWindow : Window
         catch (Exception ex)
         {
             // 记录失败不能反悔已经成功的复制/保存/贴图，也不能把用户卡在遮罩里。
-            AppLog.Error("Output", "输出完成记录失败（不阻断关闭遮罩；T24 历史启用后需关注）", ex);
+            AppLog.Error("Output", "输出完成记录失败（不阻断关闭遮罩；历史写入失败不影响已完成的复制/保存/贴图）", ex);
         }
 
         Close();

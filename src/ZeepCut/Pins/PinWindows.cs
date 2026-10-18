@@ -31,8 +31,9 @@ public static class PinWindows
     private static readonly List<PinWindow> Open = new();
 
     /// <summary>
-    /// 历史联动接缝（T22）。本轮是 <see cref="LoggingPinHistoryRecorder"/>（只写日志），
-    /// T24 换成真实历史实现即可，贴图创建流程不需要改动。
+    /// 历史联动（T22 接缝 / T24 真实实现）。默认是只写日志的
+    /// <see cref="LoggingPinHistoryRecorder"/>；App 启动时用
+    /// <see cref="SetHistoryRecorder"/> 换成 <see cref="HistoryPinRecorder"/>。
     /// </summary>
     private static IPinHistoryRecorder _historyRecorder = new LoggingPinHistoryRecorder();
 
@@ -73,7 +74,7 @@ public static class PinWindows
     public static PinCollectionState Snapshot() =>
         PinCollectionState.FromVisibility(Open.Select(pin => pin.IsShown));
 
-    /// <summary>替换历史记录实现（T24 接真实历史；测试或调试可换成其它实现）。</summary>
+    /// <summary>替换历史记录实现（App 启动用 <see cref="HistoryPinRecorder"/>；测试或调试可换成其它实现）。</summary>
     public static void SetHistoryRecorder(IPinHistoryRecorder recorder)
     {
         ArgumentNullException.ThrowIfNull(recorder);
