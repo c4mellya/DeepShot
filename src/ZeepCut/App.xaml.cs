@@ -295,6 +295,7 @@ public partial class App : Application
             AppLog.Info(
                 "Capture",
                 $"截图结束：屏幕={overlay.ScreenBounds} DPI={overlay.ScreenDpi} " +
+                $"选区={overlay.Selection} 已定稿={overlay.IsSelectionReady} " +
                 $"已取消={overlay.WasCancelled}（历史记录尚未实现，不写入）");
         }
 

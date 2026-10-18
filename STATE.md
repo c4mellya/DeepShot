@@ -6,10 +6,10 @@
 
 - 日期：2026-10-18
 - 当前阶段：阶段一（截图闭环）
-- 本轮任务：**T7 冻结遮罩窗口 + T8 窗口识别**
-- 下一步任务：**T9 框选交互**（拖动框选、移动选区、八向调整、尺寸提示、限制在屏幕内）
+- 本轮任务：**T9 框选交互 + T10 截图工具栏**
+- 下一步任务：**T11 输出动作**（复制到剪贴板、另存为 PNG/JPEG；工具栏的复制/另存为占位按钮接真实动作，成功后才结束截图）
 - 构建状态：✅ 编译通过，0 warning 0 error
-- 测试状态：✅ 274 个测试通过（本轮新增 20 个 WindowCandidateSelector 测试；T1/T2/T5 旧测试全绿）
+- 测试状态：✅ 298 个测试通过（本轮新增 24 个 SelectionOverlayLayout 测试；T1/T2/T5/T8 旧测试全绿）
 
 ## 已完成
 
@@ -53,6 +53,16 @@
   - WPF 新增 `Capture/WindowEnumerator.cs`：`EnumWindows` 顶层 Z 序；过滤不可见、最小化、`WS_EX_TOOLWINDOW`、自身进程、DWM cloaked、`GetWindowRect` 失败、宽或高为 0；`DWMWA_EXTENDED_FRAME_BOUNDS` 优先、失败回退 `GetWindowRect`；最后用 Core 裁剪到目标屏幕，并按 Z# 记录候选（含标题）。
   - 新增 `tests/ZeepCut.Tests/Capture/WindowCandidateSelectorTests.cs`（20 个）：Z 序取首个命中、跨屏只保留交集、空交集丢弃、负坐标屏幕、125%/100% DIP 映射、半开边界、非法输入。
   - 新增验证脚本：`scripts/screenshot-physical.ps1`（PerMonitorV2 物理像素截图，支持按屏/整屏）、`scripts/window.ps1`（把窗口摆到物理坐标，用于副屏/跨屏验证）；`scripts/mouse.ps1` 改为 DPI-aware 并回读 `GetCursorPos`。
+- 2026-10-18 **T9 框选交互**：
+  - Core 新增 `src/ZeepCut.Core/Selection/SelectionOverlayLayout.cs`（纯逻辑）：`FormatSize`（物理像素 `640 × 480`）、`PlaceToolbar`（下方优先 / 上方回退 / 水平夹取 / 上下都放不下时贴边）、`PlaceSizeBadge`（右上方优先 / 下方回退 / 夹取）、`ToPhysical`（窗口内 DIP → 屏幕物理像素，用于日志与自动化点击）。**`SelectionController` 未改动**，UI 全部复用其状态机与几何。
+  - `Capture/CaptureOverlayWindow.cs` 重写为交互遮罩：`PreviewMouseLeftButtonDown/Up` + `MouseMove` + 鼠标捕获 + 丢失捕获兜底；鼠标 DIP 先按目标屏 DPI 换算成物理像素（`Bounds.Left/Top + DipToPixel`）再喂 Controller，Controller 结果用 `WindowCandidateSelector.ToDipBounds` 画回 DIP。覆盖悬停预览、拖拽、抬手定稿、整体移动、八向调整、屏幕夹取。
+  - 视觉：选区外半透明黑（`GeometryGroup` + `FillRule.EvenOdd` 挖洞；无选区时整屏压暗）；悬停候选 3 DIP 蓝框；定稿/调整时 1 DIP 白框 + 8 个 8 DIP 白色手柄；拖动/调整时在选区右上方显示物理像素尺寸标签（定稿后由工具栏显示尺寸）。
+  - 光标按命中的手柄切换（Cross / SizeAll / SizeWE / SizeNS / SizeNWSE / SizeNESW），手柄命中容差 6 物理像素，最小选区 4×4。
+- 2026-10-18 **T10 截图工具栏**：
+  - `Selected` 且达到最小尺寸时显示遮罩内浮层工具栏（尺寸文本 + 复制/另存为/贴图/取消）；优先选区下方，下方放不下放上方，水平方向夹取在屏幕内；无选区/选区过小时不显示。
+  - 按钮本轮全部只写日志占位（复制/另存为/贴图分别标注 T11/T18）；**“取消”真实关闭遮罩**。键盘 Enter → 复制占位，Esc → 取消关闭；按钮 `Focusable=false`，键盘焦点始终留在遮罩；点击工具栏区域不会触发选区状态机。
+  - 工具栏显示时把工具栏与四个按钮的物理矩形写入日志（便于真实桌面自动化点击）。UIA 按“进程 id + 标题前缀 `Zeep Cut`”找遮罩窗口，按 `ControlType.Button` + `Name="取消"` 定位按钮。
+  - 验证脚本：新增 `scripts/verify-t9t10.ps1`（`selection` / `reverse` / `window-click` / `tiny` / `toolbar-above` / `handles` / `drag-badge` 七种场景，自动 UIA 点击“取消”）；`scripts/mouse.ps1` 增加 `-ToX/-ToY` 真实拖动；`scripts/screenshot-physical.ps1` 增加 `-Primary` / `-DeviceName`（屏幕枚举顺序不保证与 DISPLAY 编号一致）。
 
 ## 验证证据
 
@@ -121,7 +131,54 @@
   `已有截图遮罩显示中，忽略本次触发：全局热键 Alt+A`，没有出现第二张遮罩。
 - 2026-10-18 **重编译后冒烟（最终代码）**：重新构建（274 测试通过）后启动（pid 52688），主屏 `Alt+A` → 遮罩物理 (0,0) 2560x1440、
   DIP 2048x1152、命中 DSH 窗口；Esc 关闭，日志与前述一致；截图 `artifacts/t7t8/final-smoke-primary.png`。
-- 2026-10-18 **未验证**：
+- 2026-10-18 **T9/T10 构建+测试（最终代码）**：`powershell.exe -NoProfile -ExecutionPolicy Bypass -File '\\wsl.localhost\Ubuntu\home\camellya\workspace\Zeep-Cut\scripts\build.ps1'` →
+  `Build succeeded.`、`0 Warning(s)`、`0 Error(s)`；测试 → `Passed! - Failed: 0, Passed: 298, Skipped: 0, Total: 298`（本轮新增 24）；末尾 `BUILD+TEST OK`。
+- 2026-10-18 **主屏框选 / 移动 / 八向 / 工具栏（真实桌面，DISPLAY1 0,0 2560×1440 DPI=120/125%，pid 58740）**：
+  - Alt+A 后遮罩物理 `(0,0) 2560x1440`、DIP `2048x1152`。物理拖动 `(300,300)→(940,780)`，日志
+    `鼠标按下：指针物理=(300,300) DIP=(240,240)` →
+    `选区定稿（框选定稿）：... 物理=(300,300) 640x480 尺寸=640 × 480（物理像素） DIP=(240,240) 512x384`，
+    工具栏在选区下方 `物理=(300,790) 426x50`；截图 `artifacts/t9t10/primary-selection.png`
+    （read_image：选区外压暗、选区内原图、1px 白框、8 个白色手柄、工具栏显示 `640 × 480` 与四个按钮）。
+  - 整体移动：从中心 `(620,540)` 拖到 `(820,640)` → `选区定稿（调整完成）：物理=(500,400) 640x480`；截图 `artifacts/t9t10/primary-moved.png`。
+  - 八向调整：依次抓住 `Right / Left / Top / Bottom / TopLeft / TopRight / BottomRight / BottomLeft`，日志每条都记录对应 `手柄=...`，
+    最终 `物理=(260,240) 750x610`，工具栏 `(260,860)`；截图 `artifacts/t9t10/primary-handles.png`。
+  - 右下角调整：按 `(1138,878)` 拖到 `(1238,978)` → `物理=(500,400) 738x578 尺寸=738 × 578`（按下点比原右下角内缩 2px，
+    Controller 以指针为边，所以少 2px；尺寸文字与实际选区一致）；截图 `artifacts/t9t10/primary-resized.png`。
+  - 拖动中尺寸标签：按住左键拖到 640×480 时截图，标签在选区右上方显示 `640 × 480`，此时无工具栏/手柄；
+    `artifacts/t9t10/primary-drag-badge.png`；松开后工具栏出现 `primary-drag-badge-released.png`。
+  - 任意方向拖动：`(940,780)→(300,300)` 仍得到 `物理=(300,300) 640x480`；截图 `artifacts/t9t10/primary-reverse-drag.png`。
+  - 窗口候选单击：鼠标 `(1200,700)` 单击命中 Z#0 DSH 窗口，采用候选 `物理=(534,245) 1603x1033`，工具栏 `(534,1288) 426x50`；
+    截图 `artifacts/t9t10/primary-window-click.png`。
+  - 最小尺寸：在没有窗口候选的顶部任务栏空白带做 `3×3` 拖动 `(1000,30)→(1003,33)`，日志
+    `框选未达最小尺寸（4px）：... 结果=(0,0) 0x0，状态=None`，无工具栏、整屏压暗；截图 `artifacts/t9t10/primary-tiny-drag.png`。
+  - 工具栏贴底：拖动 `(400,1150)→(1100,1400)` 得 `700×250`，日志 `工具栏显示（选区上方）... 物理=(400,1090) 426x50`；
+    截图 `artifacts/t9t10/primary-toolbar-above.png`。UIA 找到“取消”按钮 `物理=(753,1099) 57x32` 并自动点击 →
+    日志 `取消本次截图（工具栏取消按钮）` → `遮罩窗口已关闭 ... 已取消=True`；截图 `artifacts/t9t10/primary-after-cancel-button.png`
+    （PIL 采样左区 RGB≈255，确认无压暗、遮罩已关闭）。
+  - 工具栏水平夹取：选区 `(2200,700) 300×450`，工具栏被夹到 `DIP=(1707,928)` → `物理=(2134,1160) 426x50`
+    （右边缘正好 2560，“取消”按钮右边缘 2544 未越界）；截图 `artifacts/t9t10/clamp/primary-toolbar-clamped-right.png`。
+  - 选区限制在屏幕内：把选区整体拖 `(3000,2000)`，结果被夹到 `物理=(1920,960) 640x480`（右/下正好贴 2560/1440）；
+    截图 `artifacts/t9t10/clamp/primary-moved-clamped.png`。
+  - Enter：日志 `键盘 Enter：复制到剪贴板（占位，T11 实现）：物理=(500,400) 738x578 尺寸=738 × 578`；
+    `primary-after-enter.png` 与 `primary-resized.png` SHA-256 相同（`020cc2bb...`），证明占位不改变画面。
+  - Esc：日志 `取消本次截图（Esc）` → `遮罩窗口已关闭 ... 已取消=True`；`primary-after-esc.png` 显示未压暗桌面；当时进程 58740 仍在运行（收尾重新构建前才停止）。
+- 2026-10-18 **副屏框选 / 移动 / 调整（真实桌面，DISPLAY2 -1080,0 1080×1920 DPI=96/100%）**：
+  - 鼠标 `(-540,960)` 触发，日志 `屏幕 \\.\DISPLAY2 ... 物理矩形=(-1080,0) 1080x1920 DPI=96`、
+    `冻结遮罩 ... DIP=(-1080,0) 1080x1920`。
+  - 拖动 `(-980,300)→(-340,780)`：`鼠标按下：指针物理=(-980,300) DIP=(100,300)` →
+    `选区定稿 ... 物理=(-980,300) 640x480 尺寸=640 × 480 DIP=(100,300) 640x480`；工具栏 `物理=(-980,788) 341x40`；
+    截图 `artifacts/t9t10/secondary-selection.png`（read_image：选区外压暗、白框、8 手柄、工具栏 `640 × 480` 均在 1080×1920 屏内）。
+  - 整体移动 `(-660,540)→(-460,640)`：`物理=(-780,400) 640x480`；工具栏 `(-780,888)`。
+  - 右下调整 `(-142,878)→(-42,978)`：`物理=(-780,400) 738x578 尺寸=738 × 578 DIP=(300,400) 738x578`；工具栏 `(-780,986) 341x40`；
+    截图 `artifacts/t9t10/secondary-resized.png`。
+  - Enter 占位、Esc 关闭：日志与主屏一致（`键盘 Enter ... 尺寸=738 × 578` → `取消本次截图（Esc）`）；`secondary-after-esc.png`。
+  - 结论：同一套 DIP↔物理换算在两块不同 DPI 屏幕上，尺寸文字与实际选区一致（640×480 / 738×578），副屏负坐标原点正确。
+- 2026-10-18 **未验证（T9/T10 相关）**：
+  - 只在 125% + 100% 双屏环境验证；150% 缩放、三屏以上、副屏非竖直排列、触摸/触控笔未测试。
+  - 副屏只跑了“框选 + 整体移动 + 右下角调整”；八向全部手柄只在主屏 125% 下逐一实测（逻辑同一套 Core，未在副屏重复跑全八向）。
+  - 复制 / 另存为 / 贴图按钮按本轮范围仍是日志占位，未做真实剪贴板/文件/贴图动作（T11、T18）。
+  - 键盘移动/微调选区、双击全屏选择等额外快捷操作未实现，也未验证。
+- 2026-10-18 **未验证（历史遗留）**：
   - 非 1409 的热键注册失败分支（如权限/参数异常）未注入。
   - 通知气球/Toast 的视觉呈现未能在截图中确认（见上）；`MessageBox` 兜底已真实验证。
   - 150% 缩放、三屏以上、竖屏以外的特殊排列未测试（本机只有 125%+100% 双屏）。
@@ -136,12 +193,15 @@
 - 菜单占位：从剪贴板贴图仍是空方法（仅写日志）；显示/隐藏全部贴图、历史、设置、检查更新弹“尚未实现”。截图菜单已接真实捕获与冻结遮罩。
 - `capture-debug` 是 T6 临时调试产物；T7 起 Alt+A 不再自动落盘，`ScreenCapture.SaveDebugPng` 仅保留为诊断方法，目录仍由 `AppPaths.EnsureCreated` 创建。
 - 本机是**混合 DPI**（主屏 125%、副屏 100%）。T7 实测：主屏 WPF 按目标 DIP 摆放一次成功（物理 (0,0) 2560×1440、DIP 2048×1152）；副屏 WPF **首次按主屏 125% 摆放成 (-1350,0) 1350×1942**，由 `Loaded` 里的 `GetWindowRect` 复核 + `SetWindowPos` 校正为 (-1080,0) 1080×1920。当前做法已真实验证正确，但依赖“显示后校正”这一步；若以后 WPF 行为变化或出现可见闪烁，优先检查这里。
-- 遮罩窗口显示期间点击左键目前没有动作（T9 才实现框选）；Esc 需要遮罩处于键盘焦点。若截图期间有新窗口抢焦点，Esc 可能收不到，需要先点一下遮罩。
+- T9/T10 已接入框选与工具栏；Esc/Enter 仍要求遮罩处于键盘焦点。若截图期间有新窗口抢焦点，Esc 可能收不到，需要先点一下遮罩。
+- T9 手柄沿用 Controller 的“边跟随指针”语义：按在边缘内侧（容差内最多 6px）时，按下后该边缘会立即对齐到指针位置，因此按下点比原边缘内缩多少，选区就先缩小多少（实测内缩 2px → `738×578` 而不是 `740×580`）。尺寸文字与实际选区一致，不是换算错误；若以后需要“零跳动”手感，应在 Core 增加按增量调整的模式并补测试，而不是在 UI 里另算。
+- 在窗口候选上做小于最小尺寸的拖动会被 Controller 视为单击窗口并采用候选（T2 既有语义）。验证“过小框选无效”必须在没有窗口候选的区域（本机为顶部任务栏空白带）进行。
+- 本机 DSH 的 `powershell.exe` 运行在沙箱视图中：`Get-Content %LOCALAPPDATA%\ZeepCut\logs\...` 可能读到旧内容，`FindWindow` 按完整中文标题也不可靠。真实日志通过 WSL `/mnt/c/Users/19427/AppData/Local/ZeepCut/logs/app-YYYYMMDD.log` 读取；自动化找遮罩窗口要用“进程 id + 标题前缀 `Zeep Cut`” + UI Automation（工具栏显示后才能找到按钮，且按钮在 `Visibility.Collapsed` 时不会出现在 UIA 树里）。
 - 主屏物理 2560×1440、逻辑 2048×1152。若按旧文档期待“2048×1152 PNG”会误判；产品按 PLAN/ARCHITECTURE 使用物理像素，捕获结果 2560×1440 是正确行为。
 - Windows 通知横幅在本机自动截图中不可见；热键冲突已用启动 MessageBox 兜底，不影响另外的热键注册。
 - 本机 Windows PowerShell 5.1 的 `Start-Process` 会因环境变量 `NO_PROXY`/`no_proxy` 大小写重复键抛 `Item has already been added`；且 GUI 进程继承 WSL 管道会让调用一直等待。`scripts/run.ps1` 已改用 `Invoke-CimMethod Win32_Process Create`（立即返回、不继承管道）。GUI 自动化时 UIA 坐标与 `scripts/mouse.ps1` 坐标一致（本机托盘按钮 1747,81,50,50）。
 - `scripts/screenshot.ps1` 是 DPI-unaware 的 WinForms 脚本：在本机主屏上截到的是逻辑 2048×1152，而产品捕获为物理 2560×1440。需要物理像素基准时用新增的 `scripts/screenshot-physical.ps1`。
-- T7 起 `scripts/mouse.ps1` 自己声明 PerMonitorV2 并回读 `GetCursorPos`；`scripts/window.ps1` 用物理坐标摆放测试窗口，`scripts/screenshot-physical.ps1` 截物理像素。
+- T7 起 `scripts/mouse.ps1` 自己声明 PerMonitorV2 并回读 `GetCursorPos`；`scripts/window.ps1` 用物理坐标摆放测试窗口，`scripts/screenshot-physical.ps1` 截物理像素。T9 起 `mouse.ps1` 支持 `-ToX/-ToY` 真实拖动，`screenshot-physical.ps1` 支持 `-Primary`/`-DeviceName`（屏幕枚举顺序不固定），`verify-t9t10.ps1` 提供七种交互场景。
 - Inno Setup 未安装，阶段四需尝试 winget 安装；失败则只交付便携版并说明。
 - 尚无真实更新渠道地址（`AppInfo.UpdateManifestUrl` 为空），实现时必须显示“尚未配置更新渠道”。
 - 无代码签名证书，安装包将为未签名。
@@ -177,3 +237,11 @@
 - T8 过滤链：可见、非最小化、非 `WS_EX_TOOLWINDOW`、非自身进程、非 DWM cloaked、`GetWindowRect` 成功、宽高 > 0；DWM 扩展边框失败回退 `GetWindowRect`，最终交集在 Core 完成。
 - T8 高亮用 3 DIP 蓝色边框（内缩半个线宽）；鼠标位置用 `HitTestDip` 按目标屏幕 DPI 换算，避免把 WPF DIP 当物理像素。
 - T8 新增 `screenshot-physical.ps1` / `window.ps1` 并把 `mouse.ps1` 改成 DPI-aware，混合 DPI 下的桌面验证不再依赖临时脚本。
+- T9 UI 只做换算/绘制/输入映射，状态与几何全部由 Core `SelectionController` 决定；换算入口固定为 `DpiTransform`（DIP→物理）与 `WindowCandidateSelector.ToDipBounds`（物理→DIP），窗口里不再另写比例。
+- T9 渲染顺序：冻结图 → 压暗层（EvenOdd 挖洞）→ 白框/悬停蓝框 → 8 手柄 → 尺寸标签；工具栏放在单独的、可命中测试的 Canvas 层，按钮 `Focusable=false`，保证 Enter/Esc 始终作用于遮罩。
+- T9 交互事件用 `PreviewMouseLeftButtonDown/Up` + `CaptureMouse`，`LostMouseCapture` 时用最后位置定稿，避免 Alt+Tab 后卡在 Dragging。
+- T10 工具栏只在 `IsCaptureReady`（Selected + 最小尺寸）显示；拖动/调整期间用右上尺寸标签，松开后由工具栏承担尺寸显示。
+- T10 工具栏与尺寸标签的摆放算法下沉到 Core `SelectionOverlayLayout`（下方优先、上方回退、水平夹取、超大贴边），并补了 xUnit；尺寸文字固定用物理像素 + ` × `。
+- T10 按钮本轮全部日志占位（复制/另存为/贴图），只有“取消”真实关闭；Enter 走复制占位，Esc 取消。
+- 点击工具栏矩形不进入选区状态机（`PreviewMouseLeftButtonDown` 先判断是否落在工具栏内），避免点按钮时把已定稿选区清掉重新框选。
+- 遮罩把工具栏和四个按钮的物理矩形写入日志；UIA 用“进程 id + 标题前缀”找遮罩、按按钮名定位，自动化验证不硬编码坐标。

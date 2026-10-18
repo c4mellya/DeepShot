@@ -7,11 +7,15 @@
 #
 # Examples:
 #   ... screenshot-physical.ps1 -List
-#   ... screenshot-physical.ps1 -MonitorIndex 0 -Out C:\temp\primary.png
-#   ... screenshot-physical.ps1 -MonitorIndex 1 -Out C:\temp\secondary.png
+#   ... screenshot-physical.ps1 -List
+#   ... screenshot-physical.ps1 -Primary -Out C:\temp\primary.png
+#   ... screenshot-physical.ps1 -DeviceName '\\.\DISPLAY2' -Out C:\temp\secondary.png
+#   ... screenshot-physical.ps1 -MonitorIndex 1 -Out C:\temp\any.png
 param(
     [string]$Out = '',
     [int]$MonitorIndex = -1,
+    [string]$DeviceName = '',
+    [switch]$Primary,
     [switch]$List
 )
 $ErrorActionPreference = 'Stop'
@@ -41,6 +45,22 @@ for ($i = 0; $i -lt $screens.Count; $i++) {
     Write-Host ("screen {0}: {1} origin=({2},{3}) {4}x{5} primary={6}" -f $i, $screens[$i].DeviceName, $b.Left, $b.Top, $b.Width, $b.Height, $screens[$i].Primary)
 }
 if ($List) { exit 0 }
+
+# 屏幕枚举顺序不保证与 DISPLAY 编号一致；优先按主屏/设备名定位，避免截错屏。
+if ($Primary) {
+    $MonitorIndex = -1
+    for ($i = 0; $i -lt $screens.Count; $i++) {
+        if ($screens[$i].Primary) { $MonitorIndex = $i; break }
+    }
+    if ($MonitorIndex -lt 0) { Write-Host 'primary screen not found' -ForegroundColor Red; exit 1 }
+}
+elseif (-not [string]::IsNullOrWhiteSpace($DeviceName)) {
+    $MonitorIndex = -1
+    for ($i = 0; $i -lt $screens.Count; $i++) {
+        if ($screens[$i].DeviceName -eq $DeviceName) { $MonitorIndex = $i; break }
+    }
+    if ($MonitorIndex -lt 0) { Write-Host ("screen not found: {0}" -f $DeviceName) -ForegroundColor Red; exit 1 }
+}
 
 if ([string]::IsNullOrWhiteSpace($Out)) {
     $Out = Join-Path $env:TEMP 'zeepcut-physical.png'
