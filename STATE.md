@@ -344,6 +344,7 @@
   - 点“选择”后双击文字 → 日志 `重新编辑文字：图像坐标=(55,55) 原内容="first text" 输入框DIP=(300,236) 宽=360 字号=18`；截图 `primary-textedit-02-dblclick-editor-crop.png` 显示输入框内预填原文。
   - `Ctrl+A` + 输入 `second T16 text` + Enter → 日志 `文字重新编辑提交（Enter）：长度=15 内容="second T16 text" 记录=修改文字 文档标注数=1 撤销栈=2`。
   - `Ctrl+Z` → 截图 `primary-textedit-04-undo-text-crop.png` 文字回到 `first text`；`Ctrl+Y` → `primary-textedit-05-redo-text-crop.png` 又变成 `second T16 text`。文字修改**可撤销/重做**。
+- 2026-10-18 **T16/T17 最终冒烟（提交后重新构建 + 重启，真实桌面）**：重新构建 `0 Warning(s)` / `625 passed`，启动 pid 8624。主屏 125% 七种标注 + 马赛克 → Enter → 独立进程读剪贴板 **`760x560`**，马赛克区域 **140 个块 0 个非均匀**（证据 `artifacts/t16t17/final-smoke/primary-export-clipboard.png`）；副屏 100% 选区 `(-1000,240) 640×480` → 剪贴板 **`700x640`**（脚本里副屏默认 700×640 的选择，与 `-SelW/-SelH` 的组合一致）。提交后行为与提交前一致。
 - 2026-10-18 **未验证（T16/T17 相关）**：
   - 手柄缩放只在**矩形**上真实验证（椭圆/马赛克走同一套 `Resize` 分支，Core 单测覆盖 `MosaicAnnotation` 缩放，但未在桌面逐一拖马赛克/椭圆手柄）。
   - 箭头/直线的**端点拖动**只有 Core 单测（`SegmentEndpoints_DragStartAndEnd_RecordsOneStep`、`SegmentEndpoints_AreClampedToImage`），未在桌面拖动线段端点。
