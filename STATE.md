@@ -2,30 +2,134 @@
 
 > 每轮工作结束时更新本文件。下一位接手者先读这里。
 
+
 ## 本轮快照
 
 - 日期：2026-10-18
-- 当前阶段：阶段三（历史与设置）→ **历史存储与写入已完成**（T23 / T24）
-- 本轮任务：**T23 历史存储 + T24 历史写入**
-- 下一步任务：**T25 历史图库**（日期分组缩略图、预览、复制、另存为、贴图、删除）。
-  T23/T24 已把底座铺好，T25 基本只需要写 UI：
-  - `HistoryRepository`（Core）已提供 `GetList(HistoryQuery)`（名称搜索 / 收藏过滤 / 分页 / 三种排序）、
-    `GetById`、`GetAllNames`、`Count`、`Delete`、`Update`、`SetFavorite`、`UpdateImage`、
-    `ReadImageBytes`、`ReadThumbnailBytes`、`GetImageAbsolutePath`。
-  - `HistoryStore`（App）已提供 `GetPage` / `Count` / `TryLoad(相对路径)` / `TryLoadPreview(record)`
-    （内部用 `BitmapCacheOption.OnLoad`，读完即释放句柄，可直接用于图库缩略图列表）。
-  - `PinWindows.CreateFromHistory(image, bounds, screenBounds, dpi)` 已存在（T22 留的接缝），
-    历史图库的“贴图”按钮直接调它即可（Source=History → 不新增历史）。
-  - **T27 的 30 天清理规则还没写**：`HistoryRecord.CreatedAtUtc` + `IsFavorite` 已按 PLAN 语义就位
-    （改名/覆盖只更新 `UpdatedAtUtc`，不延长 CreatedAtUtc），但 `HistoryRules` 类与清理动作留给 T27。
-- 构建状态：✅ 编译通过，0 warning 0 error
-- 测试状态：✅ **860 个测试通过**（本轮新增 **156**：`HistoryRecordTests` 44、`HistoryNameTests` 38、
-  `HistoryRepositoryTests` 43、`HistoryQueryTests` 31）
-- 桌面验证：✅ 主屏 125% 实测：复制 / 另存为 / 贴图各恰好写 1 条记录、Esc 取消不写、
-  外部剪贴板贴图写 `Source=Clipboard`、`images/*.png` + `thumbs/*.png` 真实存在（尺寸正确）、
-  图片/缩略图文件**未被锁**（可改名/复制/删除）、历史写失败时复制仍成功且弹 Toast 提示
+- 当前阶段：阶段三（历史与设置）→ **T25 历史图库 + T26 历史管理已完成**
+- 本轮任务：**T25 历史图库 + T26 历史管理**（接手上一轮崩溃留下的 1940 行残留代码）
+- 下一步任务：**T27 30 天清理**（启动与跨日清理、收藏豁免、超期收藏取消时二次确认）。
+  T25/T26 现在必须知道的底座：
+  - `HistoryRepository.Delete(id)` 已删行 + 图片 + 缩略图三样（T25 图库删除按钮就是走它，
+    本轮实测过：`images/` 3→2、`thumbs/` 3→2、SQLite 行 3→2，另一个记录的文件不受影响）。
+    T27 的批量清理应复用同一套删除路径，不要另写一份。
+  - `HistoryRepository.SetFavorite` / `Update` 已能改收藏；`HistoryRecord.CreatedAtUtc` 是 30 天
+    期限的唯一依据（改名/收藏只动 `UpdatedAtUtc`，本轮已用数据库核对过）。
+  - **`HistoryRules` 类还不存在**（ROADMAP 里排在 T27），Core 目前没有任何"到期"判定；
+    写 T27 时把规则放进 `src/ZeepCut.Core/History/`，UI 提示文案照 `HistoryRename` /
+    `HistoryView.DescribeEmptyState` 的做法放 Core，便于单测。
+  - 图库窗口每次打开/刷新只查一页（`PageSize = 60`，滚到底自动加载更多）；
+    T27 清理后图库要刷新，可以直接调 `HistoryGallery.Current?.Reload()`（`Reload` 是 internal 的，
+    在 `ZeepCut` 程序集内可直接调）。
+- 构建状态：✅ 编译通过，**0 warning 0 error**
+- 测试状态：✅ **958 个测试通过**（上一次提交时 860；本轮把接手残留的
+  `HistoryGroupingTests` 289 行 / `HistoryRenameTests` 106 行 / `HistoryViewTests` 243 行 也算进来，
+  过滤 `--filter 'FullyQualifiedName~ZeepCut.Tests.History'` 实测 **254 个通过**）
+- 桌面验证：✅ 主屏 125%（2560×1440 @ (0,0)）真实桌面实测（脚本 `scripts/verify-t25t26.ps1`，
+  证据 `artifacts/t25t26/`）：托盘“历史”能打开图库、**今天/昨天/具体日期**三组分组正确、
+  卡片显示缩略图+名称+时间+来源+星标、搜索（大小写不敏感、与“只看收藏”组合）、空状态两套文案、
+  星标收藏后**重启应用仍保持**、重命名生效、双击预览大图（Esc 关闭）、
+  从历史贴图后**历史条数不变（3→3）**、删除后**行 + 图片 + 缩略图同步删除**、
+  复制到剪贴板、另存为真实 Win32 对话框保存成功。
+  详见下面“验证证据 / T25/T26 桌面实测”一节。
+
+### 本轮：残留代码如何接手（重要）
+
+上一轮 agent 在写 `HistoryGalleryWindow` 时崩溃，留下 10 个未提交文件、约 1940 行，
+`dotnet build` 只有 3 个错误（`HistoryGallery.cs` 引用不存在的 `HistoryGalleryWindow`）。
+**处理方式是"补齐 + 小改"，没有推倒重来**：
+
+| 残留文件 | 处理 | 说明 |
+| --- | --- | --- |
+| `src/ZeepCut.Core/History/HistoryGrouping.cs` | **原样保留** | 日期分组（今天/昨天/`yyyy-MM-dd 星期X`）+ 组内倒序，直接接入图库，未改一行 |
+| `src/ZeepCut.Core/History/HistoryRename.cs` | **原样保留** | 重命名校验（空名/非法字符/collapse 后为空都拒绝），被 `HistoryRenameDialog` 调用 |
+| `src/ZeepCut.Core/History/HistoryView.cs` | **原样保留** | 视图（搜索 + 只看收藏 + 排序 + 页大小）→ `HistoryQuery`；空状态文案 `DescribeEmptyState` 直接给图库用 |
+| `src/ZeepCut/History/HistoryActions.cs` | **保留 + 1 行 using** | 复制/另存为/贴图/删除/收藏/重命名动作；只补了 `using ZeepCut.Capture;`（`MonitorLayout` 在 `Capture` 命名空间，残留代码漏了这个 using） |
+| `src/ZeepCut/History/HistoryCard.cs` | **保留 + 1 个新方法** | 缩略图卡片；新增 `SetDragScroll(ScrollViewer)`（在卡片空白处按下拖动 = 滚动图库），其余未动 |
+| `src/ZeepCut/History/HistoryGallery.cs` | **保留 + 3 处可见性** | 单实例宿主已写好；把 `Current`/`Show` 由 `public` 改 `internal`（`HistoryGalleryWindow` 的构造函数是 internal，public 方法无法返回它；`CloseIfOpen` 仍 public） |
+| `src/ZeepCut/History/HistoryUi.cs` | **原样保留** | 图库配色/文字/按钮工厂 |
+| `tests/ZeepCut.Tests/History/{HistoryGrouping,HistoryRename,HistoryView}Tests.cs` | **原样保留** | 上一轮已写好且全绿（254 个 History 测试中包含它们） |
+
+**新写的文件**（缺口就在这里）：
+- `src/ZeepCut/History/HistoryGalleryWindow.xaml.cs`（约 700 行，**纯代码构建 UI，没有 XAML 文件**：
+  与仓库里遮罩/贴图/Toast 的写法一致，避免再引入一套 XAML 命名空间与 partial 类；
+  文件后缀沿用宿主 `HistoryGallery.cs` 指名的类型名 `HistoryGalleryWindow.xaml.cs`）。
+- `src/ZeepCut/History/HistoryTabStrip.cs`：顶部“全部 / 只看收藏”两段式开关（RadioButton + 自绘模板）。
+- `src/ZeepCut/History/HistoryRenameDialog.cs`：重命名对话框（Enter 确定、Esc 取消、非法输入就地报错不关闭）。
+- `src/ZeepCut/History/HistoryPreviewWindow.cs`：双击预览大图（1:1 + 滚轮缩放 + 适应窗口）。
+- `src/ZeepCut/Pins/PinWindows.cs`：`CreateFromHistory` 去掉“T25 尚未实现”的日志文案（行为未变，
+  仍固定 `PinSource.History` → 不新增历史）。
+- `src/ZeepCut/App.xaml.cs`：托盘“历史”从 `ShowNotImplemented` 换成 `ShowHistoryGallery`
+  （历史库启动失败时说明原因而不是弹“尚未实现”）；`ExitFromTray`/`OnExit` 增加 `DisposeHistoryGallery()`。
+- `scripts/verify-t25t26.ps1`：真实桌面验证驱动（11 个场景，见下）。
+
+**接手时发现的残留代码 bug（都修了）**：
+1. 分组标题用 `Width = double.PositiveInfinity` 想做整行 → WPF 直接抛
+   `ArgumentException: '∞' is not a valid value for property 'Width'`，图库一打开就显示“无法读取历史记录”。
+   改成：标题前插一个宽到必然换行的 1px 空占位。
+2. `HistoryCard` 的“重命名”按钮显示文字是 `改名`，但残留的动作条没有 AutomationId 前缀统一
+   （`history-action-改名-N`），验证脚本一开始按“重命名”找不到 —— 已按实际文字修正脚本。
+3. 预览窗口用 `SendKeys '{ESC}'` 关不掉（本机已知坑，T23 记录过）：改为 `PostMessage(WM_KEYDOWN/UP)`
+   到预览窗口 hwnd，窗口自己的 `PreviewKeyDown` 才走得到。
+
+### 本轮决策（值得留给下一位）
+
+- **图库是普通窗口**（有边框、进任务栏），关闭只是关窗口，进程与托盘继续运行（PLAN：关闭普通窗口留在托盘）。
+- **收藏切换后重查库**（`Reload`）而不是只改卡片颜色：这样“只看收藏”开着时取消收藏，
+  记录会立刻从列表消失——这是过滤语义的正确表现，而不是 bug。
+- **预览是 1:1 物理像素**（`Stretch.None` + ScrollViewer），不是“缩放到窗口”：本机主屏 2560×1440，
+  图库里基本都是整屏截图，缩放到窗口会糊；滚轮 / ±/ 适应窗口 / 实际大小都给了。
+- **贴图摆放在光标附近**（复用 `PinPlacement.NearCursor` + 光标所在屏幕），与 Alt+S 剪贴板贴图一致。
+- **删除一律带确认**（`MessageBox` OKCancel，默认按钮是取消），收藏记录文案额外提示“这是一条收藏记录”。
+- **重名允许**（PLAN 只要求按名称搜索，Id 才是主键）；新建记录才走 `CreateUniqueName` 的 ` (2)` 规则。
+- **搜索用 Core 的 `HistoryView` 翻译成 SQL**（`LIKE + COLLATE NOCASE`），不在 UI 里做内存过滤：
+  分页“加载更多”才不会漏掉后面的匹配项。
+- **所有会改列表的操作最后都走 `Reload()`**（重新查库 + 重建卡片）。图库量级很小，重建最不容易出错；
+  代价是滚动位置会回到顶部（见“未验证/遗留”）。
 
 ## 已完成
+
+- 2026-10-18 **T25 历史图库 + T26 历史管理**（接手上一轮崩溃留下的残留代码，补齐缺口而不是重写；
+  详细“怎么接手”见上面的本轮快照表格）：
+
+  **图库窗口 `src/ZeepCut/History/HistoryGalleryWindow.xaml.cs`（新写，纯代码构建 UI）**
+  - 顶部：`历史记录` 标题 + 搜索框（`history-search`，250ms 防抖，Enter 立即搜，Esc 清空）+ 
+    `全部 / 只看收藏` 两段开关（`HistoryTabStrip`）+ `刷新`；下面一行状态栏
+    （`共 N 条历史记录` / `共 N 条匹配（库内总计 M 条）` / 上次操作结果）。
+  - 主体：`ScrollViewer` + `WrapPanel`，按 `HistoryGrouping.GroupByDay` 分组——
+    每组先一行分组标题（`今天` / `昨天` / `2026-10-16 星期五`，带条数），标题前插一个宽度等于可见区的
+    空占位强制换行（`WrapPanel` 没有"整行"概念）；卡片用残留的 `HistoryCard`（缩略图 + 名称 + 时间/尺寸/来源 +
+    星标 + 选中后展开 复制/贴图/改名/删除/另存为/预览 操作条）。
+  - 交互：单击卡片选中（操作条展开）、双击打开预览、卡片空白处拖动 = 滚动列表、滚到底自动加载下一页
+    （每页 60，`PageSize`）、F5 刷新。所有会改动列表的操作最后都走 `Reload()`（重新查库 + 重建卡片）。
+  - 空状态：`totalCount<=0` → `还没有历史记录。按 Alt+A 截个图…`；有筛选没命中 → `没有匹配的记录` +
+    Core 给出的具体说明 + `清除筛选` 按钮。文案全部来自 `HistoryView.DescribeEmptyState`。
+  - 历史库初始化失败时托盘“历史”不再弹“尚未实现”，而是说明本次启动历史不可用（截图/贴图不受影响）。
+  - 退出时（托盘退出 / `OnExit`）关闭图库窗口，不动数据库。
+
+  **重命名 `HistoryRenameDialog`**：单行输入框 + 提示 + 错误行 + 确定/取消；Enter 提交、Esc 取消；
+  校验用 Core `HistoryRename.TryNormalize`（空名/全非法字符直接拒绝并就地显示原因，不关对话框）；
+  `HistoryActions.Rename` 只改 `Name` + `UpdatedAtUtc`（`CreatedAtUtc` 不变 → 不延长 30 天）。
+
+  **预览 `HistoryPreviewWindow`**：非模态（可同时操作图库），1:1 显示原图 + 滚动条，
+  滚轮缩放（0.1×–4×）、`实际大小`/`适应窗口` 按钮、`复制`/`贴图`（复用 `HistoryActions`），Esc 关闭；
+  元数据栏显示名称/像素尺寸/本地时间/来源/当前缩放。图片走 `HistoryStore.TryLoad`（读完即释放句柄），
+  因此预览打开时仍可删除该记录（`DeleteRecord` 会先关掉对应预览）。
+
+  **T26 收藏**：星标点击 → `HistoryRepository.SetFavorite` → 就地更新星标 + `Reload()`；
+  “只看收藏”开着时取消收藏会让记录立刻从列表消失（过滤语义，不是 bug）。
+
+  **T26 搜索**：`HistoryView` → `HistoryQuery`（`LIKE + COLLATE NOCASE`，`BuildLikePattern` 转义 `%`/`_`），
+  大小写不敏感、子串匹配，与“只看收藏”是**与**关系；分页也带着同一份条件。
+
+  **T25 动作**：复制（`Clipboard.SetImage`，`COMException` 单独提示）/ 另存为（真实 Win32 对话框，
+  显示期间临时取消 Topmost —— T11 的老坑）/ 贴图（`PinWindows.CreateFromHistory`，固定 `PinSource.History`，
+  **不新增历史**；摆放用 `PinPlacement.NearCursor` + 光标所在屏幕）/ 删除（`MessageBox` 确认，默认按钮取消；
+  收藏记录额外提示）→ `Repository.Delete` 删行 + 图片 + 缩略图文件。
+
+  **接线**：`App.xaml.cs` 的 `ShowHistoryGallery(trigger)`（取代 `ShowNotImplemented("历史")`）、
+  `DisposeHistoryGallery()`（`ExitFromTray` 与 `OnExit` 都调）；`PinWindows.CreateFromHistory` 的日志
+  去掉"T25 尚未实现"的占位文案。
 
 - 2026-10-18 **T23 历史存储 + T24 历史写入**（全新 Core 存储层 + 替换 T11/T22 的两个日志占位实现；
   未改动任何已通过的 Core 类型，也没有动 PLAN 范围之外的东西）：
@@ -332,7 +436,118 @@
     - 马赛克：拖拽区域，预览是块状示意（半透明压暗 + 交替块），真实像素化留 T17。
   - 新增验证脚本 `scripts/verify-t14t15.ps1`（11 个场景：rect/ellipse/arrow/line/freehand/text/mosaic/all/undo-redo/lock/color/buttons），UIA 按 `AutomationProperties.Name` 点工具/颜色/粗细/撤销重做按钮，全程物理像素坐标。
 
+## 未验证 / 遗留问题（T25/T26 本轮）
+
+- **图库只在主屏 125% 实测过**：副屏（-1080,0 / 100%）没有单独打开图库验证定位与缩放；
+  窗口尺寸按 `SystemParameters.WorkArea` 夹取（主屏工作区），副屏上打开时的初始位置是
+  `WindowStartupLocation.CenterScreen`（落在光标所在屏），没有专门验证。
+- **“加载更多”（每页 60 条，滚到底自动追加）未在真实桌面验证**：本轮库里最多 4 条，
+  分页逻辑只有代码路径；`HistoryRepositoryTests` 覆盖了 `HistoryQuery` 的 offset/limit。
+- **滚动位置**：任何操作都会 `Reload()` 重建卡片，滚动条会回到顶部（记录多时要重新往下滚）。
+  本轮选择“重建比增量维护更不容易出错”，若后续觉得碍事再改成增量更新。
+- **重命名的非法输入提示**（空名称 / 只有 `???`）只在代码里走 `HistoryRename` 校验，**没有在桌面
+  输入非法字符实测**；Core 单测（`HistoryRenameTests`）覆盖了规则本身。
+- **收藏记录删除的额外提示文案**只对收藏项弹不同文案，本轮删除的是非收藏记录，收藏项的
+  那条提示没有实测点击。
+- **重命名/删除后“只看收藏”开着时的组合行为**只验证了“取消收藏 → 从列表消失”，
+  没有验证“在收藏视图里重命名后仍然留在收藏视图”（逻辑上会留下，因为收藏没变）。
+- **双击判定**用 WPF 原生 `ClickCount`（卡片 `MouseLeftButtonDown` 的 `e.ClickCount >= 2`），
+  本轮用两次 45ms 间隔的真实双击验证成功；三击、慢双击未测。
+- **预览的滚轮缩放 / 适应窗口 / 实际大小按钮**都没有在桌面点过（只截到按钮；缩放日志
+  `历史预览缩放：…` 已写好）。预览对**超大记录**（如整屏 2560×1440）的滚动表现未实测。
+- **列表为空的历史库（真正的空库）**没有截图：本轮空状态都是在“有 2~3 条但被筛掉”的情况下
+  看到的（`没有匹配的记录`），`还没有历史记录。按 Alt+A 截个图…` 这条文案（`totalCount<=0` 分支）
+  **未实测**。
+- 图库窗口没有“删除全部 / 清空历史”入口（PLAN 没要求；T27 的自动清理是另一回事）。
+- 主题（T30）未接：图库颜色写死在 `HistoryUi`，浅色下正常，深色模式下不跟随（符合 T30 之前的状态）。
+
 ## 验证证据
+
+- 2026-10-18 **T25/T26 构建+测试（最终代码）**：`powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+  '\\wsl.localhost\Ubuntu\home\camellya\workspace\Zeep-Cut\scripts\build.ps1'` → `Build succeeded.`、
+  `0 Warning(s)`、`0 Error(s)`；测试 → `Passed! - Failed: 0, Passed: 958, Skipped: 0, Total: 958`；末尾 `BUILD+TEST OK`。
+  其中历史相关过滤实测 `--filter 'FullyQualifiedName~ZeepCut.Tests.History'` → `Passed: 254`。
+
+- 2026-10-18 **T25/T26 真实桌面实测（主屏 \\.\DISPLAY1 0,0 2560×1440，DPI=120/125%；
+  脚本 `scripts/verify-t25t26.ps1`；证据 `artifacts/t25t26/`）**。数据准备：先清空
+  `history.db*` 与 `images/*.png`、`thumbs/*.png`，再用脚本 `-Scenario seed` 做 3 条真实历史：
+  两次 Alt+A 框选 + Enter 复制（选区 640×420 / 760×480）、一次 Alt+S 外部剪贴板贴图（300×200）。
+  WSL 侧先用 `cp history.db* /tmp/hdb/` 再 `sqlite3` 核对（WAL 模式不能用 python3 直接开 `/mnt/c`），
+  然后**把其中两条的创建时间改成"昨天"与"前天"**（只改数据库行，图片文件照旧）并 checkpoint，
+  让日期分组真正有 3 个不同的日期可验证。最终 3 行：
+  `贴图_2026-10-18_122704`(Clipboard,300×200) / `截图_昨天验证`(Screenshot,760×480) / `截图_前天验证`(Screenshot,640×420)。
+  - **托盘“历史”打开图库**（`-Scenario gallery`）：`scripts/tray-menu.ps1 -Index 3` 真实点开托盘菜单并点“历史”，
+    日志 `菜单命令: History` → `历史图库触发：托盘菜单` → `历史图库窗口已创建` →
+    `历史图库刷新：搜索=- 只看收藏=False 排序=CreatedAtDescending 每页=60 → 命中=3 显示=3
+    分组=今天=1 | 昨天=1 | 2026-10-16 星期五=1 总记录=3 用时=28ms`；截图 `gallery-01-opened.png`
+    （窗口标题 `Zeep Cut 历史`，顶部搜索框 + 全部/只看收藏 + 刷新，三组标题
+    **`今天 (1)` / `昨天 (1)` / `2026-10-16 星期五 (1)`**，每张卡片是缩略图 + 名称 + `今天 12:27:04 · 300×200 · 剪贴板贴图`）。
+    UIA 树核对（脚本 `Report-Gallery`）：3 个 `history-group-*` 分组节点、3 张卡片，每张卡片的
+    `history-name-N` / `history-meta-N` / `history-star-N` 都在，星标 UIA 名字是 `收藏`。
+    **单实例**：重复点托盘“历史”不会开第二个窗口（日志 `历史图库已打开，本次只激活已有窗口`）。
+  - **搜索（名称子串、大小写不敏感、与收藏组合）**（`-Scenario search`）：
+    - 先重命名一条为 `Abc 报告`，搜 `abc` → `共 1 条匹配（库内总计 3 条）`，只剩 `Abc 报告`；
+      再搜 `ABC`（全大写）→ **同样命中 1 条**（大小写不敏感）；截图 `search-01-keyword.png`、`search-02-uppercase.png`。
+    - 搜 `zzz-no-such-name` → 0 条，空状态文案 `没有名称包含“zzz-no-such-name”的记录。换个关键字试试，或清空搜索。`
+      （文案来自 Core `HistoryView.DescribeEmptyState`）；截图 `search-03-empty.png`。
+    - 清空后点“只看收藏” → `共 0 条匹配（库内总计 3 条）`、空状态
+      `还没有收藏的记录。点击缩略图左上角的星标即可收藏。`；截图 `search-04-favorites-only.png`。
+      收藏了一条之后再点“只看收藏” → `共 1 条匹配（库内总计 2 条）`，列表只剩被收藏的那条。
+    - 空状态截图 `empty-01-no-match.png` 上可见“没有匹配的记录”“清除筛选”按钮；
+      点“清除筛选”后回到 `共 3 条历史记录`（`empty-02-cleared.png`）。
+  - **收藏 + 重启持久化**（`-Scenario favorite` 然后 `-Scenario restart`）：
+    - 点第 1 张卡片的星标 → UIA 该星标名字由 `收藏` 变 `取消收藏`，状态栏
+      `已收藏“截图_昨天验证”（不会被 30 天清理）。`，日志
+      `历史收藏切换：名称=截图_昨天验证 … 收藏=False → True`；截图 `favorite-01-starred.png`
+      （放大 `zoom-stars-after-restart.png` 可见卡片 1 是**实心金色星标**、卡片 0 是空心）。
+    - WSL 侧查库：该行 `IsFavorite=1`，且 `CreatedAtUtc` 仍是 `2026-10-17T16:27:45.000Z`（只有 `UpdatedAtUtc` 变），
+      即收藏**不延长 30 天期限**（PLAN 要求）。
+    - 托盘“退出”（`tray-menu.ps1 -Index 6`）→ 脚本确认 `APP ALIVE AFTER EXIT: 0` → `scripts/run.ps1`
+      重新启动（新 pid）→ 重新从托盘打开图库 → UIA 读到该卡片星标仍是 `取消收藏`；
+      再反过来（取消收藏 A、收藏 B）重启一次，读到 `CARD 0 star=[取消收藏] CARD 1 star=[收藏]`，
+      与数据库 `[('Abc 报告', 1), ('截图_昨天验证', 0)]` 完全一致 —— **收藏重启后保持**。
+  - **重命名生效**（`-Scenario rename`）：选中卡片 0（操作条展开，UIA 逐个确认
+    `复制 / 贴图 / 改名 / 删除 / 另存为 / 预览` 的物理矩形）→ 点“改名” → 对话框
+    `history-rename-dialog` 出现，输入框 UIA 名字 `历史记录名称`；截图 `rename-01-dialog.png`。
+    全选后输入 `Abc 报告` → 点“确定重命名” → 状态栏 `已重命名为“Abc 报告”。`，
+    卡片名称变成 `Abc 报告`（`rename-03-after.png`），日志
+    `历史重命名成功：Id=… 贴图_2026-10-18_122704 → Abc 报告 （创建时间不变=…）`；
+    数据库该行 `Name='Abc 报告'`，`CreatedAtUtc` 未变。
+  - **双击预览大图**（`-Scenario preview`）：双击缩略图（物理 788,462）→ 预览窗口
+    `预览 · Abc 报告`，元数据栏 `Abc 报告 · 300×200 px · 2026-10-18 12:27:04 · 剪贴板贴图 · 缩放 100%`，
+    截图 `preview-01-opened.png` 里图片就是 1:1 的 300×200（绿底 + 黄块），底部有
+    缩小/放大/实际大小/适应窗口/复制/贴图；向预览窗口 PostMessage ESC → `PREVIEW STILL OPEN: False`
+    （截图 `preview-02-closed.png`），即**双击能开大图、Esc 能关**。
+  - **从历史贴图不新增历史**（`-Scenario pin`，卡片 2 = `截图_前天验证`）：
+    点“贴图” → 贴图窗口 `0xFA0930 854,685 640x420 [Zeep Cut 贴图 38296]`，`PINS before=0 after=1`；
+    文件计数 `images=3 thumbs=3` → `images=3 thumbs=3`（**不变**）；日志
+    `贴图历史联动：来源=历史记录 不记录（…），尺寸=640x420 位置=(854,685) 640x420` →
+    `从历史贴图完成：名称=截图_前天验证 … 贴图总数=1 历史记录数 3 → 3（不新增历史）`；
+    截图 `pin-01-created.png`。之后点贴图右上 × 关闭，`PINS after close: 0`。
+  - **删除：行 + 图片 + 缩略图同步删除**（`-Scenario delete`，卡片 2）：
+    点“删除” → 真实确认框 `0xB20544 1066,672 446x232 [删除历史记录]`（截图 `delete-01-confirm.png`）→
+    点“确定” → 日志 `历史删除：名称=截图_前天验证 … 行已删除=True
+    图片=images/20261018-122656-330-ae2daf10.png 图片仍在=False
+    缩略图=thumbs/20261018-122656-330-ae2daf10.thumb.png 缩略图仍在=False 剩余记录数=2`。
+    脚本侧文件计数 `images 3 → 2`、`thumbs 3 → 2`（各少一个，且是同一记录的两个文件）；
+    WSL 侧 `ls images/ thumbs/` 只剩另两条记录的两个文件，`sqlite3` 查询行数 3 → 2、
+    被删行的 Id 已不存在；图库刷新为 2 个分组 2 张卡片（`delete-02-after.png`）。
+  - **复制到剪贴板**（`-Scenario copy`）：点“复制” → 独立读取本进程剪贴板
+    `CLIPBOARD IMAGE 300x200`（与记录尺寸一致，保存 `copy-clipboard.png`），状态栏
+    `已复制“Abc 报告”（300×200）。`。
+  - **另存为（真实 Win32 对话框）**（`-Scenario saveas`，760×480 的记录）：
+    点“另存为” → 对话框 `历史图片另存为`（截图 `saveas-01-dialog.png`）→ 用剪贴板把路径贴进文件名框
+    （中文 IME 会改写 `C:\` 的老坑）→ 点“保存” → `SAVED FILE …\saveas-history.png bytes=31391 size=760x480`
+    （PNG 可被本进程重新打开，尺寸与记录一致），截图 `saveas-02-filled.png` / `saveas-03-after.png`。
+  - **脚本注意事项（写给下一位）**：托盘菜单的自动打开在本机有一条不稳定路径 ——
+    直接 `PostMessage(WM_TRAYICON, WM_RBUTTONUP)` 给托盘隐藏窗口**有时不弹菜单**
+    （取决于当时哪个窗口是前台，本轮遇到过几次 `NO MENU`）；`scripts/tray-menu.ps1`
+    （UIA 展开“显示隐藏的图标” → 右键 Zeep Cut 图标 → 扫描菜单文字行 → 点第 N 行）**稳定可用**，
+    所以 `verify-t25t26.ps1` 直接调用它。菜单文字行的 y 坐标会随弹出位置变化，**不要写死**。
+  - **WPF 弹窗的 UIA 位置**：本机 WPF 拥有的 owned 窗口（重命名对话框、预览窗口）
+    在 UIA 里是**图库窗口的子孙**，不是桌面 RootElement 的直接子节点 —— 脚本改用
+    `AutomationId` 从 RootElement 全树查找（`history-rename-dialog` / `history-preview-window`）。
+
 
 - 2026-10-18 **T23/T24 构建+测试（最终代码）**：`powershell.exe -NoProfile -ExecutionPolicy Bypass -File
   '\\wsl.localhost\Ubuntu\home\camellya\workspace\Zeep-Cut\scripts\build.ps1'` → `Build succeeded.`、

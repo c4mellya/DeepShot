@@ -232,7 +232,7 @@ public partial class App : Application
                 break;
 
             case TrayMenuCommand.History:
-                ShowNotImplemented("历史");
+                ShowHistoryGallery("托盘菜单");
                 break;
 
             case TrayMenuCommand.Settings:
@@ -524,6 +524,44 @@ public partial class App : Application
         }
     }
 
+    // --- T25 历史图库 ---
+
+    /// <summary>
+    /// 托盘“历史”：打开历史图库（单实例）。历史库初始化失败时说明原因，不弹“尚未实现”。
+    /// </summary>
+    private void ShowHistoryGallery(string trigger)
+    {
+        AppLog.Info("History", $"历史图库触发：{trigger}");
+
+        if (_historyStore is null)
+        {
+            AppLog.Warn("History", "历史图库不可用：本次启动历史库初始化失败");
+            MessageBox.Show(
+                "历史库本次启动初始化失败，图库不可用。\n\n截图与贴图仍可正常使用，" +
+                $"但不会记录历史。详情见日志：\n{AppLog.CurrentLogPath}",
+                AppInfo.Name,
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        var window = HistoryGallery.Show(_historyStore);
+        if (window is null)
+        {
+            MessageBox.Show(
+                "打开历史图库失败，详情见日志：\n" + AppLog.CurrentLogPath,
+                AppInfo.Name,
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            return;
+        }
+
+        AppLog.Info(
+            "History",
+            $"历史图库已显示：显示中={window.IsVisible} 库内记录={_historyStore.Count()} " +
+            $"图片目录={_historyStore.Repository.ImagesDirectory}");
+    }
+
     private void ShowNotImplemented(string feature)
     {
         AppLog.Info("App", $"菜单命令“{feature}”尚未实现");
@@ -538,6 +576,7 @@ public partial class App : Application
     {
         AppLog.Info("App", "退出：用户选择托盘菜单“退出”");
         DisposeCaptureOverlay();
+        DisposeHistoryGallery();
         DisposePins();
         DisposeGlobalHotkey();
         DisposeTrayIcon();
@@ -557,6 +596,9 @@ public partial class App : Application
         overlay.Closed -= OnCaptureOverlayClosed;
         overlay.Cancel();
     }
+
+    /// <summary>退出时关闭历史图库窗口（历史数据留在磁盘上，关闭窗口不动数据库）。</summary>
+    private void DisposeHistoryGallery() => HistoryGallery.CloseIfOpen();
 
     /// <summary>退出时关闭全部贴图（PLAN：退出不恢复贴图，也不销毁历史）。</summary>
     private void DisposePins() => PinWindows.CloseAll();
@@ -590,6 +632,7 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         DisposeCaptureOverlay();
+        DisposeHistoryGallery();
         DisposePins();
         DisposeGlobalHotkey();
         DisposeTrayIcon();
