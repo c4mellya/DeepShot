@@ -6,10 +6,10 @@
 
 - 日期：2026-10-18
 - 当前阶段：阶段一（截图闭环）
-- 本轮任务：**T9 框选交互 + T10 截图工具栏**
-- 下一步任务：**T11 输出动作**（复制到剪贴板、另存为 PNG/JPEG；工具栏的复制/另存为占位按钮接真实动作，成功后才结束截图）
+- 本轮任务：**T11 输出动作**（复制到剪贴板 / 另存为 PNG/JPEG / 贴图占位窗口）
+- 下一步任务：**T12 Core 标注模型**（矩形/椭圆/箭头/直线/画笔/文字/马赛克 + 颜色/粗细/字号）
 - 构建状态：✅ 编译通过，0 warning 0 error
-- 测试状态：✅ 298 个测试通过（本轮新增 24 个 SelectionOverlayLayout 测试；T1/T2/T5/T8 旧测试全绿）
+- 测试状态：✅ 344 个测试通过（本轮新增 46 个 Output 测试；T1–T10 旧测试全绿）
 
 ## 已完成
 
@@ -63,6 +63,19 @@
   - 按钮本轮全部只写日志占位（复制/另存为/贴图分别标注 T11/T18）；**“取消”真实关闭遮罩**。键盘 Enter → 复制占位，Esc → 取消关闭；按钮 `Focusable=false`，键盘焦点始终留在遮罩；点击工具栏区域不会触发选区状态机。
   - 工具栏显示时把工具栏与四个按钮的物理矩形写入日志（便于真实桌面自动化点击）。UIA 按“进程 id + 标题前缀 `Zeep Cut`”找遮罩窗口，按 `ControlType.Button` + `Name="取消"` 定位按钮。
   - 验证脚本：新增 `scripts/verify-t9t10.ps1`（`selection` / `reverse` / `window-click` / `tiny` / `toolbar-above` / `handles` / `drag-badge` 七种场景，自动 UIA 点击“取消”）；`scripts/mouse.ps1` 增加 `-ToX/-ToY` 真实拖动；`scripts/screenshot-physical.ps1` 增加 `-Primary` / `-DeviceName`（屏幕枚举顺序不保证与 DISPLAY 编号一致）。
+
+- 2026-10-18 **T11 输出动作**：
+  - Core 新增 `src/ZeepCut.Core/Output/`：
+    - `SelectionCrop.ToImageRect`：屏幕绝对物理像素选区 → 冻结图内裁剪矩形，**减去目标屏幕原点**（主屏 0,0；副屏 -1080,0）；与屏幕无交集返回空；`IsInsideImage` 按半开区间校验。
+    - `CaptureFileName`：默认名 `截图_yyyy-MM-dd_HHmmss.png`（JPEG 为 `.jpg`）；Windows 非法字符/控制字符替换为 `_`、去掉结尾点/空格、超长截断、空名回退“截图”；`TryGetFormatFromExtension` 识别 .png/.jpg/.jpeg；`CaptureImageFormat` 枚举。
+  - App 新增 `src/ZeepCut/Output/`：
+    - `ICaptureSink` + `CaptureCompletion`（动作、裁剪图、选区、屏幕、文件路径、本地时间、耗时）+ `LoggingCaptureSink`：**成功路径**写一条 INFO（动作/选区/尺寸/耗时/文件/时间）；T24 只需替换 sink 实现即可接历史。
+    - `CaptureCropper`：Core 换算 + `CroppedBitmap`，校验选区与冻结图越界，结果冻结。
+    - `CaptureImageEncoder`：PNG 保留 alpha；JPEG 先转 Bgr24 去 alpha，质量 90。
+  - `Capture/CaptureOverlayWindow.cs`：复制/另存为/贴图按钮与 Enter 接**真实动作**；成功才写完成记录并关闭遮罩；工具栏内联状态文字（失败橙色、取消绿色）；复制用 `Clipboard.SetImage` 并单独 catch `COMException`；另存为用 `SaveFileDialog`（PNG/JPEG 过滤器、默认本地时间名）；取消对话框只写取消日志并留在截图状态。
+  - 新增 `Pins/PinWindow.cs`：T11 最小贴图占位（无边框、Topmost、1:1 显示裁剪图、右上 × 与 Esc 关闭、按目标屏 DPI 定位 + Loaded 物理矩形校正）；完整贴图能力留 T18–T22。
+  - App 创建 `LoggingCaptureSink` 并传给遮罩；`OnCaptureOverlayClosed` 记录完成动作。
+  - **SaveFileDialog + Topmost 遮罩的真实 bug 与修复**：遮罩 `Topmost=true` 时，Win32 保存对话框会在显示后自行返回（实测出现过默认名在 1.5–44 秒后静默保存，`DialogResult=True`；表现为“对话框自己关了/没点保存却生成了文件”）。修复：`ShowDialog` 期间 `Topmost=false`，`finally` 恢复并在取消后重新激活遮罩；修复后对话框稳定等待用户点“保存/取消”。日志新增“保存对话框已打开/已关闭”。
 
 ## 验证证据
 
@@ -173,10 +186,57 @@
     截图 `artifacts/t9t10/secondary-resized.png`。
   - Enter 占位、Esc 关闭：日志与主屏一致（`键盘 Enter ... 尺寸=738 × 578` → `取消本次截图（Esc）`）；`secondary-after-esc.png`。
   - 结论：同一套 DIP↔物理换算在两块不同 DPI 屏幕上，尺寸文字与实际选区一致（640×480 / 738×578），副屏负坐标原点正确。
+- 2026-10-18 **T11 构建+测试（最终代码）**：`powershell.exe -NoProfile -ExecutionPolicy Bypass -File '\\wsl.localhost\Ubuntu\home\camellya\workspace\Zeep-Cut\scripts\build.ps1'` →
+  `Build succeeded.`、`0 Warning(s)`、`0 Error(s)`；测试 → `Passed! - Failed: 0, Passed: 344, Skipped: 0, Total: 344`（本轮新增 46 个：SelectionCrop 16、CaptureFileName 30）；末尾 `BUILD+TEST OK`。
+- 2026-10-18 **主屏复制（真实桌面，DISPLAY1 0,0 2560×1440 DPI=120/125%）**：
+  - 把 Notepad 放在物理 (500,350) 作为静态内容，框选 `(560,400) 600×300`；Enter 触发 → 日志
+    `开始输出（键盘 Enter）：动作=复制到剪贴板 ...` → `裁剪完成 ... → 图像=600x300 Pbgra32` →
+    `截图完成 ... 耗时=4ms，关闭遮罩` → `输出完成：动作=复制到剪贴板 选区=(560,400) 600x300 尺寸=600 × 300（物理像素） 耗时=4ms`；遮罩关闭。该次为 pid 56496（Topmost 修复前的构建，裁剪/剪贴板代码与最终一致）。
+  - **独立进程** `scripts/clipboard.ps1` 读剪贴板：`CLIPBOARD IMAGE 600x300`，保存 `artifacts/t11/clipboard-primary-notepad.png`；read_image 查看为 Notepad 选区内容（文字/菜单/状态栏），非黑图/错位。
+  - 像素对齐核验：与关闭遮罩后的物理截图 `artifacts/t11/primary-copy-after.png` 按 (560,400,600,300) 裁剪对比，`dx=dy=0` 时顶部文本带（0–120 行）mean diff=0.195、仅 55 像素差异（文本光标闪烁）；偏移 ±1px 时 mean 7.7–16.0。
+  - 最终构建（pid 58544）再次主屏复制 600×300（`clipboard-primary.png`）与当次 `primary-copy-after.png` 对比：origin mean=0.021 / 190 个差异像素（内容为实时 DSH 界面），偏移 ±1px 时 mean 3.17–4.14 / 7700+ 像素差异 → 只有 (0,0) 对齐。裁剪原点精确。
+  - 当次剪贴板图中出现的 IME/快捷候选条在截图时已消失，整图 12.7% 差异；通过偏移扫描确认不是裁剪错位。
+- 2026-10-18 **复制按钮（真实桌面，最终代码）**：UIA 找到工具栏“复制” `物理=(695,719) 58x32` 并点击 → 日志完成、遮罩关闭；独立进程读剪贴板 `600x300`（`artifacts/t11/clipboard-primary-button.png`）。
+- 2026-10-18 **主屏右下边缘复制（真实桌面，最终代码）**：框选 `(2200,1100) 359×279`（贴右边缘、接近底部任务栏），Enter → 剪贴板 `359x279`；与关闭遮罩后的截图裁剪 (2200,1100,359,279) 对比 **逐像素完全相同（mean=0, max=0, 0 个差异像素）**；证据 `artifacts/t11/clipboard-primary-edge.png`、`primary-copy-edge-after.png`。
+- 2026-10-18 **副屏负坐标复制（真实桌面，DISPLAY2 -1080,0 1080×1920 DPI=96/100%，最终代码）**：
+  - Notepad 放在物理 (-1080,250) 640×400；框选 `(-980,320) 580×320`；Enter → 日志
+    `开始输出（键盘 Enter）... 选区=(-980,320) 580x320 ... 屏幕=(-1080,0) 1080x1920 DPI=96` →
+    `裁剪完成 ... → 图像=580x320 Pbgra32` → `输出完成 ... 尺寸=580 × 320 ... 耗时=5ms`；遮罩关闭。
+  - 独立进程读剪贴板 `CLIPBOARD IMAGE 580x320`，保存 `artifacts/t11/clipboard-secondary.png`；read_image 可见 Notepad 文字、状态栏 `Ln 3, Col 7 100% Windows (CRLF) UTF-8` 与右侧壁纸，负坐标未错位。
+  - 与关闭遮罩后副屏截图 `secondary-copy-after.png` 的图像内 (100,320,580,320)（= -980 - (-1080)、320）对比：`dx=dy=0` 时 mean=0.189 / max=58 / 7175 个小差异像素（ClearType/重绘），偏移 ±1px 时 mean 2.1–4.2，换算正确。
+- 2026-10-18 **另存为 PNG（真实桌面，最终代码）**：点“另存为”（UIA）→ 日志
+  `保存对话框已打开：默认名称=截图_2026-10-18_052414.png 目录=C:\Users\19427\Pictures`；
+  验证脚本用 UIA 找到文件名字段（DirectUI，无 ValuePattern），点击聚焦后把临时路径**从剪贴板粘贴**进去（中文输入法会把 `C:\...` 改写成 `C：、...`），再点对话框的“保存”（子 Button `BM_CLICK`）→
+  `保存对话框已关闭：DialogResult=True 选择文件=C:\...\Temp\zeepcut-t11\save-t11.png` →
+  `文件已保存 ... 格式=Png 尺寸=600x300` → `输出完成 ... 耗时=3ms`，遮罩关闭；
+  独立校验文件 `600x300, 27352 bytes, PNG magic OK`，副本 `artifacts/t11/primary-saved.png`（read_image 可打开）；截图 `primary-save-dialog.png` / `primary-save-dialog-filled.png` / `primary-save-after.png`。
+- 2026-10-18 **另存为 JPEG（真实桌面，最终代码）**：同路径 `.jpg` → 日志 `文件已保存 ... 格式=Jpeg 尺寸=600x300 质量=90`；独立校验 `600x300, 18125 bytes, JPEG magic FF D8`，副本 `artifacts/t11/primary-saved.jpg`（read_image 可打开）；遮罩关闭。
+- 2026-10-18 **取消保存对话框（真实桌面，最终代码）**：
+  - 点“另存为”后点对话框“取消”（`BM_CLICK` id=2）→ 日志
+    `保存对话框已关闭：DialogResult=False` → `另存为取消（工具栏按钮“另存为”）... 留在截图状态，不关闭遮罩、不写入任何记录`；
+    窗口枚举仍有 `Zeep Cut 截图遮罩`，截图 `artifacts/t11/primary-cancel-after-dialog.png` 显示 600×300 选区、工具栏与绿色 `已取消保存`；无文件生成；随后 Esc 关闭遮罩。
+  - 也验证 Esc 取消：打开对话框后按 Esc → `DialogResult=False` → 取消日志 → 遮罩仍在，截图 `artifacts/t11/primary-cancel-esc.png` 显示 `已取消保存`；第二次 Esc 才关闭（`已取消=True`、`完成动作=无`）。
+  - 取消路径日志没有 `输出完成`，也没有图片/历史文件。
+- 2026-10-18 **贴图占位（真实桌面，最终代码）**：点“贴图”（UIA `物理=(845,719) 58x32`）→
+  `创建贴图窗口：选区=(560,400) 600x300 ... 图像=600x300` → `贴图窗口物理矩形与选区一致 (560,400) 600x300` →
+  `输出完成：动作=贴图 ... 耗时=21ms`，遮罩关闭；窗口枚举 `'Zeep Cut 贴图' (560,400) 600x300`；
+  截图 `artifacts/t11/primary-pin.png`（放大 `primary-pin-zoom.png` 可见内容与右上 ×）。按 Esc →
+  `贴图窗口关闭（Esc）` → `贴图窗口已关闭`，窗口消失；另一次点击右上 × → 只有 `贴图窗口已关闭`、无 Esc 日志（`primary-pin-close-button.png`）。
+- 2026-10-18 **剪贴板被占用失败路径（真实桌面，最终代码）**：验证进程 `OpenClipboard` 持有剪贴板 → Enter 复制 → 日志
+  `[WARN] 复制到剪贴板失败（留在截图状态）：COMException: OpenClipboard Failed (0x800401D0 (CLIPBRD_E_CANT_OPEN))`；
+  遮罩仍在并显示橙色 `复制失败：剪贴板被占用，请稍后重试`（`artifacts/t11/primary-copy-busy.png`）；释放剪贴板后再按 Enter 成功复制并关闭遮罩（`输出完成 ... 耗时=13ms`，`primary-copy-busy-retry.png`）。
+- 2026-10-18 **未验证（T11 相关）**：
+  - 另存为的失败写入路径（磁盘满/只读目录/被占用）未注入；只验证了成功与取消。
+  - 剪贴板失败只注入 `CLIPBRD_E_CANT_OPEN`；其它 COMException/权限失败未注入。
+  - JPEG 的过滤器下拉选择未单独用键盘切换验证；JPEG 通过输入 `.jpg` 文件名 + 保存实际验证（扩展名优先；在 JPEG 过滤器下保留默认 `.png` 名仍按 PNG 保存，见已知问题）。
+  - 副屏只验证了复制；副屏的另存为/贴图未重复测试（裁剪与写文件同一套代码）。
+  - 贴图窗口只验证了主屏 125% 的定位与 Esc/× 关闭；副屏、多贴图、拖动/缩放/透明度/锁定/右键菜单未做（T18–T22）。
+  - 保存对话框的 Topmost 临时取消依赖“对话框显示期间用户不会切走”；若切走，遮罩可能被其它窗口覆盖，取消后已恢复 Topmost 与焦点（成功/取消两条路径均实测）。
+  - 150% 缩放、三屏、非竖直副屏未测试（本机只有 125%+100% 双屏）。
 - 2026-10-18 **未验证（T9/T10 相关）**：
   - 只在 125% + 100% 双屏环境验证；150% 缩放、三屏以上、副屏非竖直排列、触摸/触控笔未测试。
   - 副屏只跑了“框选 + 整体移动 + 右下角调整”；八向全部手柄只在主屏 125% 下逐一实测（逻辑同一套 Core，未在副屏重复跑全八向）。
-  - 复制 / 另存为 / 贴图按钮按本轮范围仍是日志占位，未做真实剪贴板/文件/贴图动作（T11、T18）。
+  - 复制 / 另存为已由 T11 接真实动作；贴图在 T11 是最小占位窗口（完整能力 T18–T22）。
   - 键盘移动/微调选区、双击全屏选择等额外快捷操作未实现，也未验证。
 - 2026-10-18 **未验证（历史遗留）**：
   - 非 1409 的热键注册失败分支（如权限/参数异常）未注入。
@@ -205,6 +265,12 @@
 - Inno Setup 未安装，阶段四需尝试 winget 安装；失败则只交付便携版并说明。
 - 尚无真实更新渠道地址（`AppInfo.UpdateManifestUrl` 为空），实现时必须显示“尚未配置更新渠道”。
 - 无代码签名证书，安装包将为未签名。
+
+- **SaveFileDialog + Topmost 所有者（T11 已修复）**：遮罩 `Topmost=true` 时，Win32 保存对话框会在显示后自行返回（实测出现过默认名在 1.5–44 秒后静默保存，`DialogResult=True`；表现为“没点保存却生成了文件”）。现在 `ShowDialog` 期间临时 `Topmost=false`，`finally` 恢复并在取消后重新激活遮罩；修复后对话框稳定等待用户操作。若以后 WPF/系统行为变化，优先检查这里；日志有 `保存对话框已打开/已关闭`。
+- **另存为格式解析是“扩展名优先”**：`.png`→PNG、`.jpg/.jpeg`→JPEG；其它/无扩展名时按对话框过滤器并在末尾补正确扩展名。因此在“JPEG 图片”过滤器下直接保存默认的 `.png` 名称仍会得到 PNG；输入 `.jpg` 或去掉扩展名才按 JPEG 保存（实测 `.jpg` 成功）。若要求“过滤器决定格式”，应在 `FileOk` 里改写扩展名并补测试。
+- 保存失败与取消使用工具栏内联文字提示（不抢键盘焦点）；失败时遮罩保持可重试。失败/取消只写 WARN/ERROR/取消 INFO，不写“输出完成”。
+- 贴图占位窗口未纳入 App 的贴图集合管理（退出时由 WPF 关闭全部窗口）；T18–T22 接入集合、全局显示/隐藏、拖动/缩放等。
+- 本轮验证产生的临时文件（`Pictures\截图_2026-10-18_*.png`、`%TEMP%\zeepcut-t11`、临时排查脚本）已清理；`artifacts/t11/` 保留截图证据（`artifacts/` 在 `.gitignore` 中，不入库）。
 
 ## 决策记录
 
@@ -245,3 +311,11 @@
 - T10 按钮本轮全部日志占位（复制/另存为/贴图），只有“取消”真实关闭；Enter 走复制占位，Esc 取消。
 - 点击工具栏矩形不进入选区状态机（`PreviewMouseLeftButtonDown` 先判断是否落在工具栏内），避免点按钮时把已定稿选区清掉重新框选。
 - 遮罩把工具栏和四个按钮的物理矩形写入日志；UIA 用“进程 id + 标题前缀”找遮罩、按按钮名定位，自动化验证不硬编码坐标。
+- T11 裁剪与命名下沉 Core `ZeepCut.Core.Output`：`SelectionCrop.ToImageRect` 只做“屏幕绝对物理选区 − 屏幕原点”的换算（DPI 不参与）；`CaptureFileName` 显式列出 Windows 非法字符（不用 `Path.GetInvalidFileNameChars`，避免 Unix 实现只返回少数几个字符）。
+- T11 成功记录用 `ICaptureSink` 接缝：遮罩只在复制/另存为/贴图**成功后**调用一次；`LoggingCaptureSink` 写动作/选区/尺寸/耗时/文件/时间；T24 换成历史 sink 即可，不动遮罩与动作代码。
+- T11 失败/取消不写完成记录：复制失败（COMException）与保存失败只写 WARN/ERROR 并在工具栏内联提示；取消保存只写取消 INFO，遮罩保持；成功才关闭遮罩。
+- T11 另存为默认 PNG、可选 JPEG；JPEG 编码前转 Bgr24 去 alpha、质量 90；格式按扩展名解析，未知/无扩展名时按过滤器并在末尾补正确扩展名。
+- T11 贴图仅占位窗口（无边框/Topmost/1:1/×+Esc），按目标屏 DPI 摆放并做 Loaded 物理校正；不纳入集合管理，T18–T22 替换。
+- T11 SaveFileDialog：**显示期间临时取消遮罩 Topmost**，否则 Topmost 所有者会让 Win32 对话框自行返回；`finally` 恢复并重新激活遮罩（修复前实测会静默保存/关闭，修复后稳定等待用户操作）。
+- T11 验证脚本 `scripts/verify-t11.ps1` 覆盖 copy/copy-button/copy-edge/save-png/save-jpeg/cancel-save/pin/copy-busy；`scripts/clipboard.ps1` 在独立进程读剪贴板（`-Save` 落盘、`-Clear` 清空、`-HoldSeconds` 占用剪贴板复现失败）。
+- T11 保存对话框的自动化：文件名字段是 DirectUI（UIA 无 ValuePattern，子 Edit 的 `SetWindowText` 不改变保存结果），改为点击聚焦 + **剪贴板粘贴**路径；保存/取消按钮用对话框真实子 Button 的 `BM_CLICK`。中文输入法会把 `C:\...` 改写成 `C：、...`，禁止用 SendKeys 直接键入路径。

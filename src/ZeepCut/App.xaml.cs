@@ -5,6 +5,7 @@ using ZeepCut.Core;
 using ZeepCut.Core.Capture;
 using ZeepCut.Core.Geometry;
 using ZeepCut.Core.Shortcuts;
+using ZeepCut.Output;
 using ZeepCut.Platform;
 
 namespace ZeepCut;
@@ -29,6 +30,12 @@ public partial class App : Application
     private TrayIcon? _trayIcon;
     private GlobalHotkey? _globalHotkey;
     private CaptureOverlayWindow? _captureOverlay;
+
+    /// <summary>
+    /// 截图成功输出的接收端。T11 只写一条完成日志；T24 换成历史写入实现即可，
+    /// 遮罩与动作代码不需要改动。
+    /// </summary>
+    private readonly ICaptureSink _captureSink = new LoggingCaptureSink();
 
     public App()
     {
@@ -264,7 +271,7 @@ public partial class App : Application
                 $"→ DIP=({dip.Left:0.##},{dip.Top:0.##}) {dip.Width:0.##}x{dip.Height:0.##}，" +
                 $"窗口候选={candidates.Count}");
 
-            var overlay = new CaptureOverlayWindow(capture, candidates);
+            var overlay = new CaptureOverlayWindow(capture, candidates, _captureSink);
             overlay.Closed += OnCaptureOverlayClosed;
             _captureOverlay = overlay;
 
@@ -296,7 +303,8 @@ public partial class App : Application
                 "Capture",
                 $"截图结束：屏幕={overlay.ScreenBounds} DPI={overlay.ScreenDpi} " +
                 $"选区={overlay.Selection} 已定稿={overlay.IsSelectionReady} " +
-                $"已取消={overlay.WasCancelled}（历史记录尚未实现，不写入）");
+                $"已取消={overlay.WasCancelled} 完成动作={(overlay.CompletedAction?.ToString() ?? "无")}" +
+                "（历史记录 T24 启用，成功记录已由 ICaptureSink 写入日志）");
         }
 
         _captureOverlay = null;

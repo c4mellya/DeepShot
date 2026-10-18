@@ -1,14 +1,21 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
+using Microsoft.Win32;
 using ZeepCut.Core.Capture;
 using ZeepCut.Core.Geometry;
+using ZeepCut.Core.Output;
 using ZeepCut.Core.Selection;
+using ZeepCut.Output;
+using ZeepCut.Pins;
 using ZeepCut.Platform;
+
 
 namespace ZeepCut.Capture;
 
@@ -54,11 +61,14 @@ public sealed class CaptureOverlayWindow : Window
     private static readonly Color ToolbarBorderColor = Color.FromArgb(0x66, 0xFF, 0xFF, 0xFF);
     private static readonly Color ButtonBackgroundColor = Color.FromArgb(0x26, 0xFF, 0xFF, 0xFF);
     private static readonly Color ButtonBorderColor = Color.FromArgb(0x4D, 0xFF, 0xFF, 0xFF);
+    private static readonly Color StatusErrorColor = Color.FromRgb(0xFF, 0xA0, 0x80);
+    private static readonly Color StatusInfoColor = Color.FromRgb(0xB8, 0xD8, 0xB8);
 
     private readonly ScreenCaptureResult _capture;
     private readonly IReadOnlyList<WindowCandidate> _candidates;
     private readonly DpiTransform _transform;
     private readonly SelectionController _selection;
+    private readonly ICaptureSink _sink;
 
     private readonly Path _dim;
     private readonly Rectangle _border;
@@ -67,10 +77,13 @@ public sealed class CaptureOverlayWindow : Window
     private readonly TextBlock _sizeBadgeText;
     private readonly Border _toolbar;
     private readonly TextBlock _toolbarSizeText;
+    private readonly TextBlock _statusText;
     private readonly List<(string Label, Button Element)> _toolbarButtons = new();
 
     private readonly SolidColorBrush _selectionStroke = CreateFrozenBrush(Colors.White);
     private readonly SolidColorBrush _hoverStroke = CreateFrozenBrush(HoverStrokeColor);
+    private readonly SolidColorBrush _statusErrorBrush = CreateFrozenBrush(StatusErrorColor);
+    private readonly SolidColorBrush _statusInfoBrush = CreateFrozenBrush(StatusInfoColor);
 
     private int _lastPhysicalX;
     private int _lastPhysicalY;
@@ -82,13 +95,18 @@ public sealed class CaptureOverlayWindow : Window
     private SelectionState _lastLoggedState = SelectionState.None;
     private bool _toolbarLogged;
 
-    public CaptureOverlayWindow(ScreenCaptureResult capture, IReadOnlyList<WindowCandidate> candidates)
+    public CaptureOverlayWindow(
+        ScreenCaptureResult capture,
+        IReadOnlyList<WindowCandidate> candidates,
+        ICaptureSink sink)
     {
         ArgumentNullException.ThrowIfNull(capture);
         ArgumentNullException.ThrowIfNull(candidates);
+        ArgumentNullException.ThrowIfNull(sink);
 
         _capture = capture;
         _candidates = candidates;
+        _sink = sink;
         _transform = new DpiTransform(capture.Dpi);
         _selection = new SelectionController(
             capture.Bounds,
@@ -173,6 +191,17 @@ public sealed class CaptureOverlayWindow : Window
             MinWidth = 76,
         };
 
+        // 输出动作的内联提示（成功不提示，失败/取消保存时显示），不抢键盘焦点。
+        _statusText = new TextBlock
+        {
+            Foreground = _statusErrorBrush,
+            FontSize = 12,
+            FontFamily = new FontFamily("Segoe UI"),
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(10, 0, 0, 0),
+            Visibility = Visibility.Collapsed,
+        };
+
         _toolbar = CreateToolbar();
         var chromeLayer = new Canvas();
         chromeLayer.Children.Add(_toolbar);
@@ -220,6 +249,15 @@ public sealed class CaptureOverlayWindow : Window
 
     /// <summary>当前是否有可完成截图的选区。</summary>
     public bool IsSelectionReady => _selection.IsCaptureReady;
+
+    /// <summary>
+    /// 本次截图的成功动作；取消、失败或尚未完成时为 <c>null</c>。
+    /// 只有它为非空时才应该计入历史（T24）。
+    /// </summary>
+    public CaptureAction? CompletedAction { get; private set; }
+
+    /// <summary>本次截图是否以成功动作结束（复制/另存为/贴图）。</summary>
+    public bool WasCompleted => CompletedAction.HasValue;
 
     /// <summary>取消本次截图并关闭遮罩；重复调用为空操作。</summary>
     /// <param name="reason">取消来源，仅用于日志。</param>
@@ -355,7 +393,8 @@ public sealed class CaptureOverlayWindow : Window
 
             case Key.Enter:
                 e.Handled = true;
-                TriggerCopyPlaceholder("键盘 Enter");
+                // 文字编辑（T12 之后）尚未实现，Enter 直接触发真实的复制动作。
+                TriggerCopy("键盘 Enter");
                 break;
         }
     }
@@ -374,6 +413,7 @@ public sealed class CaptureOverlayWindow : Window
         Activate();
         Focus();
         Keyboard.Focus(this);
+        ClearStatus();
 
         var (physicalX, physicalY) = ToPhysical(position);
         var previousState = _selection.State;
@@ -815,49 +855,289 @@ public sealed class CaptureOverlayWindow : Window
             $"遮罩窗口已关闭：屏幕={_capture.DeviceName} 物理={_capture.Bounds} 已取消={_cancelRequested}");
     }
 
-    // --- T10 工具栏：本轮按钮只打日志，T11 接真实动作；“取消”已经真实关闭遮罩。 ---
+    // --- T11 输出动作：复制 / 另存为 / 贴图。三者都只在成功后关闭遮罩并写一条完成记录。 ---
 
-    private void TriggerCopyPlaceholder(string source)
+    /// <summary>复制到剪贴板。剪贴板被占用（COMException）时提示并留在截图状态。</summary>
+    private void TriggerCopy(string source)
     {
-        if (!_selection.IsCaptureReady)
+        if (!TryBeginOutput(source, CaptureAction.Copy))
         {
-            AppLog.Info("Overlay", $"{source}：当前没有可复制的选区，忽略本次触发");
             return;
         }
 
-        AppLog.Info(
-            "Overlay",
-            $"{source}：复制到剪贴板（占位，T11 实现）：物理={_selection.Selection} " +
-            $"尺寸={SelectionOverlayLayout.FormatSize(_selection.Selection)}");
+        var stopwatch = Stopwatch.StartNew();
+        try
+        {
+            var image = CropSelection(CaptureAction.Copy);
+            Clipboard.SetImage(image);
+            stopwatch.Stop();
+            CompleteCapture(CaptureAction.Copy, image, stopwatch.Elapsed, filePath: null);
+        }
+        catch (COMException ex)
+        {
+            stopwatch.Stop();
+            FailOutput(CaptureAction.Copy, "复制失败：剪贴板被占用，请稍后重试", ex, isWarning: true);
+        }
+        catch (Exception ex)
+        {
+            stopwatch.Stop();
+            FailOutput(CaptureAction.Copy, "复制失败", ex, isWarning: false);
+        }
     }
 
-    private void TriggerSaveAsPlaceholder()
+    /// <summary>
+    /// 另存为 PNG/JPEG。取消对话框必须留在截图状态（不关闭遮罩、不产生记录）；
+    /// 只有文件真正写入成功才结束截图。
+    /// </summary>
+    private void TriggerSaveAs(string source)
     {
-        if (!_selection.IsCaptureReady)
+        if (!TryBeginOutput(source, CaptureAction.SaveAs))
         {
-            AppLog.Info("Overlay", "工具栏按钮“另存为”：当前没有可保存的选区，忽略本次触发");
             return;
         }
 
-        AppLog.Info(
-            "Overlay",
-            $"工具栏按钮“另存为”（占位，T11 实现）：物理={_selection.Selection} " +
-            $"尺寸={SelectionOverlayLayout.FormatSize(_selection.Selection)}");
-    }
-
-    private void TriggerPinPlaceholder()
-    {
-        if (!_selection.IsCaptureReady)
+        SaveFileDialog dialog;
+        try
         {
-            AppLog.Info("Overlay", "工具栏按钮“贴图”：当前没有可贴图的选区，忽略本次触发");
+            dialog = CreateSaveDialog();
+        }
+        catch (Exception ex)
+        {
+            FailOutput(CaptureAction.SaveAs, "无法打开保存对话框", ex, isWarning: false);
             return;
         }
 
+        bool? result;
+        var wasTopmost = Topmost;
+        try
+        {
+            // 遮罩是 Topmost 窗口；用 Topmost 的所有者显示 Win32 文件对话框时，
+            // 对话框会被所有者的置顶状态干扰（本机实测会自行返回/关闭）。
+            // 显示期间临时取消置顶，关闭后恢复并重新激活遮罩。
+            Topmost = false;
+            AppLog.Info("Output", $"保存对话框已打开：默认名称={dialog.FileName} 目录={dialog.InitialDirectory}");
+            result = dialog.ShowDialog(this);
+            AppLog.Info("Output", $"保存对话框已关闭：DialogResult={result} 选择文件={dialog.FileName}");
+        }
+        catch (Exception ex)
+        {
+            FailOutput(CaptureAction.SaveAs, "无法打开保存对话框", ex, isWarning: false);
+            return;
+        }
+        finally
+        {
+            Topmost = wasTopmost;
+        }
+
+        if (result != true)
+        {
+            AppLog.Info(
+                "Output",
+                $"另存为取消（{source}）：选区={_selection.Selection}，留在截图状态，不关闭遮罩、不写入任何记录");
+            SetStatus("已取消保存");
+            RestoreOverlayFocus();
+            return;
+        }
+
+        var format = ResolveFormat(dialog.FileName, dialog.FilterIndex);
+        var path = EnsureExtension(dialog.FileName, format);
+        var stopwatch = Stopwatch.StartNew();
+        try
+        {
+            var image = CropSelection(CaptureAction.SaveAs);
+            CaptureImageEncoder.Save(image, path, format);
+            stopwatch.Stop();
+            AppLog.Info(
+                "Output",
+                $"文件已保存：{path} 格式={format} 尺寸={image.PixelWidth}x{image.PixelHeight} " +
+                $"质量={(format == CaptureImageFormat.Jpeg ? CaptureImageEncoder.DefaultJpegQuality : (int?)null)}");
+            CompleteCapture(CaptureAction.SaveAs, image, stopwatch.Elapsed, path);
+        }
+        catch (Exception ex)
+        {
+            stopwatch.Stop();
+            FailOutput(CaptureAction.SaveAs, "保存失败，请重试", ex, isWarning: false);
+        }
+    }
+
+    /// <summary>贴图：本轮创建最小可用的占位贴图窗口（T18–T22 完善），成功后结束截图。</summary>
+    private void TriggerPin(string source)
+    {
+        if (!TryBeginOutput(source, CaptureAction.Pin))
+        {
+            return;
+        }
+
+        var stopwatch = Stopwatch.StartNew();
+        try
+        {
+            var image = CropSelection(CaptureAction.Pin);
+            var pin = new PinWindow(image, _selection.Selection, _capture.Bounds, _capture.Dpi);
+            pin.Show();
+            stopwatch.Stop();
+            CompleteCapture(CaptureAction.Pin, image, stopwatch.Elapsed, filePath: null);
+
+            // 遮罩关闭后把焦点交回贴图窗口，Esc 才能直接关闭它。
+            pin.Activate();
+        }
+        catch (Exception ex)
+        {
+            stopwatch.Stop();
+            FailOutput(CaptureAction.Pin, "贴图失败", ex, isWarning: false);
+        }
+    }
+
+    /// <summary>输出动作的共同前置检查与日志；没有可输出选区时返回 false。</summary>
+    private bool TryBeginOutput(string source, CaptureAction action)
+    {
+        if (!_selection.IsCaptureReady)
+        {
+            AppLog.Info(
+                "Output",
+                $"{source}：当前没有可输出的选区，忽略本次 {LoggingCaptureSink.Describe(action)}（状态={_selection.State}）");
+            return false;
+        }
+
+        ClearStatus();
+        AppLog.Info(
+            "Output",
+            $"开始输出（{source}）：动作={LoggingCaptureSink.Describe(action)} 选区={_selection.Selection} " +
+            $"尺寸={SelectionOverlayLayout.FormatSize(_selection.Selection)}（物理像素） " +
+            $"屏幕={_capture.Bounds} DPI={_capture.Dpi}");
+        return true;
+    }
+
+    /// <summary>按选区裁剪冻结图；失败会抛异常，由各动作的 catch 提示并留在截图状态。</summary>
+    private BitmapSource CropSelection(CaptureAction action)
+    {
+        var image = CaptureCropper.Crop(_capture.Image, _selection.Selection, _capture.Bounds);
+        AppLog.Info(
+            "Output",
+            $"裁剪完成（{LoggingCaptureSink.Describe(action)}）：选区={_selection.Selection} " +
+            $"屏幕={_capture.Bounds} → 图像={image.PixelWidth}x{image.PixelHeight} {image.Format}");
+        return image;
+    }
+
+    /// <summary>成功收尾：写完成记录（T24 历史的接缝）→ 关闭遮罩。</summary>
+    private void CompleteCapture(
+        CaptureAction action,
+        BitmapSource image,
+        TimeSpan elapsed,
+        string? filePath)
+    {
+        CompletedAction = action;
+        var completion = new CaptureCompletion(
+            action,
+            image,
+            _selection.Selection,
+            _capture.Bounds,
+            filePath,
+            DateTime.Now,
+            elapsed);
+
         AppLog.Info(
             "Overlay",
-            $"工具栏按钮“贴图”（占位，T18 实现）：物理={_selection.Selection} " +
-            $"尺寸={SelectionOverlayLayout.FormatSize(_selection.Selection)}");
+            $"截图完成（{LoggingCaptureSink.Describe(action)}）：选区={_selection.Selection} " +
+            $"输出={image.PixelWidth}x{image.PixelHeight} 耗时={elapsed.TotalMilliseconds:0}ms，关闭遮罩");
+
+        try
+        {
+            _sink.OnCaptureCompleted(completion);
+        }
+        catch (Exception ex)
+        {
+            // 记录失败不能反悔已经成功的复制/保存/贴图，也不能把用户卡在遮罩里。
+            AppLog.Error("Output", "输出完成记录失败（不阻断关闭遮罩；T24 历史启用后需关注）", ex);
+        }
+
+        Close();
     }
+
+    /// <summary>失败提示：写日志 + 工具栏内联提示，并留在截图状态。</summary>
+    private void FailOutput(CaptureAction action, string message, Exception ex, bool isWarning)
+    {
+        var summary = $"{LoggingCaptureSink.Describe(action)}失败（留在截图状态）：{ex.GetType().Name}: {ex.Message}";
+        if (isWarning)
+        {
+            AppLog.Warn("Output", summary);
+        }
+        else
+        {
+            AppLog.Error("Output", summary, ex);
+        }
+
+        SetStatus(message, isError: true);
+        RestoreOverlayFocus();
+    }
+
+    private void SetStatus(string message, bool isError = false)
+    {
+        if (string.IsNullOrEmpty(message))
+        {
+            ClearStatus();
+        }
+        else
+        {
+            _statusText.Text = message;
+            _statusText.Foreground = isError ? _statusErrorBrush : _statusInfoBrush;
+            _statusText.Visibility = Visibility.Visible;
+        }
+
+        // 提示文字会改变工具栏宽度，需要重新测量与摆放（仍夹在屏幕内）。
+        if (ActualWidth > 0)
+        {
+            UpdateVisuals();
+        }
+    }
+
+    private void ClearStatus()
+    {
+        _statusText.Text = string.Empty;
+        _statusText.Visibility = Visibility.Collapsed;
+    }
+
+    private void RestoreOverlayFocus()
+    {
+        Activate();
+        Focus();
+        Keyboard.Focus(this);
+    }
+
+    private static SaveFileDialog CreateSaveDialog()
+    {
+        var dialog = new SaveFileDialog
+        {
+            Title = "另存为",
+            FileName = CaptureFileName.CreateDefault(DateTime.Now, CaptureImageFormat.Png),
+            DefaultExt = ".png",
+            AddExtension = true,
+            OverwritePrompt = true,
+            CheckPathExists = true,
+            Filter = "PNG 图片 (*.png)|*.png|JPEG 图片 (*.jpg;*.jpeg)|*.jpg;*.jpeg",
+            FilterIndex = 1,
+            RestoreDirectory = true,
+        };
+
+        var pictures = Environment.GetFolderPath(Environment.SpecialFolder.MyPictures);
+        if (!string.IsNullOrWhiteSpace(pictures) && System.IO.Directory.Exists(pictures))
+        {
+            dialog.InitialDirectory = pictures;
+        }
+
+        return dialog;
+    }
+
+    /// <summary>输出格式：优先按用户输入/对话框补全的扩展名，否则按过滤器（第 2 项为 JPEG）。</summary>
+    private static CaptureImageFormat ResolveFormat(string path, int filterIndex) =>
+        CaptureFileName.TryGetFormatFromExtension(path, out var format)
+            ? format
+            : filterIndex == 2
+                ? CaptureImageFormat.Jpeg
+                : CaptureImageFormat.Png;
+
+    /// <summary>极端情况下对话框没有补扩展名时，按格式补上，避免生成无扩展名文件。</summary>
+    private static string EnsureExtension(string path, CaptureImageFormat format) =>
+        System.IO.Path.HasExtension(path) ? path : path + CaptureFileName.GetExtension(format);
 
     private Border CreateToolbar()
     {
@@ -868,6 +1148,7 @@ public sealed class CaptureOverlayWindow : Window
         };
 
         panel.Children.Add(_toolbarSizeText);
+        panel.Children.Add(_statusText);
         panel.Children.Add(new Border
         {
             Width = 1,
@@ -877,9 +1158,9 @@ public sealed class CaptureOverlayWindow : Window
             VerticalAlignment = VerticalAlignment.Center,
         });
 
-        panel.Children.Add(CreateToolbarButton("复制", () => TriggerCopyPlaceholder("工具栏按钮“复制”")));
-        panel.Children.Add(CreateToolbarButton("另存为", TriggerSaveAsPlaceholder));
-        panel.Children.Add(CreateToolbarButton("贴图", TriggerPinPlaceholder));
+        panel.Children.Add(CreateToolbarButton("复制", () => TriggerCopy("工具栏按钮“复制”")));
+        panel.Children.Add(CreateToolbarButton("另存为", () => TriggerSaveAs("工具栏按钮“另存为”")));
+        panel.Children.Add(CreateToolbarButton("贴图", () => TriggerPin("工具栏按钮“贴图”")));
         panel.Children.Add(CreateToolbarButton("取消", () => Cancel("工具栏取消按钮"), emphasize: true));
 
         return new Border
