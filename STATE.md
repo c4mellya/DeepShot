@@ -5,11 +5,11 @@
 ## 本轮快照
 
 - 日期：2026-10-18
-- 当前阶段：阶段一（截图闭环）
-- 本轮任务：**T11 输出动作**（复制到剪贴板 / 另存为 PNG/JPEG / 贴图占位窗口）
-- 下一步任务：**T12 Core 标注模型**（矩形/椭圆/箭头/直线/画笔/文字/马赛克 + 颜色/粗细/字号）
+- 当前阶段：阶段二（标注与贴图）
+- 本轮任务：**T12 Core 标注模型 + T13 Core 撤销重做**（纯 Core，未接 UI）
+- 下一步任务：**T14 标注画布**（截图遮罩上叠加绘制、工具切换、颜色/粗细选择，消费 `Annotations`/`Editing`）
 - 构建状态：✅ 编译通过，0 warning 0 error
-- 测试状态：✅ 344 个测试通过（本轮新增 46 个 Output 测试；T1–T10 旧测试全绿）
+- 测试状态：✅ 512 个测试通过（本轮新增 168：Annotations 137 + Editing 31；T1–T11 旧测试全绿）
 
 ## 已完成
 
@@ -76,6 +76,23 @@
   - 新增 `Pins/PinWindow.cs`：T11 最小贴图占位（无边框、Topmost、1:1 显示裁剪图、右上 × 与 Esc 关闭、按目标屏 DPI 定位 + Loaded 物理矩形校正）；完整贴图能力留 T18–T22。
   - App 创建 `LoggingCaptureSink` 并传给遮罩；`OnCaptureOverlayClosed` 记录完成动作。
   - **SaveFileDialog + Topmost 遮罩的真实 bug 与修复**：遮罩 `Topmost=true` 时，Win32 保存对话框会在显示后自行返回（实测出现过默认名在 1.5–44 秒后静默保存，`DialogResult=True`；表现为“对话框自己关了/没点保存却生成了文件”）。修复：`ShowDialog` 期间 `Topmost=false`，`finally` 恢复并在取消后重新激活遮罩；修复后对话框稳定等待用户点“保存/取消”。日志新增“保存对话框已打开/已关闭”。
+
+- 2026-10-18 **T12 Core 标注模型**（纯 Core，无 WPF/Win32/System.Drawing 依赖）：
+  - `src/ZeepCut.Core/Geometry/PixelPoint.cs`：整数像素点（平移、距离、格式化）。
+  - `src/ZeepCut.Core/Annotations/`：
+    - `AnnotationColor`：`uint` ARGB 的 record struct（Alpha/Red/Green/Blue、`FromArgb`/`FromRgb`、默认亮红 `#FFFF3B30`），可直接存整数列。
+    - `Annotation` 抽象基类：`Id`（Guid，反序列化可显式传入）、`Kind`、`Color`、`Thickness`（1–20 钳制）、`CreationOrder`（文档加入时从 1 递增，撤销删除后保留）、抽象 `Bounds`、`HitTest(PixelPoint, tolerance)`、`Move`；`GetRenderBounds()` 按描边半宽外扩供渲染裁剪；`CanResize`/`Resize` 默认不支持（抛 `NotSupportedException`）。
+    - 七种具体类型：`RectangleAnnotation`/`EllipseAnnotation`（区域 + 非填充，支持 Resize）、`ArrowAnnotation`/`LineAnnotation`（共享 `SegmentAnnotation`：起终点、端点包围盒、点到线段距离命中）、`FreehandAnnotation`（点列表 + `Smooth` 开关 + `AddPoint`）、`TextAnnotation`（锚点/文本/字号 8–72/可选背景色，确定性估算包围盒）、`MosaicAnnotation`（区域 + 块大小 4–64 + 强度 0–1，NaN 回退默认）。
+    - `AnnotationDefaults`：默认值（粗细 3、字号 18、块 12、强度 0.75）与静默钳制规则。
+    - `AnnotationDocument`：按 Z 序（底→顶）的有序集合，`Add`/`Insert`/`Remove`/`RemoveAt`/`Clear`（返回被移除项）、`IndexOf`/`Contains`、`MoveToIndex`/`BringToFront`/`SendToBack`、`HitTest` 取最上层、`Bounds` 并集、实现 `IEnumerable<Annotation>`；同一对象不可重复加入，删除后插回保留 `CreationOrder`。
+  - 坐标约定：标注使用**相对截图图像左上角的物理像素**（不是屏幕绝对坐标、不是 DIP），T15 导出时可直接按图像渲染。
+  - 命中语义：矩形/椭圆/马赛克命中内部 + 容差（椭圆额外排除包围盒四角）；直线/箭头/画笔按点到线段距离 + 容差 + 描边半宽；文字按包围盒。负容差按 0 处理。退化图形（单点画笔、零长度箭头、零宽线）包围盒为零尺寸但仍可命中。
+- 2026-10-18 **T13 Core 撤销重做**：
+  - `src/ZeepCut.Core/Editing/IEditCommand.cs`：`Description` + `Execute`（首次/重做）+ `Undo`（恢复执行前状态）。
+  - `EditHistory`：撤销栈 + 重做栈（`List` 末尾为栈顶），`Capacity` 默认 100，超出丢弃最旧（栈底）；`Execute` 成功后入栈并清空重做栈，命令抛异常时历史不变；`CanUndo`/`CanRedo`/`UndoCount`/`RedoCount`/`NextUndoDescription`/`NextRedoDescription`；空栈 `Undo()`/`Redo()` 返回 false 不抛异常；`Clear()` 清空两条栈。
+  - `AnnotationCommands.cs`：`AddAnnotationCommand`（撤销=移除，重做=同一对象插回原层级）、`RemoveAnnotationCommand`（撤销=恢复原索引/原顺序/原 CreationOrder）、`MoveAnnotationCommand`（撤销=反向平移）、`ClearAnnotationsCommand`（撤销=按原顺序全部插回）、`AnnotationPropertyCommand<T>`（构造时记录旧值，撤销写回旧值，适用于颜色/粗细/文字/字号等）。
+  - `AnnotationEdits` 工厂：`Move`/`SetColor`/`SetThickness`/`SetText`/`SetFontSize`/`SetTextBackground`/`SetMosaicBlockSize`/`SetMosaicStrength`/`SetFreehandSmooth`，避免 UI 层手写读写委托。
+  - xUnit 覆盖：各类型 Bounds（反向坐标/单点/零长度/多行/全角）、命中/不命中的边界与容差、Move/Resize 与顺序保持、属性默认值与上下限钳制、文档 Z 序与命中取最上层、五类命令往返、容量丢弃最旧、新操作清空重做栈、空栈与抛异常命令。
 
 ## 验证证据
 
@@ -188,6 +205,13 @@
   - 结论：同一套 DIP↔物理换算在两块不同 DPI 屏幕上，尺寸文字与实际选区一致（640×480 / 738×578），副屏负坐标原点正确。
 - 2026-10-18 **T11 构建+测试（最终代码）**：`powershell.exe -NoProfile -ExecutionPolicy Bypass -File '\\wsl.localhost\Ubuntu\home\camellya\workspace\Zeep-Cut\scripts\build.ps1'` →
   `Build succeeded.`、`0 Warning(s)`、`0 Error(s)`；测试 → `Passed! - Failed: 0, Passed: 344, Skipped: 0, Total: 344`（本轮新增 46 个：SelectionCrop 16、CaptureFileName 30）；末尾 `BUILD+TEST OK`。
+- 2026-10-18 **T12/T13 构建+测试（最终代码）**：`powershell.exe -NoProfile -ExecutionPolicy Bypass -File '\\wsl.localhost\Ubuntu\home\camellya\workspace\Zeep-Cut\scripts\build.ps1'` →
+  `Build succeeded.`、`0 Warning(s)`、`0 Error(s)`；测试 → `Passed! - Failed: 0, Passed: 512, Skipped: 0, Total: 512`；末尾 `BUILD+TEST OK`。
+  本轮新增 168 个测试（过滤实测）：`--filter 'FullyQualifiedName~ZeepCut.Tests.Annotations'` → `Passed: 137`；
+  `--filter 'FullyQualifiedName~ZeepCut.Tests.Editing'` → `Passed: 31`。新增测试文件：
+  `tests/ZeepCut.Tests/Annotations/{AnnotationBoundsTests,AnnotationHitTestTests,AnnotationMoveResizeTests,AnnotationPropertyTests,AnnotationDocumentTests}.cs`、
+  `tests/ZeepCut.Tests/Editing/{EditHistoryTests,AnnotationCommandsTests}.cs`。
+- 2026-10-18 **纯 Core 约束核验（真实执行）**：`grep -RnE "System\.Windows|PresentationCore|System\.Drawing|WindowsBase" src/ZeepCut.Core/Annotations src/ZeepCut.Core/Editing src/ZeepCut.Core/Geometry/PixelPoint.cs` 无输出（NO_WPF_REFERENCES），即本轮新增 Core 代码不引用 WPF/PresentationCore/System.Drawing；WPF 项目编译仍为 0 warning。
 - 2026-10-18 **主屏复制（真实桌面，DISPLAY1 0,0 2560×1440 DPI=120/125%）**：
   - 把 Notepad 放在物理 (500,350) 作为静态内容，框选 `(560,400) 600×300`；Enter 触发 → 日志
     `开始输出（键盘 Enter）：动作=复制到剪贴板 ...` → `裁剪完成 ... → 图像=600x300 Pbgra32` →
@@ -225,6 +249,12 @@
 - 2026-10-18 **剪贴板被占用失败路径（真实桌面，最终代码）**：验证进程 `OpenClipboard` 持有剪贴板 → Enter 复制 → 日志
   `[WARN] 复制到剪贴板失败（留在截图状态）：COMException: OpenClipboard Failed (0x800401D0 (CLIPBRD_E_CANT_OPEN))`；
   遮罩仍在并显示橙色 `复制失败：剪贴板被占用，请稍后重试`（`artifacts/t11/primary-copy-busy.png`）；释放剪贴板后再按 Enter 成功复制并关闭遮罩（`输出完成 ... 耗时=13ms`，`primary-copy-busy-retry.png`）。
+- 2026-10-18 **未验证（T12/T13 相关）**：
+  - 本轮是纯 Core，**未接 UI**（T14/T15）：没有在真实截图上绘制/渲染任何标注，描边视觉粗细、箭头头部、文字真实字体排版、马赛克像素处理均未验证。
+  - 文字 `Bounds` 是确定性估算（半角 `FontSize×0.6`、全角 `FontSize`、行高 `FontSize×1.25`），未与真实字体测量对齐；命中测试允许这个量级的偏差。
+  - 未实现真正的序列化/反序列化（只保证 `Id` 可显式传入、集合可遍历、删除后插回保留 `CreationOrder`）；JSON/SQLite 映射留到需要时。
+  - 撤销/重做只在 Core 单测中验证；未接 Ctrl+Z/Ctrl+Y（T16），也未验证与 UI 选择态/文字编辑态的联动。
+  - 容量 100 与"丢弃最旧"已单测；未做超大历史或性能测试。命令未做线程安全处理（UI 单线程使用）。
 - 2026-10-18 **未验证（T11 相关）**：
   - 另存为的失败写入路径（磁盘满/只读目录/被占用）未注入；只验证了成功与取消。
   - 剪贴板失败只注入 `CLIPBRD_E_CANT_OPEN`；其它 COMException/权限失败未注入。
@@ -271,6 +301,11 @@
 - 保存失败与取消使用工具栏内联文字提示（不抢键盘焦点）；失败时遮罩保持可重试。失败/取消只写 WARN/ERROR/取消 INFO，不写“输出完成”。
 - 贴图占位窗口未纳入 App 的贴图集合管理（退出时由 WPF 关闭全部窗口）；T18–T22 接入集合、全局显示/隐藏、拖动/缩放等。
 - 本轮验证产生的临时文件（`Pictures\截图_2026-10-18_*.png`、`%TEMP%\zeepcut-t11`、临时排查脚本）已清理；`artifacts/t11/` 保留截图证据（`artifacts/` 在 `.gitignore` 中，不入库）。
+- **T12 标注坐标是图像坐标，不是屏幕坐标**：`Annotation` 的像素坐标相对截图图像左上角（副屏截图同样从图像 (0,0) 开始）。T14 把鼠标 DIP 换算成图像坐标时，要减去目标屏幕原点并把 DIP 转物理像素，不能直接把遮罩窗口坐标当标注坐标；T17 导出也不需要再减屏幕原点。
+- **T12 命中语义是“内部命中”**：矩形/椭圆/马赛克点内部即可选中（椭圆排除四角）；直线/箭头/画笔按到线段距离。若以后要求“只点边框才选中”（例如内部要穿透到下层标注），需要改各类型的 `HitTest` 并补测试，而不是在 UI 里另写命中逻辑。
+- **T12 文字包围盒是估算**：`TextAnnotation.Bounds` 用固定系数（半角 0.6、全角 1.0、行高 1.25），与实际 WPF 字体测量会有偏差；T15 渲染/导出若按真实字形排版，选中框和点击范围可能略有出入。需要精确时应在 Core 注入测量委托（`Func<string,int,int>`），不要依赖 WPF 类型进 Core。
+- **T13 `EditHistory` 不持有文档**，命令对象持有文档/标注引用；跨窗口（截图编辑窗口与历史再编辑窗口）要各自建 `EditHistory`，不要把两个窗口的命令混进同一条历史。
+- **T13 命令不是线程安全的**，默认 UI 单线程调用；`EditHistory` 只在命令成功 `Execute` 后才入栈，命令抛异常不会污染历史（已单测）。
 
 ## 决策记录
 
@@ -319,3 +354,12 @@
 - T11 SaveFileDialog：**显示期间临时取消遮罩 Topmost**，否则 Topmost 所有者会让 Win32 对话框自行返回；`finally` 恢复并重新激活遮罩（修复前实测会静默保存/关闭，修复后稳定等待用户操作）。
 - T11 验证脚本 `scripts/verify-t11.ps1` 覆盖 copy/copy-button/copy-edge/save-png/save-jpeg/cancel-save/pin/copy-busy；`scripts/clipboard.ps1` 在独立进程读剪贴板（`-Save` 落盘、`-Clear` 清空、`-HoldSeconds` 占用剪贴板复现失败）。
 - T11 保存对话框的自动化：文件名字段是 DirectUI（UIA 无 ValuePattern，子 Edit 的 `SetWindowText` 不改变保存结果），改为点击聚焦 + **剪贴板粘贴**路径；保存/取消按钮用对话框真实子 Button 的 `BM_CLICK`。中文输入法会把 `C:\...` 改写成 `C：、...`，禁止用 SendKeys 直接键入路径。
+- T12 标注模型放 `ZeepCut.Core.Annotations`，坐标是**截图图像内的物理像素**（相对图像左上角），不引入 WPF 颜色/几何类型；颜色用 `uint` ARGB 的 `AnnotationColor`，可直接存整数列。
+- T12 `Annotation.Bounds` 是**不含描边的几何包围盒**，另给 `GetRenderBounds()`（按描边半宽外扩、至少 1 像素）用于渲染裁剪；退化图形（单点/零长度/零宽）包围盒为零尺寸但命中测试仍有效。
+- T12 命中语义：矩形/椭圆/马赛克命中内部 + 容差（椭圆排除四角），直线/箭头/画笔按点到线段距离 + 容差 + 描边半宽，文字按包围盒；负容差按 0。选中标注时不必精确点中描边，后续若需要“只点边框”再改 Core 并补测试。
+- T12 属性越界一律**静默钳制**（粗细 1–20、字号 8–72、块 4–64、强度 0–1，NaN 强度回退默认），不抛异常；这样 UI 滑杆、配置导入、旧数据都不会因一个越界数字失败。
+- T12 `AnnotationDocument` 的列表顺序就是 Z 序（末尾最上层），`CreationOrder` 由文档分配（从 1 递增）并在删除后插回时保留；提供 `MoveToIndex`/`BringToFront`/`SendToBack` 与取最上层的 `HitTest`。
+- T13 撤销/重做用**命令模式**而不是整文档快照：`IEditCommand` 保存执行所需旧值，命令直接持有文档/标注引用；`EditHistory` 只管两条栈、容量和顺序，不持文档，便于截图编辑与历史再编辑复用。
+- T13 命令集：添加（重做插回同一对象与原层级）、删除（恢复原索引/顺序/CreationOrder）、移动（反向平移）、清空（按原顺序全部插回）、属性泛型命令（构造时捕获旧值，撤销写回）；`AnnotationEdits` 工厂提供颜色/粗细/文字/字号/背景/马赛克/平滑等常用命令。
+- T13 容量默认 100，超出**丢弃栈底最旧**的一步（被丢弃的无法再撤销）；新命令执行成功后清空重做栈；空栈 `Undo`/`Redo` 返回 false 不抛异常；命令 `Execute` 抛异常时不入栈。
+
