@@ -2018,7 +2018,13 @@ public sealed class CaptureOverlayWindow : Window
         try
         {
             var image = RenderSelection(CaptureAction.Pin);
-            var pin = PinWindows.Create(image, _selection.Selection, _capture.Bounds, _capture.Dpi);
+            // T22：内部截图来源 → 历史已由 ICaptureSink（T11）记录，贴图本身不再记一次。
+            var pin = PinWindows.Create(
+                image,
+                _selection.Selection,
+                _capture.Bounds,
+                _capture.Dpi,
+                ZeepCut.Core.Pins.PinSource.Screenshot);
             stopwatch.Stop();
             CompleteCapture(CaptureAction.Pin, image, stopwatch.Elapsed, filePath: null);
 

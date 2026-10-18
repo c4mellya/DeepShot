@@ -5,14 +5,84 @@
 ## 本轮快照
 
 - 日期：2026-10-18
-- 当前阶段：阶段二（标注与贴图）
-- 本轮任务：**T18 贴图基础 + T19 贴图增强**（在 T11 的 `PinWindow` 占位基础上扩展，未重写）
-- 下一步任务：**T20 贴图全局操作**（托盘“全部隐藏/显示”不销毁实例；退出时全部关闭已在 T18 顺手做完）。`PinWindows`（`src/ZeepCut/Pins/PinWindows.cs`）已是唯一贴图注册表，T20 在它上面加 `HideAll`/`ShowAll`/`ToggleAll` + 托盘菜单接线即可；T21 剪贴板贴图也走 `PinWindows.Create`。
+- 当前阶段：阶段二（标注与贴图）→ **阶段二贴图部分已完成**（T18–T22 全部完成）
+- 本轮任务：**T20 贴图全局操作 + T21 剪贴板贴图 + T22 历史联动接缝**
+- 下一步任务：**T23 历史存储**（SQLite 元数据 + `images/`/`thumbs/` 图片文件 + 相对路径 + 启动初始化与迁移）。
+  T22 已经把接缝做好：`IPinHistoryRecorder`（`src/ZeepCut/Pins/PinHistoryRecorder.cs`）目前只有
+  `LoggingPinHistoryRecorder`（只写日志）；T24 时新增一个 SQLite 实现并调
+  `PinWindows.SetHistoryRecorder(...)` 即可，剪贴板贴图流程与 `PinWindow` 都不用改。
+  `PinWindows.CreateFromHistory(...)` 已留好方法（本轮无调用方，历史图库 T25/T28 接入）。
 - 构建状态：✅ 编译通过，0 warning 0 error
-- 测试状态：✅ 657 个测试通过（T18/T19 新增 `PinStateTests` 32 个：缩放上下限、锚点计算、透明度下限、锁定后拖动被拒绝；T1–T17 旧测试全绿）
-- 桌面验证：✅ 主屏 125% 与副屏 100% 均实测拖动 / 滚轮缩放 / Ctrl+滚轮透明度 / 锁定后再拖动无效 / 右键菜单五项 / 多张并存 / 跨屏拖动 / 退出关闭全部
+- 测试状态：✅ **704 个测试通过**（T20/T21/T22 新增 47 个：`PinCollectionStateTests` 22、`PinPlacementTests` 18、`PinSourceTests` 7）
+- 桌面验证：✅ 主屏 125% + 副屏 100% 均实测：托盘“隐藏全部贴图/显示全部贴图”往返（贴图消失/恢复、
+  hwnd 与物理矩形完全一致、缩放与透明度像素级一致）、Alt+S 从剪贴板贴图（DIB / PNG 流 / 文件拖放三种格式）、
+  空剪贴板与纯文本剪贴板有明确提示且不崩溃、退出关闭全部贴图、无贴图时菜单项灰显
 
 ## 已完成
+
+- 2026-10-18 **T20 贴图全局操作 + T21 剪贴板贴图 + T22 历史联动接缝**（在 T18/T19 的
+  `PinWindow`/`PinWindows` 上扩展，未重写已通过的类型）：
+  - Core 新增 `src/ZeepCut.Core/Pins/PinCollectionState.cs`（**T20 纯逻辑**，不可变、无 WPF/Win32）：
+    由每张贴图的可见性构造；`Count`/`VisibleCount`/`HiddenCount`/`HasVisible`/`AllHidden`；
+    `DecideBulkAction()` 给出 `PinBulkAction`（`None`/`HideAll`/`ShowAll`）；`HideAll()`/`ShowAll()`/`ToggleAll()`/`Resolve()`
+    返回新状态（已是目标状态时原样返回，便于 UI 跳过无谓的窗口操作）；`WithVisible(index, bool)` 改单张。
+    **语义**：空集合 → `None`（既不算“有可见”也不算“全隐”）；**有可见就全隐**（混合状态首次 toggle 是隐藏）；
+    全隐才全显。
+  - Core 新增 `src/ZeepCut.Core/Pins/PinPlacement.cs`（**T21 摆放逻辑**）：`NearCursor(cursor, w, h, screenBounds)`
+    默认放在光标右下 +16px，右侧放不下翻到左边、下方放不下翻到上方（两轴独立），最后用 `PixelRect.Clamp` 夹进屏幕；
+    贴图比屏幕大时按屏幕尺寸缩小并贴左上角。`NearCursor(DisplaySpace, ...)` 重载按 `DisplaySpace.FindByPoint`
+    找屏幕（兼容副屏负坐标）。常量 `CursorOffset = 16`。
+  - Core 新增 `src/ZeepCut.Core/Pins/PinSource.cs`（**T22 规则**）：`PinSource{Clipboard,History,Screenshot}` +
+    `PinSourceText.Describe/ShouldRecordHistory`。**只有 `Clipboard` 返回 true**（内部截图已由 T11 的 `ICaptureSink` 记录，
+    历史贴图的原记录已存在）。
+  - App 新增 `src/ZeepCut/Pins/PinHistoryRecorder.cs`（**T22 接缝**）：
+    `IPinHistoryRecorder.OnPinCreated(PinHistoryEntry{Source,Image,Bounds,CreatedAtLocal})` +
+    `LoggingPinHistoryRecorder`（本轮实现：写一条 INFO，含建议文件名 `贴图_yyyy-MM-dd_HHmmss.png`，明确标注
+    “T24 接真实历史，本轮仅日志占位”）。记录规则下沉到 Core，实现方不必各写一份。
+  - App `src/ZeepCut/Pins/PinWindows.cs` 扩展（**唯一贴图注册表**，未改 `Create` 的既有调用契约）：
+    - `Create(..., PinSource source = PinSource.Screenshot)` 新增可选来源参数；创建后统一走 `RecordHistory`。
+    - **T20**：`VisibleCount`/`HasVisible`/`AllHidden`/`Snapshot()`；`HideAll()`（先 `pin.CaptureSnapshot()` 记下
+      `PinWindowSnapshot(State, Dpi)` 再 `HideForBulk()`，只把 `Visibility` 设为 `Collapsed`，**不 Close、不丢实例**，
+      已被隐藏的跳过并计数）、`ShowAll()`（用快照 `ShowFromBulk()` 恢复，再 `ApplyStateToWindow` + `CorrectPhysicalBounds`
+      复核物理矩形）、`ToggleAll()` 返回实际执行的动作供提示。`NotifyClosed`/`CloseAll` 顺手清掉快照表。
+    - **T21**：`CreateFromClipboard(cursor, display)` → `ClipboardImage.TryRead()` → `PinPlacement.NearCursor` →
+      `Create(..., PinSource.Clipboard)`；返回 `ClipboardPinResult{Success,Status,Message,Pin,Format,PixelWidth,PixelHeight}`，
+      失败不抛异常。
+    - **T22**：`SetHistoryRecorder(IPinHistoryRecorder)`；`CreateFromHistory(...)`（本轮无调用方，历史图库 T25/T28 用，
+      固定 `PinSource.History` → 不记录）。
+  - App 新增 `src/ZeepCut/Platform/ClipboardImage.cs`（**T21 剪贴板读取**）：按 `Bitmap/DIB` → `PNG` 流 → `FileDrop`
+    三种格式依次尝试，全部失败时区分 **Empty / NotAnImage / Busy / Failed** 四种状态并给中文原因；
+    `COMException`（剪贴板被占用）重试 5 次 × 60ms 后返回 `Busy`，**不抛异常**。读到的位图统一转 Pbgra32 并复制成
+    独立 `WriteableBitmap` 再 `Freeze`（剪贴板 DIB 属于对方进程，直接持有会变黑图）；文件拖放用
+    `BitmapCacheOption.OnLoad` 立刻释放文件句柄。
+  - App 新增 `src/ZeepCut/Capture/MonitorLayout.cs`：`EnumDisplayMonitors` + `GetMonitorInfo` + `GetDpiForMonitor`
+    构造 `DisplaySpace`（含副屏负坐标与每屏 DPI），失败时用 `GetSystemMetrics` 虚拟桌面兜底。
+  - App 新增 `src/ZeepCut/Platform/ToastWindow.cs`（**轻量提示**，T20/T21 用）：光标附近一行短消息，2.2 秒自动消失；
+    无边框、`AllowsTransparency`、`WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE`、不抢焦点、不参与命中；按目标屏 DPI 换算并夹进工作区。
+    理由：托盘气球通知在本机常被系统“通知/专注”设置抑制（T5 已知），这类**必须看见**的反馈需要可靠通道。
+  - App `src/ZeepCut/Platform/TrayIcon.cs`：`BuildMenu` 改为实例方法；新增
+    `ToggleAllPinsTextProvider`（文案随状态变化：`隐藏全部贴图 (2)` / `显示全部贴图 (2)`）与
+    `ToggleAllPinsDisabledProvider`（无贴图时 `MF_GRAYED` 灰显）；每次弹菜单求值并写一条日志
+    `托盘菜单“隐藏全部贴图 (2)”：禁用=False`（便于自动化核对）。
+  - App `src/ZeepCut/App.xaml.cs`：
+    - `PasteFromClipboard(trigger)`（取代占位方法）：`GetCursorPos` → `MonitorLayout.ReadDisplaySpace()` →
+      `PinWindows.CreateFromClipboard`；失败走 `NotifyPinFailure`（Toast + 托盘通知 + WARN 日志）。Alt+S 与托盘菜单共用。
+    - `ToggleAllPins(trigger)`：空集合 → Toast“当前没有贴图…”；否则 `PinWindows.ToggleAll()` 并按动作提示
+      `已隐藏 N 张贴图…` / `已显示 N 张贴图`。
+    - `DescribeToggleAllPinsText()` 接托盘文案；`PinWindows.Count == 0` 时禁用菜单项。
+  - App `src/ZeepCut/Pins/PinWindow.cs`：新增 `Image`（T22 记录用）、`IsShown`、`CaptureSnapshot()`、
+    `HideForBulk()`（拖动中先收尾）、`ShowFromBulk(snapshot)`（恢复状态 + DPI + 重摆 + 复核）；新增
+    `internal readonly record struct PinWindowSnapshot(PinState State, int Dpi)`。
+  - App `src/ZeepCut/Capture/CaptureOverlayWindow.cs`：`TriggerPin` 显式传 `PinSource.Screenshot`（T22：内部来源不重复记）。
+  - `src/ZeepCut/Platform/NativeMethods.cs` 新增 `MF_GRAYED`、`EnumDisplayMonitors` + `MonitorEnumProc`。
+  - 新增测试：`tests/ZeepCut.Tests/Pins/PinCollectionStateTests.cs`（22）、`PinPlacementTests.cs`（18）、
+    `PinSourceTests.cs`（7）——隐藏/显示往返、空集合、混合状态 toggle 语义、幂等、索引越界、相等性；
+    光标附近/四角翻转/屏幕夹取/超大图/副屏负坐标/DisplaySpace 重载/非法入参；三种来源的记录规则。
+  - 新增验证脚本：
+    - `scripts/verify-t20t22.ps1`（场景 `toggle`/`clipboard`/`empty`/`text`/`busy`/`formats`/`exit`）。
+    - `scripts/tray-menu.ps1`（**新工具**：Win11 托盘图标在“显示隐藏的图标”溢出面板里，脚本用 UIA 点
+      “Show Hidden Icons” 展开、按名字找到 Zeep Cut 图标右键；Win32 `#32768` 弹出菜单**不暴露任何 UIA 项**，
+      因此改为扫描菜单位图里的文字行（band）再点第 N 行；`-List` 只列不点、`-Shot` 存带菜单的截图）。
 
 - 2026-10-18 **T18 贴图基础 + T19 贴图增强**（在 T11 的 `Pins/PinWindow.cs` 占位上**扩展**，未推翻重写；未改动已通过的 T12–T17 类型）：
   - Core 新增 `src/ZeepCut.Core/Pins/PinState.cs`（**T18/T19 状态与限制规则**，纯逻辑、无 WPF/Win32 依赖、不可变 record struct）：
@@ -166,10 +236,100 @@
 
 ## 验证证据
 
+- 2026-10-18 **T20/T21/T22 构建+测试（最终代码）**：`powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+  '\\wsl.localhost\Ubuntu\home\camellya\workspace\Zeep-Cut\scripts\build.ps1'` → `Build succeeded.`、
+  `0 Warning(s)`、`0 Error(s)`；测试 → `Passed! - Failed: 0, Passed: 704, Skipped: 0, Total: 704`；末尾 `BUILD+TEST OK`。
+  本轮新增 47 个测试（`--filter 'FullyQualifiedName~ZeepCut.Tests.Pins'` → `Passed: 79`，其中 `PinCollectionStateTests` 22、`PinPlacementTests` 18、`PinSourceTests` 7；覆盖）：隐藏/显示往返、空集合（`DecideBulkAction=None`、
+  三个批量方法都是原样返回的空操作）、全可见→全隐、全隐→全显、混合状态 toggle 先全隐、连续 toggle 到全显、单张贴图两个方向、
+  幂等（`HideAll`/`ShowAll` 在目标状态时 `Assert.Same`）、`WithVisible` 单张改动、索引越界抛异常、相等性/哈希、
+  `ToString` 计数；光标右下默认摆放、图像尺寸不变、右边缘翻左、下边缘翻上、右下角双轴翻转、角落空间不足夹回屏幕、
+  超大图缩到屏幕、副屏负坐标摆放/贴左右上边、`DisplaySpace` 重载命中主/副屏、`DisplaySpace` 为 null、非正尺寸与空屏幕抛异常；
+  三种 `PinSource` 的记录规则（只有 Clipboard 为 true）与中文描述。
+- 2026-10-18 **T20 全局隐藏/显示（真实桌面，DISPLAY1 0,0 2560×1440 DPI=120/125%，pid 24280，
+  `scripts/verify-t20t22.ps1 -Scenario toggle`，证据 `artifacts/t20t22/toggle/`）**：
+  - 先贴两张（300×220 @ 360,320 与 340×260 @ 700,360），再对第一张**滚轮放大 2 档 + Ctrl+滚轮降到 0.7**
+    （让“恢复”这件事有可验证的内容）：窗口枚举 `0x691A4C 352,312 363x266`、`0x15B16DA 700,360 340x260`；
+    截图 `primary-toggle-02-zoomed-faded.png`。
+  - 托盘菜单**文案随状态变化**：打开菜单时日志 `托盘菜单“隐藏全部贴图 (2)”：禁用=False`；菜单截图
+    `primary-toggle-02b-tray-menu-hide.png` 可见该项文字为 `隐藏全部贴图 (2)`。
+  - 点该项 → 日志 `全局显隐触发：托盘菜单，当前 贴图集合=2 张（可见 2 张，隐藏 0 张）` →
+    `已隐藏贴图：(352,312) 363x266 缩放=1.21x 透明度=0.7 锁定=False` →
+    `已隐藏贴图：(700,360) 340x260 缩放=1x 透明度=1 锁定=False` →
+    `隐藏全部贴图完成：隐藏 2 张，集合仍有 2 张（实例未销毁）` → `全局显隐结果：已隐藏全部贴图，仍保留 2 张实例`；
+    Toast `已隐藏 2 张贴图（再次点击托盘菜单可显示）`（截图 `primary-toggle-03-hidden-toast.png`）。
+    **窗口枚举 `visible count=0`**（两张都不可见），截图 `primary-toggle-04-hidden.png` 上两张贴图消失；
+    像素测量：原贴图区域 (360,320) 340×330 平均亮度 **196.81 → 249.00**（变成桌面背景）。
+  - 再次打开菜单 → 日志 `托盘菜单“显示全部贴图 (2)”：禁用=False`（**文案已切换**）；点该项 → 日志
+    `全局显隐触发：托盘菜单，当前 贴图集合=2 张（可见 0 张，隐藏 2 张）` →
+    `已显示贴图：(352,312) 363x266 缩放=1.21x 透明度=0.7 状态已恢复=True` →
+    `已显示贴图：(700,360) 340x260 缩放=1x 透明度=1 状态已恢复=True` → `显示全部贴图完成：显示 2 张，当前可见 2 张`；
+    Toast `已显示 2 张贴图`（截图 `primary-toggle-05-shown.png`）。
+  - **恢复后完全一致**：窗口签名 `0x691A4C:352,312 363x266 | 0x15B16DA:700,360 340x260` 与隐藏前**逐项相同**
+    （hwnd 同一实例、位置、尺寸、缩放后的宽高都不变），脚本输出 `RESTORED IDENTICAL (hwnd+position+size): True`；
+    像素级比对：`primary-toggle-02-zoomed-faded.png` 与 `-05-shown.png` 在贴图区域 (360,320,340,330) **完全相同
+    （mean 196.81 / 196.81、`identical=True`）**，即透明度 0.7 与 1.21x 缩放都被恢复；截图 `primary-toggle-06-shown-clean.png`。
+  - **无贴图时菜单项灰显**：关闭全部贴图后打开托盘菜单，日志
+    `托盘菜单“显示/隐藏全部贴图”：禁用=True`（08:10:37 与 08:10:47 两次），
+    截图 `primary-nopins-menu.png` 中该项为默认文案 `显示/隐藏全部贴图` 且呈灰色；
+    有贴图时同一项为 `隐藏全部贴图 (2)` / `显示全部贴图 (2)` 且 `禁用=False`（对照上面两条日志），
+    即**文案与可用状态都随集合变化**。
+- 2026-10-18 **T21 剪贴板贴图（真实桌面，主屏，pid 56432，场景 `clipboard`）**：
+  - 用 `scripts` 内置的 WinForms 夹具把一张 300×200 PNG（蓝底 + 黄/红块 + 文字 `T21 CLIP`）放进剪贴板；
+    光标定位到物理 (900,600)，发 `Alt+S`。日志：
+    `热键触发：Alt+S（id=2）` → `从剪贴板贴图触发：全局热键 Alt+S` →
+    `剪贴板图片读取成功（第 1 次尝试）：格式=Bitmap/DIB 尺寸=300x200` →
+    `创建贴图窗口：选区=(916,616) 300x200 ... 期望物理=(916,616) 300x200` →
+    `贴图已加入集合：当前 1 张，来源=外部剪贴板 物理=(916,616) 300x200 ...` →
+    `剪贴板贴图完成：光标=(900,600) 屏幕=\\.\DISPLAY1 DPI=120 摆放=(916,616) 300x200 ... 格式=Bitmap/DIB`。
+  - 窗口枚举 `0x951BE8 916,616 300x200`：位置正是**光标 +16/+16**（`|dx|=16 |dy|=16`）、尺寸 300×200 与原图一致、
+    `inside=True`（完全在屏幕内）；截图 `artifacts/t20t22/clipboard/primary-clipboard-01-created.png`
+    可见蓝底黄块红块的贴图就在光标右下方、右上 × 按钮正常。
+  - **副屏（负坐标）**：`-Target secondary -CursorX -900 -CursorY 900` → 窗口 `-884,916 300x200`
+    （= -900+16 / 900+16），`inside=True`；截图 `artifacts/t20t22/secondary/secondary-clipboard-01-created.png`
+    （1080×1920 竖屏）。证明 `PinPlacement` + `DisplaySpace` 在负坐标屏幕上正确。
+  - **贴右/下边缘自动翻转**：光标 (2530,1410)（主屏右下角附近，剩余空间 30×30 放不下 300×200）→
+    贴图落在 `2214,1194 300x200`（翻到光标左上方），`inside=True`，没有被截断。
+  - **三种剪贴板格式（场景 `formats`，pid 49344）**：`Bitmap/DIB`（上面）、
+    `PNG`（`SetData("PNG", MemoryStream)`）→ 日志 `格式=PNG 尺寸=240x160`、窗口 `916,616 240x160`；
+    `FileDrop`（资源管理器复制 PNG 文件）→ 日志 `格式=FileDrop:png 尺寸=240x160`、窗口 `1036,696 240x160`。
+    截图 `primary-formats-01-png.png` / `primary-formats-02-filedrop.png`。
+- 2026-10-18 **T21 失败路径（真实桌面，主屏）**：
+  - **空剪贴板**（场景 `empty`）：`CLIPBOARD CLEARED` 后 Alt+S → 日志
+    `从剪贴板贴图失败：状态=NotAnImage ...`（清空后 Win11 仍保留 UnicodeText 格式，属正常）→
+    Toast 窗口 `0x11C1A3C 923,623 293x47`，UIA 读到文本 **`剪贴板是空的，请先复制一张图片。`**；
+    截图 `artifacts/t20t22/errors/primary-empty-01-toast.png`（可见深色圆角提示在光标右下方）。
+    `EXPECT APP STILL RUNNING: True`、`EXPECT 0 PINS: True`（没有新建贴图）。
+  - **纯文本剪贴板**（场景 `text`）：`SetText(...)` 后 Alt+S → 日志 `状态=NotAnImage 格式=UnicodeText`；Toast 文本
+    **`剪贴板里没有图片（当前格式：UnicodeText）。`**；截图 `primary-text-01-toast.png`；无贴图、进程存活。
+  - **剪贴板被占用（COMException）—— 未能在真实桌面复现**：用独立进程 `OpenClipboard` 持锁 25 秒
+    （`holdrun.ps1` 确认输出 `HOLDER HOLDS CLIPBOARD`，另有探针在同一时刻 `OpenClipboard` 失败），
+    再发 Alt+S，结果**仍读到数据**（`状态=NotAnImage 格式=UnicodeText`）——因为 WPF/OLE 的
+    `Clipboard.GetDataObject()` 通过 OLE 快照读取，不走 `OpenClipboard`，所以持锁不构成 COMException。
+    因此“剪贴板被占用 → 提示且不崩溃”这条**只有代码路径与单测/日志覆盖，未在真实桌面复现**。
+    本轮为它保留了完整实现：`ClipboardImage.TryRead` 对 `COMException` 重试 5 次 × 60ms 后返回 `Busy`，
+    提示文案 `剪贴板被其他程序占用，暂时读不到图片，请稍后重试。`，调用方只提示、不抛异常。
+- 2026-10-18 **T22 历史联动规则（真实桌面日志核对，`artifacts/t20t22/{toggle,clipboard}/*-log.txt`）**：
+  - **外部剪贴板 → 记录一次**：每次 Alt+S 成功都有一条
+    `贴图历史联动：来源=外部剪贴板 应记录一次（T24 接真实历史，本轮仅日志占位） 图像=300x200 位置=(916,616) 300x200
+    时间=2026-10-18 08:05:54 建议名称=贴图_2026-10-18_080554.png`（PNG 流与 FileDrop 各一条，共 3 条）。
+  - **内部截图 → 不记录**：每次截图“贴图”都有一条
+    `贴图历史联动：来源=内部截图 不记录（内部截图已由 ICaptureSink 记录 / 历史贴图不重复记录），尺寸=300x220 位置=(360,320) 300x220`，
+    同一次操作里只有 T11 的 `输出完成：动作=贴图 ...` 一条，**没有第二条历史**（PLAN：内部操作避免重复记录）。
+  - **历史来源（`PinSource.History`）不记录**：本轮无历史图库，`CreateFromHistory` 无调用方，
+    该规则的判定已在 Core `PinSourceText.ShouldRecordHistory` 单测覆盖（`History → false`）。
+- 2026-10-18 **T20 退出关闭全部贴图（真实桌面，场景 `exit`，pid 49344）**：两张贴图打开时点托盘“退出” →
+  日志 `菜单命令: Exit` → `退出：用户选择托盘菜单“退出”` → `退出：关闭全部贴图 2 张` →
+  两条 `贴图窗口已关闭：(360,320) 300x220 ...` / `(700,360) 340x260 ...` → 热键注销 → 托盘图标移除 →
+  `退出完成 (exit code=0)`；脚本输出 `EXPECT APP EXITED: True`，`Get-Process ZeepCut` 无结果。
+  截图 `artifacts/t20t22/errors/primary-exit-01-two-pins.png` 与 `primary-exit-02-after-exit.png`。
+- 2026-10-18 **T18/T19 回归（真实桌面，场景 `lock`，同一最终构建）**：锁定后拖动被拒绝
+  （`LOCK BEFORE=360,320 640x420 AFTER-DRAG-ATTEMPT=360,320 640x420`）、锁定仍可缩放
+  （`→ 347,307 852x559`）、解锁后拖动生效（`→ 447,377 852x559`）、× 关闭 `count=0`；与 T19 记录一致，无回归。
 - 2026-10-18 **T18/T19 构建+测试（最终代码）**：`scripts/build.ps1` → `Build succeeded.`、`0 Warning(s)`、`0 Error(s)`；测试 →
   `Passed! - Failed: 0, Passed: 657, Skipped: 0, Total: 657`；末尾 `BUILD+TEST OK`。
   本轮新增 32 个测试（`--filter 'FullyQualifiedName~ZeepCut.Tests.Pins'`）：缩放 1x/2x/0.5x 尺寸跟随、超上限钳到 8x、低于下限钳到 40px、
   2×2 原图最小尺寸优先、NaN/∞/≤0 倍率原样返回、已到限原样返回、锚点在左上/中心/内部/窗口外（夹到最近边）四组、`ZoomBy` 连续 100/200 档停在上下限、
+
   `ResetToOriginal` 保持中心、透明度 0 钳到 0.2、>1 钳到 1、NaN 保持原值、连续 -0.1/+0.1 停在 0.2/1.0、透明度不影响 Bounds、
   锁定后 `DragTo`/`DragBy` 被拒绝、`TryDragTo` 报告是否移动、锁定仍可缩放/调透明度、`ToggleLock` 幂等、`ClampScaleFor` 双方向取较大者、负坐标副屏。
 - 2026-10-18 **T18/T19 主屏 125%（DISPLAY1 0,0 2560×1440 DPI=120，pid 59188，脚本 `scripts/verify-t18t19.ps1`，证据 `artifacts/t18t19/primary/`）**：
@@ -508,6 +668,15 @@
 - **文字输入框的 Enter 拦截有两层**：遮罩 `PreviewKeyDown`（先收到）和 `TextBox.PreviewKeyDown`（兜底），都是为了满足 PLAN 的“文字输入时 Enter 优先用于文本编辑”。两层都只处理 `Key.Enter`，Shift+Enter 不拦截（留给换行）。改键盘处理时两层要一起看。
 - **验证脚本的输入法坑**：本机 `SendKeys` 会吃掉空格和数字（`Zeep Cut T15` 曾变成 `ZeepCutT5`），所以 `verify-t14t15.ps1` 改用 `SendInput` + `KEYEVENTF_UNICODE` 逐字输入，并且 `INPUT` 结构体必须 `Size = 40`（x64）否则 `SendInput` 静默失败。另外 `SetCursorPos` 在遮罩激活的瞬间可能被丢弃，脚本会在每次移动后用 `GetCursorPos` 回读校验并重试。
 - 工具栏现在有两行（约 723×71 物理像素，副屏 100% 下约 723×71 DIP），比 T10 的单行更宽更高；`PlaceToolbar` 仍只做“下方优先/上方回退/水平夹取”，极小选区下两行工具栏可能盖住选区内容（未做自动收纳/折叠）。
+- **T20 全局隐藏只折叠窗口，禁止改成 `Close()` + 重建**：`PinWindows.HideAll` 把快照（`PinState` + DPI）存进 `HiddenSnapshots` 再 `Visibility=Collapsed`；`ShowAll` 用同一份快照恢复。重建窗口会丢掉用户调好的缩放/透明度/锁定状态，也会换 hwnd，且会闪一下。改这里时注意 `NotifyClosed` 与 `CloseAll` 都要清 `HiddenSnapshots`（已做），否则字典会留下已销毁窗口。
+- **T20 的“有可见就全隐”是 Core 里的规则，不要挪到 UI**：`PinCollectionState.DecideBulkAction()` 决定混合状态先隐藏。`PinWindows.ToggleAll()` 只是执行它。如果以后要改成“有隐藏就全显”，改 Core 并补 `PinCollectionStateTests`（现有测试会立刻失败，这是有意设计的回归保护）。
+- **T21 剪贴板读取必须处理“读取期间用户又复制了别的东西”**：现在每次 `TryRead` 都是一次独立的 `Clipboard.GetImage()/GetData()` 序列，中间可能抛出 `COMException`（重试覆盖）。**不要**把读到的 `DataObject` 缓存起来供后续多次使用，剪贴板内容随时会变。
+- **T21 剪贴板图片一定要复制成独立位图**（详见决策段）：`ClipboardImage.ToIndependentBitmap` 负责 `FormatConvertedBitmap → WriteableBitmap → Freeze`。直接 `Clipboard.SetImage`/`GetImage` 的返回值交给 `PinWindow` 长期持有，会在设置剪贴板那个进程退出后变成黑图。
+- **“剪贴板被占用”的真实复现方式未找到**：`OpenClipboard` 持锁**不会**让 WPF/OLE 的 `Clipboard.GetDataObject()` 失败（OLE 走自己的快照通道），本轮实测持锁 25 秒期间 Alt+S 仍能读到数据。想真实验证 `ClipboardImageStatus.Busy` 分支，可能需要一个真正长期占住 OLE 的进程（例如另一个 WPF/WinForms 程序在 `Clipboard.GetImage()` 期间挂起），本轮未做到。**代码路径已实现且不会崩溃**（`COMException` → 重试 5 次 → 返回 `Busy` → Toast 提示），但“真实桌面验证”这一条标注为**未验证**。
+- **T20/T21 的提示用自绘 Toast，不要换回托盘气球**：T5 已实测本机 `NIF_INFO` 通知被系统抑制（截图看不到），`Shell_NotifyIcon` 却返回成功。Toast 是唯一能截图证明“用户确实看到了提示”的通道，验证脚本也是按窗口标题 `Zeep Cut 提示 {pid}` + UIA Text 来找它。托盘通知仍并行发一份，但不要指望它能被看见。
+- **托盘菜单的自动化只能靠“文字 band + 固定顺序”**：Win32 `#32768` 弹出菜单**不暴露任何 UIA MenuItem**（`FindAll` 返回 0），且 Win11 把图标放进溢出面板（`Shell_NotifyIconGetRect` 给的 rect 与实际位置不符）。`scripts/tray-menu.ps1` 的做法是：UIA 点 `Show Hidden Icons`（panel 是 toggle，失败会重试 3 次）→ 桌面里按名字找 `Zeep Cut` → 右键 → 扫菜单位图文字行 → 点第 N 行。**菜单项顺序变更必须同步更新 `tray-menu.ps1` 的注释与调用方的 `-Index`**。
+- **本机日志核对必须从 WSL 做**：`powershell.exe` 读 `%LOCALAPPDATA%\ZeepCut\logs\app-YYYYMMDD.log` 会拿到一个**陈旧的 907 字节视图**（同一路径在 WSL 侧已是 1.1MB），所以验证脚本里的日志检查全部改成打印 `grep` 提示，真正核对由 WSL 侧执行。写验证脚本时不要再用 PowerShell 读日志判断成功与否。
+
 - 标注撤销历史与截图输出是分开的：按 Esc 取消后标注全部丢弃（不写历史），复制/另存为/贴图成功后遮罩关闭、标注也随之丢失（T17 会把它们渲染进输出图）。这不是 bug，是 T14/T15/T17 的分工。
 
 - 托盘图标默认进入 Windows 11 的“显示隐藏的图标”溢出面板，不在任务栏直接可见；用户可手动固定到任务栏。
@@ -616,3 +785,44 @@
 - T18 贴图集合 `PinWindows` 是唯一注册表（`Create`/`All`/`Count`/`CloseAll`/`NotifyClosed`），托盘退出与 `OnExit` 都调 `CloseAll()`（PLAN：退出不恢复贴图）。T20 的全局隐藏/显示、T21 的剪贴板贴图、T22 的历史联动都从这里取实例。
 - T18 贴图窗口不启用 `AllowsTransparency`，靠 `CS_DROPSHADOW`（系统投影）+ 1 DIP 深色边框与桌面区分；这样内容仍是 1:1 物理像素直出，不受分层窗口影响。
 - T18 验证脚本 `scripts/verify-t18t19.ps1` 用 `Find-PinWindows`（标题前缀 + 可见 + 非零矩形 + 按屏幕位置排序）识别贴图窗口，右键菜单项通过 UIA 按 `Name` 命中（原始大小/复制/另存为…/锁定位置/解锁位置/关闭），不硬编码菜单坐标。
+- T20 全局隐藏**只折叠窗口**（`Visibility=Collapsed`），不 `Close()`、不从集合移除、不重建图片：隐藏前用
+  `PinWindow.CaptureSnapshot()` 记下 `PinState` + 当时屏幕 DPI，显示时原样恢复再走一遍 `ApplyStateToWindow` +
+  `CorrectPhysicalBounds`。这样"隐藏再显示"的 hwnd/位置/尺寸/缩放/透明度全部不变（已像素级实测），
+  也不会因为重建窗口而闪一下或丢掉用户调好的缩放。
+- T20 的"有可见就全隐、全隐就全显"语义下沉到 Core `PinCollectionState.DecideBulkAction()`，而不是写在
+  `PinWindows` 或托盘代码里：混合状态的取舍（隐藏优先）是最容易被后续改动破坏的规则，放 Core 才有单测兜住。
+  `HideAll`/`ShowAll` 在已是目标状态时**原样返回同一实例**，UI 据 `PinBulkAction` 决定是否提示"没有可隐藏的贴图"。
+- T20 托盘菜单项**文案随状态变化**（`隐藏全部贴图 (2)` / `显示全部贴图 (2)`）且**无贴图时 `MF_GRAYED` 灰显**：
+  灰显让"点了没反应"不再发生，文案里的数字让用户知道会影响几张。两者都由 `App` 提供的 provider 委托在
+  每次弹菜单时求值（`TrayIcon` 不依赖 `PinWindows`，保持 Platform 层干净）。
+- T21 剪贴板读取顺序固定为 **Bitmap/DIB → PNG 流 → FileDrop**：DIB 是截屏工具/画图/浏览器"复制图片"的主流格式；
+  PNG 流常见于浏览器与 Win11 截图工具；FileDrop 覆盖"在资源管理器里复制一个图片文件"。三者都失败时才去
+  `GetFormats` 区分"空"与"非图片"，以便给出准确提示（实测得到 `剪贴板是空的…` 与 `剪贴板里没有图片（当前格式：UnicodeText）`）。
+- T21 读到的位图**必须复制成独立 `WriteableBitmap` 再 `Freeze`**：剪贴板 DIB 的内存属于设置剪贴板的进程，
+  直接长期持有 `Clipboard.GetImage()` 的 `BitmapSource` 在对方释放后会变黑（与 T6 的 GDI 位图同一类陷阱）。
+- T21 摆放（`PinPlacement`）默认**光标右下 +16px**，右/下放不下时**分别翻到左侧/上方**（两轴独立），最后 `Clamp` 进屏幕：
+  比"永远贴左上角"更接近用户预期，也比"只夹取"少了半张贴图在屏幕外的观感问题。贴图比屏幕还大时按屏幕缩小（与 T18 的 8x 缩放允许出屏一致）。
+- T20/T21 的用户反馈用**自绘 Toast（`ToastWindow`）而不是托盘气球**：T5 已实测本机 `Shell_NotifyIcon(NIF_INFO)`
+  返回成功但通知横幅被系统抑制、截图里看不到；"剪贴板没有图片"这类反馈必须让用户真看见，所以走一个
+  2.2 秒自动消失的无边框提示窗口（`WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE`，不抢焦点、不挡鼠标）。
+  托盘通知仍然并行发送一份（双通道，任一可见即可），并同时写日志。
+- T22 记录规则**下沉到 Core `PinSourceText.ShouldRecordHistory`**（只有 `Clipboard` 为 true），而不是在
+  `LoggingPinHistoryRecorder` 里写 if：T24 换成 SQLite 实现后仍要遵守同一套规则，规则留在 Core 才有单测
+  （`PinSourceTests`）兜住"内部截图不重复记、历史贴图不重复记"。
+- T22 的 `IPinHistoryRecorder` 在 `PinWindows` 里用 `SetHistoryRecorder` 注入（默认 `LoggingPinHistoryRecorder`），
+  `RecordHistory` 外层 try/catch：历史写失败只记 ERROR，**绝不影响贴图本身**（PLAN：历史缺失不阻塞本地功能）。
+- **本机验证环境坑（务必注意）**：
+  1. `powershell.exe` 进程**看不到应用新写入的日志内容**（读到的 `app-YYYYMMDD.log` 只有 907 字节，
+     而 WSL 侧同一路径已有 1.1MB）。因此日志核对**必须从 WSL 侧 grep**（`/mnt/c/Users/.../logs/app-*.log`），
+     验证脚本里的 `Show-LogHint` 只打印一条提示命令，不再自己读日志（否则永远 0 命中）。
+  2. Win11 托盘图标在“显示隐藏的图标”溢出面板里，`Shell_NotifyIconGetRect` 给的 rect（1851,10）与真实图标
+     位置（1747,81）不一致，**直接点 rect 会点到别的应用图标**。已新增 `scripts/tray-menu.ps1`：
+     UIA 点 `Show Hidden Icons`（名字会变成 `Show Hidden Icons Hide`，按前缀匹配，且面板是 toggle 的所以失败会重试）→
+     在整个桌面里按名字找 `Zeep Cut` 图标 → 右键 → 扫 `#32768` 菜单位图里的文字行（band）→ 点第 N 行。
+     **Win32 弹出菜单不给 UIA 暴露任何 MenuItem**（`FindAll` 返回 0），所以只能用文字 band + 固定顺序
+     （0 截图 / 1 从剪贴板贴图 / 2 显示隐藏全部贴图 / 3 历史 / 4 设置 / 5 检查更新 / 6 退出）。
+  3. `Start-Process` 在本机不可用（`NO_PROXY` 重复键）；且 `Win32_Process.Create` 用 `>` 重定向需要
+     `cmd.exe /c` 包一层。后台持锁进程要用这两条组合才能拿到输出。
+  4. 其他截图/录屏工具（实测 QQ 的 `QQScreenCapture`）会**抢走 Alt+A**，桌面被别的遮罩盖住时 Zeep Cut 的热键
+     完全不触发（日志无“热键触发”）。验证前先确认桌面干净；`Alt`/`Ctrl` 被 `keybd_event` 卡住也会导致热键失效
+     （表现为托盘图标与热键全无响应），用 `GetAsyncKeyState` 查并补发 key-up 修掉。

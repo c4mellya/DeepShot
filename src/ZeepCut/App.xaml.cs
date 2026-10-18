@@ -1,9 +1,11 @@
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Threading;
 using ZeepCut.Capture;
 using ZeepCut.Core;
 using ZeepCut.Core.Capture;
 using ZeepCut.Core.Geometry;
+using ZeepCut.Core.Pins;
 using ZeepCut.Core.Shortcuts;
 using ZeepCut.Output;
 using ZeepCut.Pins;
@@ -64,6 +66,8 @@ public partial class App : Application
 
             _trayIcon = new TrayIcon();
             _trayIcon.CommandInvoked += OnTrayCommandInvoked;
+            _trayIcon.ToggleAllPinsTextProvider = DescribeToggleAllPinsText;
+            _trayIcon.ToggleAllPinsDisabledProvider = () => PinWindows.Count == 0;
             if (!_trayIcon.Show())
             {
                 AppLog.Error("App", "托盘图标加入通知区域失败，程序无法驻留");
@@ -139,11 +143,11 @@ public partial class App : Application
                 break;
 
             case TrayMenuCommand.PasteFromClipboard:
-                PasteFromClipboardPlaceholder("托盘菜单");
+                PasteFromClipboard("托盘菜单");
                 break;
 
             case TrayMenuCommand.ToggleAllPins:
-                ShowNotImplemented("显示/隐藏全部贴图");
+                ToggleAllPins("托盘菜单");
                 break;
 
             case TrayMenuCommand.History:
@@ -185,7 +189,7 @@ public partial class App : Application
         }
 
         RegisterHotkey(ScreenshotShortcutText, () => StartCapture("全局热键 " + ScreenshotShortcutText));
-        RegisterHotkey(PinShortcutText, () => PasteFromClipboardPlaceholder("全局热键 " + PinShortcutText));
+        RegisterHotkey(PinShortcutText, () => PasteFromClipboard("全局热键 " + PinShortcutText));
 
         if (_hotkeyRegistrationFailures.Count > 0)
         {
@@ -311,9 +315,106 @@ public partial class App : Application
         _captureOverlay = null;
     }
 
-    // TODO(T18–T22): 读取剪贴板图片并创建贴图窗口。本轮仅保留热键与菜单入口。
-    private void PasteFromClipboardPlaceholder(string trigger) =>
-        AppLog.Info("Pins", $"从剪贴板贴图触发（{trigger}）：占位入口，T21/T22 实现");
+    // --- T21 剪贴板贴图 ---
+
+    /// <summary>
+    /// Alt+S / 托盘“从剪贴板贴图”：读取剪贴板图片，在光标附近创建一张贴图。
+    /// 无图 / 非图片格式 / 剪贴板被占用都只提示，不抛异常、不影响已有贴图。
+    /// </summary>
+    private void PasteFromClipboard(string trigger)
+    {
+        AppLog.Info("Pins", $"从剪贴板贴图触发：{trigger}");
+
+        if (!NativeMethods.GetCursorPos(out var cursorPoint))
+        {
+            var error = Marshal.GetLastWin32Error();
+            AppLog.Warn("Pins", $"GetCursorPos 失败（Win32Error={error}），改按主屏中心摆放贴图");
+        }
+
+        var cursor = new PixelPoint(cursorPoint.X, cursorPoint.Y);
+        DisplaySpace display;
+        try
+        {
+            display = MonitorLayout.ReadDisplaySpace();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("Pins", "读取屏幕布局失败，无法定位剪贴板贴图", ex);
+            NotifyPinFailure("无法定位屏幕位置，贴图失败。");
+            return;
+        }
+
+        var result = PinWindows.CreateFromClipboard(cursor, display);
+        if (result.Success)
+        {
+            AppLog.Info(
+                "Pins",
+                $"剪贴板贴图成功：{result.Message} 格式={result.Format} 位置={result.Pin?.Bounds} " +
+                $"当前共 {PinWindows.Count} 张");
+            return;
+        }
+
+        AppLog.Warn("Pins", $"剪贴板贴图失败：状态={result.Status} 原因={result.Message}");
+        NotifyPinFailure(result.Message);
+    }
+
+    /// <summary>剪贴板贴图失败的提示：轻量提示窗口（可见性可靠）+ 托盘通知 + WARN 日志。</summary>
+    private void NotifyPinFailure(string message)
+    {
+        ToastWindow.Show(message);
+        _trayIcon?.ShowNotification("从剪贴板贴图失败", message, warning: true);
+    }
+
+    // --- T20 贴图全局显隐 ---
+
+    /// <summary>托盘“显示/隐藏全部贴图”的文案：随当前状态变化（T20）。</summary>
+    private static string? DescribeToggleAllPinsText()
+    {
+        if (PinWindows.Count == 0)
+        {
+            return TrayIcon.ToggleAllPinsDefaultText;
+        }
+
+        var state = PinWindows.Snapshot();
+        return state.HasVisible
+            ? $"隐藏全部贴图 ({state.VisibleCount})"
+            : $"显示全部贴图 ({state.Count})";
+    }
+
+    /// <summary>
+    /// 托盘“显示/隐藏全部贴图”：有可见就全部隐藏，全部隐藏就全部显示。
+    /// 隐藏不销毁实例；没有贴图时给出提示（菜单项同时是灰显的）。
+    /// </summary>
+    private void ToggleAllPins(string trigger)
+    {
+        var state = PinWindows.Snapshot();
+        AppLog.Info("Pins", $"全局显隐触发：{trigger}，当前 {state}");
+
+        if (state.IsEmpty)
+        {
+            AppLog.Info("Pins", "全局显隐：当前没有贴图，提示用户");
+            ToastWindow.Show("当前没有贴图，先按 Alt+A 截图或 Alt+S 从剪贴板贴图。");
+            return;
+        }
+
+        var action = PinWindows.ToggleAll();
+        switch (action)
+        {
+            case PinBulkAction.HideAll:
+                AppLog.Info("Pins", $"全局显隐结果：已隐藏全部贴图，仍保留 {PinWindows.Count} 张实例");
+                ToastWindow.Show($"已隐藏 {PinWindows.Count} 张贴图（再次点击托盘菜单可显示）");
+                break;
+
+            case PinBulkAction.ShowAll:
+                AppLog.Info("Pins", $"全局显隐结果：已显示全部贴图，当前可见 {PinWindows.VisibleCount} 张");
+                ToastWindow.Show($"已显示 {PinWindows.VisibleCount} 张贴图");
+                break;
+
+            default:
+                AppLog.Info("Pins", "全局显隐结果：无操作");
+                break;
+        }
+    }
 
     /// <summary>托盘通知优先；系统拒绝通知时退回 MessageBox，保证失败不会静默。</summary>
     private void NotifyUser(string title, string message)

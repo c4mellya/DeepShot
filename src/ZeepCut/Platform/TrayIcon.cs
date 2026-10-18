@@ -26,6 +26,9 @@ public sealed class TrayIcon : IDisposable
     private const string Tooltip = "Zeep Cut";
     private const uint TrayIconId = 1;
 
+    /// <summary>托盘菜单“显示/隐藏全部贴图”的默认文案（没有贴图时用它）。</summary>
+    public const string ToggleAllPinsDefaultText = "显示/隐藏全部贴图";
+
     private readonly NativeMethods.WndProc _wndProc;
     private readonly uint _taskbarCreatedMessage;
     private readonly DispatcherTimer _singleClickTimer;
@@ -59,6 +62,18 @@ public sealed class TrayIcon : IDisposable
 
     /// <summary>用户在托盘菜单里选择了某个命令；回调在 UI 线程上执行。</summary>
     public event Action<TrayMenuCommand>? CommandInvoked;
+
+    /// <summary>
+    /// T20：“显示/隐藏全部贴图”菜单项的文案（例如“隐藏全部贴图 (2)”）。每次弹菜单时求值，
+    /// 因此始终反映当前贴图状态；返回 null/空白时使用默认文案。
+    /// </summary>
+    public Func<string?>? ToggleAllPinsTextProvider { get; set; }
+
+    /// <summary>
+    /// T20：没有贴图时是否禁用“显示/隐藏全部贴图”。返回 true 时该项灰显不可点，
+    /// 避免点了没反应（有贴图时始终可用）。
+    /// </summary>
+    public Func<bool>? ToggleAllPinsDisabledProvider { get; set; }
 
     /// <summary>把图标加入通知区域。失败时返回 false，由调用方提示用户。</summary>
     public bool Show()
@@ -334,7 +349,6 @@ public sealed class TrayIcon : IDisposable
             AppLog.Error("Tray", "创建托盘菜单失败", new Win32Exception(Marshal.GetLastWin32Error()));
             return;
         }
-
         try
         {
             // 标准修正：先把隐藏窗口设为前台，菜单才会在点击别处时正确消失。
@@ -363,7 +377,7 @@ public sealed class TrayIcon : IDisposable
         }
     }
 
-    private static IntPtr BuildMenu()
+    private IntPtr BuildMenu()
     {
         var menu = NativeMethods.CreatePopupMenu();
         if (menu == IntPtr.Zero)
@@ -374,7 +388,22 @@ public sealed class TrayIcon : IDisposable
         AppendCommand(menu, TrayMenuCommand.Screenshot, "截图");
         AppendCommand(menu, TrayMenuCommand.PasteFromClipboard, "从剪贴板贴图");
         NativeMethods.AppendMenu(menu, NativeMethods.MF_SEPARATOR, UIntPtr.Zero, null);
-        AppendCommand(menu, TrayMenuCommand.ToggleAllPins, "显示/隐藏全部贴图");
+
+        // T20：文案随贴图状态变化（“隐藏全部贴图 (2)”/“显示全部贴图 (2)”），
+        // 没有贴图时灰显，避免点了没反应。
+        var pinsText = ToggleAllPinsTextProvider?.Invoke();
+        if (string.IsNullOrWhiteSpace(pinsText))
+        {
+            pinsText = ToggleAllPinsDefaultText;
+        }
+
+        var pinsDisabled = ToggleAllPinsDisabledProvider?.Invoke() == true;
+        var pinsFlags = NativeMethods.MF_STRING | (pinsDisabled ? NativeMethods.MF_GRAYED : 0u);
+        NativeMethods.AppendMenu(menu, pinsFlags, new UIntPtr((uint)TrayMenuCommand.ToggleAllPins), pinsText);
+        AppLog.Info(
+            "Tray",
+            $"托盘菜单“{pinsText}”：禁用={pinsDisabled}");
+
         AppendCommand(menu, TrayMenuCommand.History, "历史");
         AppendCommand(menu, TrayMenuCommand.Settings, "设置");
         AppendCommand(menu, TrayMenuCommand.CheckUpdates, "检查更新");

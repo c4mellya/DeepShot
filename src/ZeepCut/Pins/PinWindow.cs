@@ -213,11 +213,64 @@ public sealed class PinWindow : Window
     /// <summary>当前贴图状态（缩放/位置/透明度/锁定），主要供日志与验证使用。</summary>
     public PinState State => _state;
 
+    /// <summary>贴图内容（1:1 原图，T22 历史接缝与右键“复制/另存为”共用）。</summary>
+    public BitmapSource Image => _image;
+
     /// <summary>贴图所在屏幕的 DPI（跨屏移动后会更新）。</summary>
     public int ScreenDpi => _dpi;
 
     /// <summary>贴图当前占用的屏幕物理矩形。</summary>
     public PixelRect Bounds => _state.Bounds;
+
+    /// <summary>
+    /// T20：这张贴图当前是否显示。全局隐藏把窗口设为 <see cref="Visibility.Collapsed"/>，
+    /// 窗口实例、状态与集合条目都保留。
+    /// </summary>
+    public bool IsShown => IsVisible && Visibility == Visibility.Visible;
+
+    /// <summary>
+    /// T20：隐藏前把窗口状态拍一张快照（位置/尺寸/透明度/锁定 + DPI）。
+    /// 全局隐藏只折叠窗口，<see cref="ShowFromBulk"/> 时用这份快照恢复，
+    /// 因此恢复后位置、尺寸、透明度与隐藏前完全一致。
+    /// </summary>
+    internal PinWindowSnapshot CaptureSnapshot() => new(_state, _dpi);
+
+    /// <summary>T20：隐藏这张贴图（不销毁窗口、不关闭、不改状态）。</summary>
+    internal void HideForBulk()
+    {
+        if (_dragging)
+        {
+            EndDrag("全局隐藏前收尾");
+        }
+
+        // 先取消激活，避免隐藏后系统把焦点留在不可见窗口上。
+        Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// T20：重新显示这张贴图。给了 <paramref name="snapshot"/> 时按快照恢复状态
+    /// （隐藏期间窗口理论上不会变，但跨屏/DPI 变化后仍需重新换算，所以恢复后照样复核物理矩形）。
+    /// </summary>
+    /// <returns>物理矩形是否与状态一致。</returns>
+    internal bool ShowFromBulk(PinWindowSnapshot? snapshot)
+    {
+        if (snapshot is { } saved)
+        {
+            var dpiChanged = saved.Dpi != _dpi;
+            _state = saved.State;
+            if (dpiChanged)
+            {
+                _dpi = saved.Dpi;
+            }
+
+            _lastApplied = null;
+        }
+
+        Visibility = Visibility.Visible;
+        ApplyStateToWindow(force: true, stage: "显示全部贴图");
+        ApplyVisualState();
+        return CorrectPhysicalBounds("显示全部贴图复核", _state.Bounds);
+    }
 
     private void OnSourceInitialized(object? sender, EventArgs e)
     {
@@ -781,3 +834,11 @@ public sealed class PinWindow : Window
         return brush;
     }
 }
+
+/// <summary>
+/// T20：全局隐藏前拍下的贴图状态快照（状态 + 当时所在屏幕的 DPI）。
+/// 全局显示时用同一份快照恢复，保证"隐藏再显示"位置/尺寸/透明度不变。
+/// </summary>
+/// <param name="State">隐藏前的缩放/位置/透明度/锁定状态。</param>
+/// <param name="Dpi">隐藏前贴图所在屏幕的 DPI（跨屏后重新显示需要正确换算）。</param>
+internal readonly record struct PinWindowSnapshot(PinState State, int Dpi);

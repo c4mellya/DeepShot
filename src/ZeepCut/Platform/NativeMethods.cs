@@ -49,6 +49,9 @@ internal static class NativeMethods
     public const uint MF_STRING = 0x00000000;
     public const uint MF_SEPARATOR = 0x00000800;
 
+    /// <summary>菜单项禁用（灰显且不可点）。没有贴图时的“显示/隐藏全部贴图”用它。</summary>
+    public const uint MF_GRAYED = 0x00000001;
+
     public const uint TPM_RIGHTBUTTON = 0x0002;
     public const uint TPM_NONOTIFY = 0x0080;
     public const uint TPM_RETURNCMD = 0x0100;
@@ -213,6 +216,13 @@ internal static class NativeMethods
     /// <summary>按窗口句柄找所在屏幕（贴图跨屏移动后重新取 DPI）。</summary>
     [DllImport("user32.dll", SetLastError = true)]
     public static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
+
+    /// <summary>枚举所有屏幕（光标定位贴图时用于构造 DisplaySpace）。</summary>
+    [DllImport("user32.dll")]
+    public static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr lprcClip, MonitorEnumProc lpfnEnum, IntPtr dwData);
+
+    /// <summary>EnumDisplayMonitors 回调；返回 false 会停止枚举。</summary>
+    public delegate bool MonitorEnumProc(IntPtr hMonitor, IntPtr hdc, IntPtr lprcMonitor, IntPtr dwData);
 
     /// <summary>系统度量：虚拟桌面（所有屏幕的并集）物理矩形，用于拖动时把贴图留在可见范围。</summary>
     [DllImport("user32.dll")]
