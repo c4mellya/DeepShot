@@ -9,7 +9,7 @@
 
 ## 阶段一：截图闭环
 
-- [ ] **T1 Core 几何与屏幕模型**：`PixelRect`、`MonitorInfo`、`DisplaySpace`、`DpiTransform`。
+- [x] **T1 Core 几何与屏幕模型**：`PixelRect`、`MonitorInfo`、`DisplaySpace`、`DpiTransform`。
   要求：含负坐标屏幕的点查找；选区夹取到目标屏幕；物理像素↔DIP 换算。xUnit 覆盖。
 - [ ] **T2 Core 选区状态机**：`SelectionState`，支持任意方向拖拽生成正矩形、最小尺寸、鼠标抬起定稿。
 - [ ] **T3 应用外壳**：单实例 Mutex、隐藏主窗口、退出生命周期、全局未处理异常日志。
