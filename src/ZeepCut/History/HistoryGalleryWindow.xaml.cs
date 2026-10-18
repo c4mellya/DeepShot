@@ -70,6 +70,9 @@ public sealed class HistoryGalleryWindow : Window
     private bool _busy;
     private HistoryCard? _selected;
 
+    /// <summary>T27：自动清理后写进状态栏的说明（下次有其它操作时会被覆盖）。</summary>
+    private string? _retentionNotice;
+
     /// <summary>
     /// 创建图库窗口。外部必须走 <see cref="HistoryGallery.Show"/>（单实例），
     /// 直接 new 会得到两个同时改同一批记录的图库。
@@ -192,6 +195,7 @@ public sealed class HistoryGalleryWindow : Window
         // --- 第四行：底部提示 ---
         var footer = HistoryUi.Text(
             "提示：双击缩略图看大图；点击星标收藏（收藏项不会被 30 天清理）；" +
+            "选中后用“标注”在现有图片上追加标注并覆盖这条记录；" +
             "“贴图”不会新增历史记录。",
             11.5,
             HistoryUi.SecondaryForeground);
@@ -240,6 +244,9 @@ public sealed class HistoryGalleryWindow : Window
 
     /// <summary>最近打开的大图预览窗口（未打开为 null）。</summary>
     internal HistoryPreviewWindow? Preview { get; private set; }
+
+    /// <summary>当前的追加标注编辑窗口（T28，未打开为 null）。</summary>
+    internal HistoryEditWindow? Edit { get; private set; }
 
     /// <summary>状态栏当前文本（供验证脚本通过日志核对）。</summary>
     internal string StatusText => _status.Text;
@@ -373,6 +380,7 @@ public sealed class HistoryGalleryWindow : Window
         Rename = RenameRecord,
         Preview = OpenPreview,
         ToggleFavorite = ToggleFavorite,
+        Edit = EditRecord,
     };
 
     /// <summary>执行一个 <see cref="HistoryActions"/> 动作并在状态栏显示结果。</summary>
@@ -395,8 +403,42 @@ public sealed class HistoryGalleryWindow : Window
 
     // --- T26 收藏 ---
 
+    /// <summary>
+    /// 切换收藏。T27：**取消一条已过期收藏**时先确认——取消收藏后它会在下一次清理
+    /// （启动或跨日）被删掉，用户必须有机会反悔（PLAN：告知即将清理并允许取消）。
+    /// 文案由 Core 的 <see cref="HistoryRetentionPolicy.DescribeFavoriteRemovalWarning"/> 给出。
+    /// </summary>
     private void ToggleFavorite(HistoryRecord record)
     {
+        if (record.IsFavorite)
+        {
+            var warning = HistoryRetentionPolicy.DescribeFavoriteRemovalWarning(record, DateTime.UtcNow);
+            if (warning is not null)
+            {
+                AppLog.Info(
+                    "History",
+                    $"取消过期收藏确认框已打开：名称={record.Name} Id={record.Id} " +
+                    $"创建={HistoryRecord.FormatUtc(record.CreatedAtUtc)} " +
+                    $"已过期=True 剩余天数=0");
+                var answer = MessageBox.Show(
+                    this,
+                    warning,
+                    "取消收藏",
+                    MessageBoxButton.OKCancel,
+                    MessageBoxImage.Warning,
+                    MessageBoxResult.Cancel);
+
+                if (answer != MessageBoxResult.OK)
+                {
+                    AppLog.Info("History", $"取消过期收藏已放弃：用户选择保留收藏 名称={record.Name}");
+                    UpdateStatus($"已保持收藏“{record.Name}”（收藏不会被自动清理）。");
+                    return;
+                }
+
+                AppLog.Info("History", $"取消过期收藏已确认：名称={record.Name}，它会在下次清理时被删除");
+            }
+        }
+
         var updated = HistoryActions.ToggleFavorite(_store, record);
         if (updated is null)
         {
@@ -409,9 +451,19 @@ public sealed class HistoryGalleryWindow : Window
         var card = _loaded.FirstOrDefault(c => c.Record.Id == updated.Id);
         card?.ApplyFavorite(updated.IsFavorite);
         Reload();
-        UpdateStatus(updated.IsFavorite
-            ? $"已收藏“{updated.Name}”（不会被 30 天清理）。"
-            : $"已取消收藏“{updated.Name}”。");
+
+        if (updated.IsFavorite)
+        {
+            UpdateStatus($"已收藏“{updated.Name}”（不会被 30 天清理）。");
+        }
+        else if (HistoryRetentionPolicy.IsExpired(updated, DateTime.UtcNow))
+        {
+            UpdateStatus($"已取消收藏“{updated.Name}”：它已超过 30 天，会在下次清理时被删除。");
+        }
+        else
+        {
+            UpdateStatus($"已取消收藏“{updated.Name}”。");
+        }
     }
 
     private void SetFavoritesOnly(bool favoritesOnly)
@@ -555,6 +607,88 @@ public sealed class HistoryGalleryWindow : Window
         UpdateStatus(result);
     }
 
+    // --- T28 追加标注覆盖 ---
+
+    /// <summary>
+    /// 打开这条记录的编辑窗口（T28）：复用标注组件，在现有图片上追加标注，
+    /// “保存并覆盖”写回**同一条记录**（保留 Id/名称/创建时间/收藏，不新增记录）。
+    /// 每条记录同时只开一个编辑窗口（再点就激活已有那个）。
+    /// </summary>
+    private void EditRecord(HistoryRecord record)
+    {
+        if (Edit is { } existing)
+        {
+            if (existing.Record.Id == record.Id)
+            {
+                AppLog.Info("History", $"编辑窗口已打开，本次只激活：名称={record.Name} Id={record.Id}");
+                existing.Activate();
+                UpdateStatus("这条记录已经在编辑窗口中打开。");
+                return;
+            }
+
+            AppLog.Info(
+                "History",
+                $"已有另一条记录的编辑窗口（{existing.Record.Name}），先关闭它再打开 {record.Name}");
+            existing.Close();
+        }
+
+        var image = HistoryActions.LoadImage(_store, record);
+        if (image is null)
+        {
+            UpdateStatus("图片文件已丢失，无法追加标注。");
+            return;
+        }
+
+        try
+        {
+            var before = _store.Count();
+            var window = new HistoryEditWindow(this, _store, record, image);
+            window.Closed += (_, _) => OnEditWindowClosed(window, before);
+            Edit = window;
+            window.Show();
+            window.Activate();
+            AppLog.Info(
+                "History",
+                $"历史编辑窗口已打开：名称={record.Name} Id={record.Id} 图片={image.PixelWidth}x{image.PixelHeight} " +
+                $"历史条数={before} 收藏={record.IsFavorite}");
+            UpdateStatus($"正在编辑“{record.Name}”：追加标注后点“保存并覆盖”。");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("History", $"打开历史编辑窗口失败：{record.Name}", ex);
+            UpdateStatus($"打开编辑窗口失败：{ex.Message}");
+        }
+    }
+
+    private void OnEditWindowClosed(HistoryEditWindow window, int countBefore)
+    {
+        if (ReferenceEquals(Edit, window))
+        {
+            Edit = null;
+        }
+
+        if (!window.WasSaved || window.SavedRecord is not { } saved)
+        {
+            AppLog.Info(
+                "History",
+                $"历史编辑窗口已关闭（未保存）：名称={window.Record.Name} Id={window.Record.Id} " +
+                "原图未修改");
+            return;
+        }
+
+        var countAfter = _store.Count();
+        AppLog.Info(
+            "History",
+            $"历史编辑覆盖完成：名称={saved.Name} Id={saved.Id} 尺寸={saved.Width}x{saved.Height} " +
+            $"追加标注={window.AddedAnnotationCount} 历史条数 {countBefore} → {countAfter}：" +
+            $"创建时间={HistoryRecord.FormatUtc(saved.CreatedAtUtc)} 收藏={saved.IsFavorite} " +
+            $"修改时间={HistoryRecord.FormatUtc(saved.UpdatedAtUtc)}");
+
+        Reload();
+        UpdateStatus(
+            $"已保存并覆盖“{saved.Name}”（{saved.Width}×{saved.Height}），历史记录数仍为 {countAfter}。");
+    }
+
     // --- T25 预览 ---
 
     private void OpenPreview(HistoryRecord record)
@@ -693,6 +827,20 @@ public sealed class HistoryGalleryWindow : Window
         _status.ToolTip = message;
     }
 
+    /// <summary>
+    /// 自动清理删掉记录后在图库状态栏写一句说明（T27）。清理是静默的家务活，
+    /// 但用户正看着图库时卡片突然变少会困惑，所以给一行原因。
+    /// </summary>
+    internal void ShowRetentionNotice(string reason)
+    {
+        _retentionNotice = reason;
+        UpdateStatus(reason);
+        AppLog.Info("History", $"历史图库显示清理提示：{reason}");
+    }
+
+    /// <summary>最近一次清理提示文本（验证脚本通过 UIA 的 history-status 读取）。</summary>
+    internal string? RetentionNotice => _retentionNotice;
+
     private void SelectCard(HistoryCard card)
     {
         if (ReferenceEquals(_selected, card))
@@ -730,6 +878,14 @@ public sealed class HistoryGalleryWindow : Window
     private void OnClosedInternal(object? sender, EventArgs e)
     {
         _searchTimer.Stop();
+
+        // T28：图库关闭时一并关闭编辑窗口（未保存就等于取消，原图不动）。
+        if (Edit is { } edit)
+        {
+            Edit = null;
+            edit.Close();
+        }
+
         if (Preview is { } preview)
         {
             Preview = null;

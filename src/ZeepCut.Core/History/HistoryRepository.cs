@@ -396,19 +396,42 @@ public sealed class HistoryRepository
     /// 覆盖图片（T28 用）：先写临时文件 → 校验长度 → 替换旧文件 → 更新元数据。
     /// 写新文件失败时旧文件保持不动（PLAN：保存失败不先销毁原图）。
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>覆盖语义</b>（PLAN「旧标注已属于图片像素，只能追加」）：**保留** Id / 名称 /
+    /// 创建时间 / 收藏状态 / 来源 / 相对路径，只换图片字节、缩略图、宽高与
+    /// <see cref="HistoryRecord.UpdatedAtUtc"/>。**不生成新记录**，所以图库条数不变；
+    /// 创建时间不变也意味着 30 天期限不会因为"又编辑了一次"而延长（T27 规则）。
+    /// </para>
+    /// <para>
+    /// 替换顺序刻意如此：先把新图完整写到 <c>xxx.png.tmp</c> 并核对长度，再
+    /// <see cref="File.Move(string, string, bool)"/> 覆盖正式文件，最后才写缩略图与行。
+    /// 中途任何一步失败，旧图要么还在（写 tmp 失败），要么已被完整的新图替换（Move 之后），
+    /// 不会出现"半个文件"。
+    /// </para>
+    /// <para>
+    /// 记录在编辑期间被删掉时返回 <c>null</c>（不抛异常），调用方提示"记录已不存在"。
+    /// </para>
+    /// </remarks>
     /// <param name="id">记录 Id。</param>
     /// <param name="imageBytes">新的 PNG 字节。</param>
     /// <param name="width">新宽度。</param>
     /// <param name="height">新高度。</param>
-    /// <param name="thumbnailBytes">新缩略图字节；null 表示保留原缩略图路径但文件不变（本轮无调用方）。</param>
+    /// <param name="thumbnailBytes">新缩略图字节；null 表示沿用原缩略图路径（文件不动）。</param>
+    /// <param name="updatedAtUtc">修改时间；null 表示取 <see cref="DateTime.UtcNow"/>（测试可注入）。</param>
     public HistoryRecord? UpdateImage(
         Guid id,
         byte[] imageBytes,
         int width,
         int height,
-        byte[]? thumbnailBytes = null)
+        byte[]? thumbnailBytes = null,
+        DateTime? updatedAtUtc = null)
     {
         ArgumentNullException.ThrowIfNull(imageBytes);
+        if (imageBytes.Length == 0)
+        {
+            throw new HistoryStoreException("新图片字节为空，放弃覆盖（原图未改动）。");
+        }
 
         var existing = GetById(id);
         if (existing is null)
@@ -427,6 +450,7 @@ public sealed class HistoryRepository
                 throw new HistoryStoreException("临时文件长度与预期不一致，放弃覆盖。");
             }
 
+            // 到这一步为止旧图一直没动；Move 是替换语义，失败时旧图还在。
             File.Move(temporaryPath, imagePath, overwrite: true);
 
             string? thumbRelative = existing.RelativeThumbnailPath;
@@ -446,7 +470,7 @@ public sealed class HistoryRepository
                 thumbRelative,
                 width,
                 height,
-                DateTime.UtcNow);
+                updatedAtUtc ?? DateTime.UtcNow);
 
             return Update(updated) ? updated : null;
         }
@@ -463,38 +487,147 @@ public sealed class HistoryRepository
     /// </summary>
     public bool Delete(Guid id)
     {
-        var existing = GetById(id);
-        if (existing is null)
-        {
-            return false;
-        }
+        // T27 顺序修正：**先在同一个事务里读行 + 删行**，提交后再删文件。
+        // 之前是"先单独 GetById（第二条连接）再开事务"，在 WAL 下多一条连接会改变快照，
+        // 真实桌面实测出现过：行已经删掉、却判定"没删掉"从而没删文件（留下孤儿图片），
+        // 返回给调用方的"行已删除=False"也与事实相反。这里读与删在同一事务内，结果必然一致。
+        string? imagePath = null;
+        string? thumbPath = null;
+        bool removed;
 
         using var connection = Open();
         try
         {
             using var transaction = connection.BeginTransaction();
-            using var command = connection.CreateCommand();
-            command.Transaction = transaction;
-            command.CommandText = "DELETE FROM history WHERE Id = $id;";
-            command.Parameters.AddWithValue("$id", FormatId(id));
 
-            var removed = command.ExecuteNonQuery() > 0;
-            transaction.Commit();
-
-            if (removed)
+            using (var select = connection.CreateCommand())
             {
-                DeleteQuietly(HistoryPaths.ToAbsolute(DataRoot, existing.RelativeImagePath));
-                if (!string.IsNullOrWhiteSpace(existing.RelativeThumbnailPath))
+                select.Transaction = transaction;
+                select.CommandText =
+                    "SELECT RelativeImagePath, RelativeThumbnailPath FROM history WHERE Id = $id LIMIT 1;";
+                select.Parameters.AddWithValue("$id", FormatId(id));
+                using var reader = select.ExecuteReader();
+                if (!reader.Read())
                 {
-                    DeleteQuietly(HistoryPaths.ToAbsolute(DataRoot, existing.RelativeThumbnailPath));
+                    transaction.Rollback();
+                    return false;
                 }
+
+                imagePath = reader.GetString(0);
+                thumbPath = reader.IsDBNull(1) ? null : reader.GetString(1);
             }
 
-            return removed;
+            using (var command = connection.CreateCommand())
+            {
+                command.Transaction = transaction;
+                command.CommandText = "DELETE FROM history WHERE Id = $id;";
+                command.Parameters.AddWithValue("$id", FormatId(id));
+                removed = command.ExecuteNonQuery() > 0;
+            }
+
+            transaction.Commit();
         }
         catch (Exception ex) when (ex is not HistoryStoreException)
         {
             throw new HistoryStoreException($"删除历史记录失败：{ex.Message}", ex);
+        }
+
+        // 行已经删掉了，文件删不掉只是留了个孤儿，不影响数据正确性（DeleteQuietly 不抛）。
+        if (removed)
+        {
+            if (!string.IsNullOrWhiteSpace(imagePath))
+            {
+                DeleteQuietly(HistoryPaths.ToAbsolute(DataRoot, imagePath));
+            }
+
+            if (!string.IsNullOrWhiteSpace(thumbPath))
+            {
+                DeleteQuietly(HistoryPaths.ToAbsolute(DataRoot, thumbPath));
+            }
+        }
+
+        return removed;
+    }
+
+    /// <summary>
+    /// 按保留策略清理过期记录（T27）：先按 <see cref="HistoryRetentionPolicy.SelectExpired"/>
+    /// 选出 Id，再逐条走 <see cref="Delete(Guid)"/>（**同一条删除路径**：删行 + 图片 + 缩略图）。
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// **只管应用内部文件**：删除的路径由记录里的相对路径决定，只可能落在
+    /// <c>&lt;数据根&gt;/images</c> 与 <c>thumbs</c>；用户"另存为"到别处的文件不在库里，
+    /// 永远不会被这里碰到（PLAN：自动清理不影响用户另存为的文件）。
+    /// </para>
+    /// <para>
+    /// **文件已缺失也能清理**：<see cref="Delete(Guid)"/> 对不存在的文件视为成功，
+    /// 只删数据库行，不抛异常。单条删除失败（例如库被别的进程锁住）只记进
+    /// <see cref="HistoryRetentionResult.Failures"/>，继续处理后面的记录。
+    /// </para>
+    /// </remarks>
+    /// <param name="nowUtc">"现在"（UTC）。</param>
+    /// <param name="retentionDays">保留天数（默认 30）。</param>
+    public HistoryRetentionResult PurgeExpired(
+        DateTime nowUtc,
+        int retentionDays = HistoryRetentionPolicy.DefaultRetentionDays)
+    {
+        var all = GetAll();
+        var expiredIds = HistoryRetentionPolicy.SelectExpired(all, nowUtc, retentionDays);
+
+        var deleted = new List<Guid>();
+        var failures = new List<(Guid Id, string Reason)>();
+
+        foreach (var id in expiredIds)
+        {
+            try
+            {
+                if (Delete(id))
+                {
+                    deleted.Add(id);
+                }
+                else
+                {
+                    // 并发场景：选完之后被别处删掉了 —— 结果一致，不算失败。
+                    failures.Add((id, "记录已不存在"));
+                }
+            }
+            catch (HistoryStoreException ex)
+            {
+                failures.Add((id, ex.Message));
+            }
+        }
+
+        return new HistoryRetentionResult(
+            TotalBefore: all.Count,
+            ExpiredCount: expiredIds.Count,
+            DeletedIds: deleted,
+            Failures: failures,
+            NowUtc: HistoryRecord.NormalizeUtc(nowUtc),
+            RetentionDays: retentionDays);
+    }
+
+    /// <summary>读出全部记录（清理与统计用；按创建时间倒序）。</summary>
+    public IReadOnlyList<HistoryRecord> GetAll()
+    {
+        using var connection = Open();
+        try
+        {
+            using var command = connection.CreateCommand();
+            command.CommandText =
+                $"SELECT {SelectColumns} FROM history ORDER BY CreatedAtUtc DESC, Id DESC;";
+            using var reader = command.ExecuteReader();
+
+            var records = new List<HistoryRecord>();
+            while (reader.Read())
+            {
+                records.Add(ReadRecord(reader));
+            }
+
+            return records;
+        }
+        catch (Exception ex) when (ex is not HistoryStoreException)
+        {
+            throw new HistoryStoreException($"读取全部历史记录失败：{ex.Message}", ex);
         }
     }
 
@@ -693,6 +826,38 @@ public sealed class HistoryRepository
             // 清孤儿文件失败不影响主流程（数据库里已经没有指向它的记录了）。
         }
     }
+}
+
+/// <summary>
+/// 一次 30 天清理的结果（T27）：给调用方写日志与查证用。
+/// </summary>
+/// <param name="TotalBefore">清理前库里记录总数。</param>
+/// <param name="ExpiredCount">策略判定为过期的记录数（不含收藏）。</param>
+/// <param name="DeletedIds">真正删掉的记录 Id。</param>
+/// <param name="Failures">删除失败（或选完之后已不存在）的 Id 与原因。</param>
+/// <param name="NowUtc">本次清理使用的"现在"。</param>
+/// <param name="RetentionDays">本次使用的保留天数。</param>
+public sealed record HistoryRetentionResult(
+    int TotalBefore,
+    int ExpiredCount,
+    IReadOnlyList<Guid> DeletedIds,
+    IReadOnlyList<(Guid Id, string Reason)> Failures,
+    DateTime NowUtc,
+    int RetentionDays)
+{
+    /// <summary>删掉的记录数。</summary>
+    public int DeletedCount => DeletedIds.Count;
+
+    /// <summary>是否什么都没删（没有过期记录，或全部都失败了）。</summary>
+    public bool IsEmpty => DeletedIds.Count == 0 && Failures.Count == 0;
+
+    /// <summary>清理后的记录数（按清理前总数推算，供日志用）。</summary>
+    public int TotalAfter => Math.Max(0, TotalBefore - DeletedCount);
+
+    public override string ToString() =>
+        $"清理过期历史：保留={RetentionDays} 天 现在={HistoryRecord.FormatUtc(NowUtc)} " +
+        $"清理前={TotalBefore} 过期={ExpiredCount} 已删除={DeletedCount} 失败={Failures.Count} " +
+        $"清理后={TotalAfter}";
 }
 
 /// <summary>

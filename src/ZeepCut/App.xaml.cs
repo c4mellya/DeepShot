@@ -53,6 +53,11 @@ public partial class App : Application
     /// <summary>T24：截图历史的 sink 实例（用于读取 <c>LastFailure</c> 并提示用户）。</summary>
     private HistoryCaptureSink? _historyCaptureSink;
 
+    /// <summary>
+    /// T27：30 天清理调度器（启动清一次 + 跨日再清）。历史不可用时为 null。
+    /// </summary>
+    private HistoryRetentionScheduler? _retentionScheduler;
+
     public App()
     {
         // 全局异常钩子尽早安装，启动阶段（含托盘创建）的异常也能落盘。
@@ -96,6 +101,7 @@ public partial class App : Application
             }
 
             StartGlobalHotkeys();
+            StartHistoryRetention();
             AppLog.Info("App", "启动完成：应用在系统托盘中运行，全局热键已处理");
         }
         catch (Exception ex)
@@ -149,6 +155,11 @@ public partial class App : Application
                 $"新建={schema.Created} 迁移步数={schema.MigratedSteps} " +
                 $"记录数={_historyStore.Count()} 图片目录={repository.ImagesDirectory}");
 
+            // T28：覆盖说明只在跨启动的第一次保存时出现（PLAN：首次使用时解释）。
+            HistoryUiState.Load();
+            HistoryEditWindow.ApplyPersistedExplanation(HistoryUiState.OverwriteExplained);
+            HistoryEditWindow.OnExplanationShown = HistoryUiState.MarkOverwriteExplained;
+
             if (schema.IsNewerThanSupported)
             {
                 AppLog.Warn(
@@ -169,6 +180,49 @@ public partial class App : Application
                 "历史功能不可用",
                 $"无法初始化历史数据库，本次运行的截图与贴图不会被记录：\n{ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// T27：启动 30 天清理并开启跨日检查。历史不可用时什么也不做。
+    /// </summary>
+    /// <remarks>
+    /// 清理规则在 Core（<see cref="HistoryRetentionPolicy"/>）：按**创建时间**算 30 天、
+    /// 编辑与重命名不延期、**收藏豁免**；删除走 <see cref="HistoryRepository.Delete(Guid)"/>
+    /// 同一条路径（行 + images/ + thumbs/ 内部文件），用户另存为到别处的文件不在库内、
+    /// 不会被清理碰到。清理失败只写日志，不影响截图/贴图/图库。
+    /// </remarks>
+    private void StartHistoryRetention()
+    {
+        if (_historyStore is null)
+        {
+            AppLog.Info("History", "30 天清理未启动：历史库本次不可用");
+            return;
+        }
+
+        try
+        {
+            _retentionScheduler = new HistoryRetentionScheduler(_historyStore, OnHistoryPurged);
+            _retentionScheduler.Start();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("History", "30 天清理调度器启动失败（历史功能仍可用，只是不再自动清理）", ex);
+            _retentionScheduler = null;
+        }
+    }
+
+    /// <summary>清理删除了记录后的收尾：刷新已打开的图库（否则用户看到的还是被删掉的卡片）。</summary>
+    private void OnHistoryPurged(int deletedCount, HistoryRetentionResult result)
+    {
+        AppLog.Info("History", $"30 天清理已删除 {deletedCount} 条记录：{result}");
+
+        // 图库没打开时不需要任何提示（启动时清理是"静默的家务活"）。
+        if (!HistoryGallery.IsOpen)
+        {
+            return;
+        }
+
+        HistoryGallery.ReloadIfOpen($"30 天清理删除了 {deletedCount} 条过期记录");
     }
 
     /// <summary>截图/贴图历史写入失败时提示一次（主操作已经成功，只提"历史没记上"）。</summary>
@@ -576,6 +630,7 @@ public partial class App : Application
     {
         AppLog.Info("App", "退出：用户选择托盘菜单“退出”");
         DisposeCaptureOverlay();
+        DisposeHistoryRetention();
         DisposeHistoryGallery();
         DisposePins();
         DisposeGlobalHotkey();
@@ -595,6 +650,13 @@ public partial class App : Application
         _captureOverlay = null;
         overlay.Closed -= OnCaptureOverlayClosed;
         overlay.Cancel();
+    }
+
+    /// <summary>退出时停止 30 天清理调度器（不删任何东西，下次启动会再清一次）。</summary>
+    private void DisposeHistoryRetention()
+    {
+        _retentionScheduler?.Dispose();
+        _retentionScheduler = null;
     }
 
     /// <summary>退出时关闭历史图库窗口（历史数据留在磁盘上，关闭窗口不动数据库）。</summary>
@@ -632,6 +694,7 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         DisposeCaptureOverlay();
+        DisposeHistoryRetention();
         DisposeHistoryGallery();
         DisposePins();
         DisposeGlobalHotkey();

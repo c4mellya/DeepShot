@@ -223,6 +223,10 @@ internal sealed class HistoryCard : Border
         secondRow.Children.Add(Small("改名", "重命名", () => callbacks.Rename?.Invoke(_record)));
         secondRow.Children.Add(Small("删除", "删除这条历史", () => callbacks.Delete?.Invoke(_record)));
 
+        // T28：追加标注并覆盖（在现有图片上继续标注，保存回同一条记录）。
+        var secondRowExtra = Small("标注", "追加标注并覆盖这条记录", () => callbacks.Edit?.Invoke(_record));
+        secondRow.Children.Add(secondRowExtra);
+
         var thirdRow = new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -248,7 +252,17 @@ internal sealed class HistoryCard : Border
         button.Padding = new Thickness(7, 2, 7, 2);
         button.Margin = new Thickness(0, 0, 4, 4);
         button.FontSize = 11.5;
+
+        // 显式字体族：只沿用了字号/内边距时按钮可能继承到不带中文字形的字体，
+        // 会出现“标注”被画成一个方块/缺字（本轮真实桌面实测到过一次）。
+        button.Content = HistoryUi.Text(text, 11.5, HistoryUi.Foreground, measureNaturalWidth: true);
+        button.FontFamily = new FontFamily(HistoryUi.FontFamilyName);
         AutomationProperties.SetAutomationId(button, $"history-action-{text}-{Index}");
+
+        // 宽度按文字实测：HistoryUi.Text 默认带 CharacterEllipsis 与 NoWrap，放进 Grid 的
+        // 自动列时会被量成很小的宽度（实测“标注”按钮只有 49px、字被裁成一条）。
+        button.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        button.MinWidth = Math.Max(0, button.DesiredSize.Width);
         return button;
     }
 
@@ -338,4 +352,7 @@ internal sealed class HistoryCardCallbacks
     internal Action<HistoryRecord>? Preview { get; init; }
 
     internal Action<HistoryRecord>? ToggleFavorite { get; init; }
+
+    /// <summary>T28：打开“追加标注并覆盖”编辑窗口。</summary>
+    internal Action<HistoryRecord>? Edit { get; init; }
 }

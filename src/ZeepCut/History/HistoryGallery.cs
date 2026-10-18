@@ -61,6 +61,30 @@ public static class HistoryGallery
         }
     }
 
+    /// <summary>
+    /// 图库已打开时让它按当前条件重新查库（T27：自动清理删了记录后调用；
+    /// 未打开时什么也不做）。
+    /// </summary>
+    /// <param name="reason">刷新原因（只写日志，便于真实桌面验证核对时间点）。</param>
+    internal static void ReloadIfOpen(string reason)
+    {
+        if (_window is null)
+        {
+            return;
+        }
+
+        AppLog.Info("History", $"历史图库刷新（{reason}）");
+        try
+        {
+            _window.ShowRetentionNotice(reason);
+            _window.Reload();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn("History", $"历史图库刷新失败（忽略）：{ex.Message}");
+        }
+    }
+
     /// <summary>关闭图库（退出应用时调用；未打开时什么也不做）。</summary>
     public static void CloseIfOpen()
     {

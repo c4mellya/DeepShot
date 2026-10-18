@@ -21,7 +21,8 @@ ZeepCut.slnx
 | `SelectionState` | 框选状态机：Idle → Hover → Dragging → Selected → Adjusting。产出规范化矩形（拖拽任意方向都得到正宽高）|
 | `Annotation` 体系 | 矩形/椭圆/箭头/直线/画笔/文字/马赛克的纯数据模型（像素坐标）+ 颜色/粗细/字号 |
 | `EditHistory` | 撤销/重做栈（增删移动标注、修改属性）|
-| `HistoryRules` | 30 天到期判定（按 CreatedAtUtc，收藏豁免）、名称生成、搜索匹配 |
+| `HistoryRetentionPolicy` | 30 天到期判定（按 CreatedAtUtc，编辑/重命名不延期，收藏豁免；**T27 落地名**，早期文档写作 `HistoryRules`）、取消过期收藏前的提示文案 |
+| `HistoryOverwritePlan` | T28 覆盖语义：覆盖基底选择、记录已删除判定、覆盖/删除/首次解释的文案 |
 | `AppSettings` | 设置模型 + 默认值 + 快捷键字符串解析/校验 |
 | `ShortcutSpec` | 快捷键解析与格式化（"Alt+A" ↔ 修饰键+虚拟键），冲突检测 |
 

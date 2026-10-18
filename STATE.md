@@ -6,32 +6,106 @@
 ## 本轮快照
 
 - 日期：2026-10-18
-- 当前阶段：阶段三（历史与设置）→ **T25 历史图库 + T26 历史管理已完成**
-- 本轮任务：**T25 历史图库 + T26 历史管理**（接手上一轮崩溃留下的 1940 行残留代码）
-- 下一步任务：**T27 30 天清理**（启动与跨日清理、收藏豁免、超期收藏取消时二次确认）。
-  T25/T26 现在必须知道的底座：
-  - `HistoryRepository.Delete(id)` 已删行 + 图片 + 缩略图三样（T25 图库删除按钮就是走它，
-    本轮实测过：`images/` 3→2、`thumbs/` 3→2、SQLite 行 3→2，另一个记录的文件不受影响）。
-    T27 的批量清理应复用同一套删除路径，不要另写一份。
-  - `HistoryRepository.SetFavorite` / `Update` 已能改收藏；`HistoryRecord.CreatedAtUtc` 是 30 天
-    期限的唯一依据（改名/收藏只动 `UpdatedAtUtc`，本轮已用数据库核对过）。
-  - **`HistoryRules` 类还不存在**（ROADMAP 里排在 T27），Core 目前没有任何"到期"判定；
-    写 T27 时把规则放进 `src/ZeepCut.Core/History/`，UI 提示文案照 `HistoryRename` /
-    `HistoryView.DescribeEmptyState` 的做法放 Core，便于单测。
-  - 图库窗口每次打开/刷新只查一页（`PageSize = 60`，滚到底自动加载更多）；
-    T27 清理后图库要刷新，可以直接调 `HistoryGallery.Current?.Reload()`（`Reload` 是 internal 的，
-    在 `ZeepCut` 程序集内可直接调）。
+- 当前阶段：阶段三（历史与设置）→ **T27 30 天清理 + T28 追加标注覆盖已完成**
+- 本轮任务：**T27 30 天清理 + T28 追加标注覆盖**
+- 下一步任务：**T29 设置窗口**（快捷键修改与冲突提示、语言、主题、开机启动、数据目录、
+  30 天清理规则说明）。T29 现在必须知道的底座：
+  - 清理规则文案已放在 Core：`HistoryRetentionPolicy.DescribeRule()`（"普通记录保留最近 30 天
+    （按创建时间计算，编辑与重命名不延长期限）；收藏的记录不会被自动清理。"），设置窗口
+    直接调用它，不要另写一份；保留天数常量 `HistoryRetentionPolicy.DefaultRetentionDays = 30`。
+  - 数据目录就是 `AppPaths.DataRoot`（`%LOCALAPPDATA%\ZeepCut`），
+    `AppPaths.EnsureCreated()` 已在启动时建好 `logs/ images/ thumbs/`。
+  - 应用层已经有一个"一次性提示/偏好"的落盘先例：`src/ZeepCut/History/HistoryUiState.cs`
+    （`history-ui.json`，JSON + 失败不抛）。T29 的设置文件（T29 规划的 `AppSettings` JSON）
+    可以照这个写法，但**不要把设置塞进 history-ui.json**，那是历史模块的提示状态。
+  - 快捷键目前是 `App.xaml.cs` 里的常量 `ScreenshotShortcutText = "Alt+A"` /
+    `PinShortcutText = "Alt+S"`，注释里已写明"T29 设置窗口接入后改为从设置读取"。
 - 构建状态：✅ 编译通过，**0 warning 0 error**
-- 测试状态：✅ **958 个测试通过**（上一次提交时 860；本轮把接手残留的
-  `HistoryGroupingTests` 289 行 / `HistoryRenameTests` 106 行 / `HistoryViewTests` 243 行 也算进来，
-  过滤 `--filter 'FullyQualifiedName~ZeepCut.Tests.History'` 实测 **254 个通过**）
-- 桌面验证：✅ 主屏 125%（2560×1440 @ (0,0)）真实桌面实测（脚本 `scripts/verify-t25t26.ps1`，
-  证据 `artifacts/t25t26/`）：托盘“历史”能打开图库、**今天/昨天/具体日期**三组分组正确、
-  卡片显示缩略图+名称+时间+来源+星标、搜索（大小写不敏感、与“只看收藏”组合）、空状态两套文案、
-  星标收藏后**重启应用仍保持**、重命名生效、双击预览大图（Esc 关闭）、
-  从历史贴图后**历史条数不变（3→3）**、删除后**行 + 图片 + 缩略图同步删除**、
-  复制到剪贴板、另存为真实 Win32 对话框保存成功。
-  详见下面“验证证据 / T25/T26 桌面实测”一节。
+- 测试状态：✅ **1014 个测试通过**（上轮 958；本轮 +56：
+  `HistoryRetentionPolicyTests` 26、`HistoryRetentionRepositoryTests` 16、`HistoryOverwritePlanTests` 14）
+- 桌面验证：✅ 主屏 125%（2560×1440 @ (0,0)）真实桌面实测。证据 `artifacts/t27t28/`，
+  驱动脚本 `scripts/verify-t27t28.ps1`（新）+ `scripts/tray-menu-direct.ps1`（新，托盘菜单回退）。
+  真实观察到的关键数字（细节见下面“验证证据 / T27/T28 桌面实测”）：
+  - **T27 启动清理**：启动前 6 行 / `images` 6 / `thumbs` 6（含 31 天前 1 条、29 天前 1 条、
+    40 天前收藏 2 条）→ 启动后 **5 行 / 5 / 5**；日志
+    `30 天清理（启动）：… 清理前=6 过期=1 已删除=1 失败=0 清理后=5`。
+    被删的正是 `T27_31天前_应清理`（图片、缩略图文件同时消失），29 天与两条 40 天收藏都还在。
+  - **T27 取消过期收藏**：40 天前收藏点星标 → 真实 Win32 对话框（标题“取消收藏”）出现，
+    正文含“创建于 40 天前，已经超过 30 天保留期…取消收藏后…会在下次清理（启动或跨日）时被删除”；
+    点“取消”→ 状态栏“已保持收藏…（收藏不会被自动清理）”，星标仍是 ★（未误删）。
+  - **T28 覆盖编辑**：图库卡片“标注”→ 编辑窗口（真实 WPF 窗口，旧标注已在背景像素里）→
+    选“矩形”拖一笔 → “保存并覆盖” → **首次说明对话框**（“覆盖编辑说明…旧版本图片与旧标注
+    「不会被保留」…”）→ 确定。结果：**记录数 5→5（不新增）**，同一条记录
+    `Id=704d94d9…`、名称 `截图_昨天验证`、`CreatedAtUtc=2026-10-17T16:27:45.000Z`、
+    `IsFavorite=0` 全部不变，**`UpdatedAtUtc` 16:39:12Z → 17:31:09Z 变了**；
+    图片仍 760×480、**diff 包围盒 (60,89)-(297,233) 共 2965 像素变化**（新矩形，见
+    `artifacts/t27t28/t28-image-after.png`），缩略图 sha256 也变了；
+    `images/` 与 `thumbs/` 文件数 **5→5 不变**（原地覆盖，无 `.tmp` 残留）。
+  - **T28 取消编辑**：编辑窗口里画一个椭圆 → “取消” → 确认对话框 → 图片与缩略图
+    sha256 与编辑前**完全一致**，文件数不变。
+  - **T28 编辑期间记录被删**：编辑窗口开着时在图库删掉这条记录，再点“保存并覆盖” →
+    弹出“已被删除，本次修改没有保存（原记录不存在，也不会新建一条）”提示，
+    **进程不崩**、不写文件、不新建记录。
+
+### 本轮决策（值得留给下一位）
+
+- **T27 规则放 Core**：新增 `src/ZeepCut.Core/History/HistoryRetentionPolicy.cs`（纯逻辑）：
+  `IsExpired` / `ShouldPurge`（= 过期 且 非收藏）/ `SelectExpired` / `GetExpiryUtc` /
+  `GetRemainingDays` / `DescribeRule` / `DescribeFavoriteRemovalWarning`。
+  **ROADMAP/ARCHITECTURE 里写的类名是 `HistoryRules`，实际落地叫 `HistoryRetentionPolicy`**
+  （与"保留策略"语义一致，且不影响任何已通过类型）；下一位若找 `HistoryRules` 请按这个名字找。
+- **边界**：`now >= CreatedAtUtc + 30 天` 即过期（正好 30 天算过期；29 天 23 小时仍保留；
+  30 天 1 秒清理）。**只看 `CreatedAtUtc`**，改名/收藏/覆盖编辑都只动 `UpdatedAtUtc`，不延期 ——
+  这条写成测试锁住（`WithImage_DoesNotExtendRetention`、`ShouldPurge_RecentlyUpdatedOldRecord_StillExpires`）。
+- **清理复用同一条删除路径**：`HistoryRepository.PurgeExpired(nowUtc, retentionDays)` 先
+  `GetAll()` → `SelectExpired` → 逐条 `Delete(id)`（删行 + `images/` + `thumbs/` 内部文件）。
+  文件已缺失时 `DeleteQuietly` 视为成功，只删行不报错（`PurgeExpired_MissingFiles_DeletesRowOnly`）。
+  单条失败只进 `HistoryRetentionResult.Failures`，不打断其余记录。
+- **启动清一次 + 跨日再清**：`src/ZeepCut/History/HistoryRetentionScheduler.cs`，
+  `DispatcherTimer` 每 1 分钟比较**本地日期**是否变化（不是"每 24 小时"：跨日才是用户能理解的定义，
+  也不受休眠影响），两次清理之间至少隔 5 分钟（防手动改系统时间抖动）。
+  清理**只写日志**，不弹窗（启动时清理是静默家务活）；只有图库开着时才刷新它并写一行状态栏说明。
+- **自动清理不碰用户文件**：删除路径只由记录里的相对路径决定，只可能落在
+  `<数据根>/images`、`thumbs`；用户"另存为"到别处的文件不在库里
+  （`PurgeExpired_DoesNotTouchFilesOutsideDataRoot` 用"另一个目录里的同名文件"验证）。
+- **过期收藏取消收藏要二次确认**：文案在 Core `DescribeFavoriteRemovalWarning`，
+  只有**已过期**（`IsExpired`，与收藏无关）的收藏才弹；点"取消"= 保持收藏、什么都不改
+  （`MessageBoxResult.Cancel` 是默认按钮）。未过期的收藏取消收藏**不弹**（不打扰）。
+- **T28 复用标注组件**：编辑窗口 `src/ZeepCut/History/HistoryEditWindow.cs` 用同一个
+  `AnnotationSession` / `AnnotationLayer` / `AnnotationRenderer` / `AnnotationExportRenderer.Composite`，
+  背景 = 记录当前图片（所以旧标注已在像素里，命中测试碰不到 → "不可拆分修改"就是覆盖语义）；
+  会话文档从空开始，**本次只追加**。没有引入任何新的标注模型。
+- **覆盖写回同一条记录**：走既有的 `HistoryRepository.UpdateImage(id, bytes, w, h, thumb)`：
+  `.tmp` → 校验长度 → `File.Move(overwrite)` → 写缩略图 → `Update` 行（`HistoryRecord.WithImage`
+  保留 Id/名称/创建时间/收藏/来源）。**不生成新记录**，因此图库条数不变、30 天期限也不延长。
+  写 tmp 失败时旧图不动（`UpdateImage_WhenTemporaryWriteFails_OriginalStaysIntact`）。
+- **编辑期间被改名/收藏**：保存前重新 `GetById`，用**库里最新那一版**作基底
+  （`HistoryOverwritePlan.MergeLatest`），避免把编辑器打开时的旧名称/旧星标写回去。
+  记录已被删则返回提示、不写文件、不新建（`DescribeDeleted`）。
+- **"保存并覆盖"按钮文案**（PLAN 硬性要求）+ **首次解释**：`HistoryOverwritePlan.DescribeOverwriteExplanation`
+  在 Core 里（可单测"说明里必须提到不保留旧版本/不新增记录/保留字段"）。说明**跨启动只出现一次**：
+  显示过之后写 `%LOCALAPPDATA%\ZeepCut\history-ui.json`（`HistoryUiState`，JSON 坏了就当没解释过，
+  从不抛异常）。编辑窗口里点"取消"对话框则不保存、留在编辑状态。
+- **双击/多条编辑**：每条记录同时只开一个编辑窗口（再点"标注"= 激活已有窗口）；
+  图库关闭时一并关掉编辑窗口（等价取消，原图不动）。
+- **贴图不受覆盖影响**（PLAN）：贴图窗口持有创建时解码的冻结位图
+  （`PinWindow._image`，`CreateFromHistory` 只在创建时 `TryLoad` 一次），与磁盘文件无共享引用；
+  覆盖只替换 `images/` 下那一个文件，所以已打开的贴图保持原样。**代码层面确认，未做"贴图开着时
+  覆盖"的桌面实测**（见遗留问题）。
+
+### 本轮修掉的真实 bug（都是桌面实测撞出来的）
+
+1. **`HistoryRepository.Delete` 先查行再开事务 → 可能"行删了、文件没删"**。原来是
+   `GetById`（另一条连接）→ 开事务删行；在 WAL 下多一条连接会改变快照，实测出现过
+   `行已删除=False` 但行其实已经删掉、图片/缩略图变成孤儿（图库删除记录时观察到）。
+   已改成**同一事务里 SELECT + DELETE，提交后再删文件**，返回值与事实一致。
+   （T27 清理与 T25 删除都走它，所以这个修复同时覆盖两条路径。）
+2. **历史卡片小按钮把中文画成一条**：`HistoryUi.Text` 默认带 `TextTrimming.CharacterEllipsis`，
+   放进 Grid 自动列/按钮内容里会被量成很窄（实测“标注”按钮 49px，字被裁掉），
+   一度看起来像"按钮不见了/点了没反应"。已给 `HistoryUi.Text` 加
+   `measureNaturalWidth` 参数（去掉省略号）+ `Small()` 里 `Measure` 后设 `MinWidth`。
+3. **`HistoryUi.Button` 的裸 `Content=string`** 在按钮模板里会走默认字体（缺中文字形时画方块），
+   已统一改成 `TextBlock`（带本类字体族）。
 
 ### 本轮：残留代码如何接手（重要）
 
@@ -88,6 +162,66 @@
   代价是滚动位置会回到顶部（见“未验证/遗留”）。
 
 ## 已完成
+
+- 2026-10-18 **T27 30 天清理 + T28 追加标注覆盖**（不重写任何已通过的 Core 类型；只新增类型 +
+  既有类型上加成员）：
+
+  **Core `src/ZeepCut.Core/History/`**
+  - `HistoryRetentionPolicy.cs`（新，纯逻辑）：`DefaultRetentionDays=30`、`RetentionPeriod`、
+    `IsExpired` / `ShouldPurge` / `IsCreatedAtExpired` / `SelectExpired` / `GetExpiryUtc` /
+    `GetRemainingDays` / `DescribeRule` / `DescribeFavoriteRemovalWarning`。
+    只按 `CreatedAtUtc` 判定；收藏豁免；边界含"正好 30 天"；非法参数（负天数/null 记录）抛明确异常。
+  - `HistoryOverwritePlan.cs`（新，纯逻辑）：`EditState{Available,Deleted}` + `ResolveState`、
+    `MergeLatest`（用库里最新一版作覆盖基底，Id 不一致直接抛）、`WasModifiedElsewhere`、
+    `DescribeSaved` / `DescribeDeleted` / `DescribeOverwriteExplanation`（三个面向用户的文案）。
+  - `HistoryRepository.cs`（只加成员 + 修 1 个 bug，未改既有签名语义）：
+    - 新 `GetAll()`（按创建时间倒序全量读）。
+    - 新 `PurgeExpired(nowUtc, retentionDays)` → `HistoryRetentionResult`（清理前/过期数/已删 Id/
+      失败列表/现在/天数 + `TotalAfter`、`IsEmpty`、`ToString`），内部**逐条走 `Delete(id)`**。
+    - `UpdateImage` 增加可选 `updatedAtUtc`（测试可注入）与空字节拒绝，文档写清覆盖语义
+      （保留 Id/名称/创建时间/收藏/来源/相对路径，只换图片/缩略图/宽高/修改时间）。
+    - **修复 `Delete`**：同一事务内 SELECT + DELETE，提交后再删文件（见"本轮修掉的真实 bug"#1）。
+
+  **App `src/ZeepCut/History/`**
+  - `HistoryRetentionScheduler.cs`（新）：`Start()` = 立刻清一次 + 起 `DispatcherTimer`；
+    每 `CheckInterval`(1 分钟) 比较本地日期，跨日且距上次清理 ≥ `MinimumInterval`(5 分钟) 再清；
+    `Purge(trigger)` 吞掉所有异常只写日志；`LastResult` / `IsRunning` / `LastPurgeUtc` 供诊断。
+  - `HistoryEditWindow.cs`（新，约 900 行，纯代码构建 UI）：标题“Zeep Cut 编辑历史 · 名称”，
+    顶部记录信息 + “旧标注已合并进图片像素，只能继续追加（不可拆分修改）”，中间
+    `ScrollViewer`+`Image(Stretch=None)` 1:1 显示原图，右侧工具栏（选择/矩形/椭圆/箭头/直线/
+    画笔/文字/马赛克、颜色、粗细、撤销/重做/删除选中、缩放 −/＋/1:1/适应窗口、
+    **保存并覆盖**、取消），底部状态行。
+    - 鼠标：绘制工具 = 拖拽草稿（`AnnotationSession.BeginDraft/UpdateDraft/CommitDraft`）；
+      文字工具 = 窗口内输入框（Enter 提交 / Esc 取消）；选择模式 = 手柄缩放 / 整体平移 /
+      双击文字重新编辑（全部走 `AnnotationEditController`）。
+    - 键盘：Ctrl+Z / Ctrl+Y、Delete / Back、Esc（草稿 → 拖拽 → 选中 → 取消窗口）、Ctrl+S 保存。
+    - 保存：`GetById` 确认记录还在（不在 → 提示 + 不写文件）→ 首次弹说明 → `Compose()`
+      （`AnnotationExportRenderer.Composite`，尺寸必须等于原图）→ `EncodePng` + 缩略图 →
+      `UpdateImage` → 日志（新尺寸/字节数/追加标注数/保留的创建时间/收藏/历史条数前后）。
+    - 取消：画过东西才确认（`OKCancel` 默认取消），从不写文件。
+  - `HistoryUiState.cs`（新）：`history-ui.json` 里记 `OverwriteExplained`，读失败按"没解释过"，
+    写失败只 WARN；`Load()` / `MarkOverwriteExplained()`。
+  - `HistoryGalleryWindow.xaml.cs`：新增 `EditRecord`（打开/激活编辑窗口、关闭上一个）、
+    `OnEditWindowClosed`（保存过才 `Reload()` 并写状态栏）、`Edit` 属性、图库关闭时关编辑窗口、
+    `ShowRetentionNotice` / `RetentionNotice`（自动清理后的一行说明）、
+    `ToggleFavorite` 加**过期收藏取消收藏的二次确认**（文案来自 Core）、底部提示补一句"标注"。
+  - `HistoryGallery.cs`：新增 `ReloadIfOpen(reason)`（App 清理后调用）。
+  - `HistoryCard.cs` / `HistoryUi.cs`：卡片操作条新增“标注”按钮（`history-action-标注-N`）；
+    `HistoryUi.Text` 加 `measureNaturalWidth`、`Button` 内容改 TextBlock（修 bug #2/#3）。
+  - `Editor/AnnotationLayer.cs`：新增 `DpiOverride`（窗口 `Loaded` 后拿到真实 DPI 再交给标注层，
+    125% 屏上文字/线宽不再偏差），`_dipPerPixel` 由 readonly 改为可写。
+  - `App.xaml.cs`：`StartHistoryRetention()`（历史不可用就跳过）、`OnHistoryPurged`（图库开着才刷新）、
+    `DisposeHistoryRetention()`（托盘退出与 `OnExit` 都调）、启动时 `HistoryUiState.Load()` +
+    `HistoryEditWindow.ApplyPersistedExplanation(...)` + `OnExplanationShown = MarkOverwriteExplained`。
+
+  **测试（+56）**：`tests/ZeepCut.Tests/History/HistoryRetentionPolicyTests.cs`（26）、
+  `HistoryRetentionRepositoryTests.cs`（16，含"文件缺失只删行""不碰数据目录外文件""写 tmp 失败原图不动"、
+  覆盖后字段/文件数/删 .tmp 等）、`HistoryOverwritePlanTests.cs`（14）。
+
+  **脚本**：`scripts/verify-t27t28.ps1`（新，场景 `diagnose/gallery/unfav/editor/overwrite/cancel/all`，
+  UIA 按 AutomationId 点到每个按钮、读 Win32 MessageBox 正文、点标准按钮）、
+  `scripts/tray-menu-direct.ps1`（新，托盘菜单回退：`PostMessage(WM_TRAYICON)` 打开真实菜单再点第 N 行；
+  原因见"遗留问题"）。
 
 - 2026-10-18 **T25 历史图库 + T26 历史管理**（接手上一轮崩溃留下的残留代码，补齐缺口而不是重写；
   详细“怎么接手”见上面的本轮快照表格）：
@@ -464,7 +598,135 @@
   `MSB3021/MSB3027 … ZeepCut.Core.dll is being used by another process`（被 `Zeep Cut (pid)` 锁住），
   看起来像编译错误其实是文件占用。本轮结尾就踩了一次：`Stop-Process ZeepCut` 后再跑即 0 warning 0 error。
 
+## 未验证 / 遗留问题（T27/T28 本轮）
+
+- **跨日清理没有等真实跨日**：`HistoryRetentionScheduler` 的"日期变化 → 再清一次"逻辑只做了
+  代码走查（`DispatcherTimer` 每分钟比较 `DateTime.Now.Date`），**没有把系统时间调到第二天实测**
+  （改系统时间会污染其它验证）。启动清理是真实实测的；跨日路径的规则本身由
+  `HistoryRetentionPolicyTests` 覆盖（给不同的 `now`）。
+- **调度器"清理一次"没有直接测"开着应用跨过零点"**：同上，未实测。
+- **"贴图开着时覆盖该记录"未做桌面实测**：代码层面确认贴图是创建时的冻结快照
+  （`PinWindow._image`，只在 `CreateFromHistory` 时 `TryLoad` 一次），覆盖不触碰它；但没有
+  "先贴一张 → 再覆盖同一条记录 → 观察贴图不变"的真实桌面截图。
+- **编辑窗口的缩放按钮 / Ctrl+滚轮缩放 / 适应窗口**没有逐个点过（打开时自动 `FitToWindow`
+  走到了日志 `编辑窗口缩放：86%`/`158%`）；标注的**马赛克、画笔、文字、箭头、直线、椭圆**在编辑窗口里
+  没有逐个桌面实测（本轮实测了矩形；这些工具与截图遮罩共用同一套 `AnnotationSession` 渲染代码，
+  T15/T16/T17 已实测过）。
+- **文字输入框在编辑窗口里的 Enter/Esc**（新增/双击改字）未实测，只做了代码走查。
+- **多屏**：编辑窗口只在主屏 125% 打开过（副屏 100% / 负坐标未测）。
+- **UIA 点击在图库卡片**上本轮遇到一次"点了没反应"（`InvokePattern` 与真实鼠标都试过），
+  最终用**真实鼠标点 + `InvokePattern` 组合**跑通；`verify-t27t28.ps1` 里已加入
+  "点击前把图库提到最前 + 用 `WindowFromPoint` 断言点击目标"的保护，但仍建议下一位用脚本
+  点卡片时先跑 `-Scenario diagnose` 看 `TOP AT …` 是不是 `Zeep Cut 历史`。
+- **托盘图标 UIA 名字有时很久不可用**：本轮重启后 `scripts/tray-menu.ps1`（按 UIA 名字找图标）
+  连续失败，改为 `scripts/tray-menu-direct.ps1`（`PostMessage(WM_TRAYICON)` 打开真实菜单）
+  才稳定。验证脚本已自动回退，但**托盘图标本身的可访问性问题仍未查明**
+  （可能是 Windows 11 重启后通知区域缓存还没建好）。
+- **WAL 与"WSL 侧直接改库"**：本轮在 WSL 侧用 `python3` 直接写 `/mnt/c` 下的 `history.db`
+  时遇到两类坑，记下免得下一位再踩：
+  1. 应用运行中**不能**直接对库做写操作，也不能只替换 `history.db` —— 应用自己那条连接还开着
+     `-wal`，新的行会读不到/看不到旧行（旧 WAL 帧仍生效）。要造数据请**先退出应用**，
+     并且**连 `history.db-wal`/`-shm` 一起删掉**再启动。
+  2. `cp` 到 `/tmp` 后用 python `sqlite3` 读副本时，**必须连 `-wal` 一起 cp**，否则看到的是
+     过时的主文件（本轮一度以为"行没被删"，其实 WAL 里已删）。
+  3. 沙箱/9p 偶尔会让 python 读 `/mnt/c/...` 报 `PermissionError`/`disk I/O error`，
+     用 shell 的 `cp` 拷到 `/tmp` 后一切正常（`cp` 本身没问题）。
+- **`HistoryRepository.Delete` 的修复**是"读+删同事务"，`PurgeExpired` 与图库删除都受益；
+  但**图库删除按钮**在修复后的代码上只做了单元测试（`HistoryRetentionRepositoryTests`），
+  没有重新在桌面点一遍"删除 → 图片/缩略图同时消失"（上一次 T25 桌面验证时走的是修复前的实现）。
+- 清理**不会**提示用户（只写日志/刷新图库）。若 PLAN 之后要求"清理后提示"，接在
+  `App.OnHistoryPurged`（现在只刷新图库）里即可。
+- 构建前必须先退出应用（MSB3021/MSB3027）这条规则**本轮又踩了一次**，已按 AGENTS.md 处理。
+
 ## 验证证据
+
+- 2026-10-18 **T27/T28 构建+测试（最终代码）**：先 `Get-Process ZeepCut` 确认**应用已退出**
+  （应用运行时踩到过 MSB3021 `ZeepCut.exe is being used by another process`，按 AGENTS.md 先退出再构建），
+  再 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+  '\\wsl.localhost\Ubuntu\home\camellya\workspace\Zeep-Cut\scripts\build.ps1'` →
+  `Build succeeded.`、`0 Warning(s)`、`0 Error(s)`；测试 → `Passed! - Failed: 0, Passed: 1014, Skipped: 0,
+  Total: 1014`；末尾 `BUILD+TEST OK`。
+
+- 2026-10-18 **T27 真实桌面实测（主屏 \\.\\DISPLAY1 0,0 2560×1440 DPI=120/125%；证据 `artifacts/t27t28/`）**。
+  造数据的方式（**先退出应用**，然后 WSL 侧用 `cp` 把 `history.db` 拉到 `/tmp`，用 python `sqlite3`
+  写行 + 写 PNG 文件，再 `cp` 回 `%LOCALAPPDATA%\ZeepCut\`，**连 `-wal`/`-shm` 一起删掉**）：
+  6 行 = `T27_40天前收藏_保留`(fav, 2026-09-08) / `T27_40天前收藏_保留2`(fav) /
+  `T27_31天前_应清理`(2026-09-17) / `T27_29天前_保留`(2026-09-19) / 昨天的 `截图_昨天验证` /
+  今天的 `Abc 报告`(fav)；`images/` 6 个、`thumbs/` 6 个。快照存档
+  `artifacts/t27t28/db-T27-step0-before-launch.db`。
+  - **启动清理**（`scripts/run.ps1` 冷启动）：日志
+    `30 天清理（启动）：清理过期历史：保留=30 天 现在=2026-10-18T17:28:23.725Z 清理前=6 过期=1 已删除=1 失败=0 清理后=5`
+    与 `30 天清理已删除 1 条记录`；`30 天清理调度器已启动：每 1 分钟检查日期变化，当前日期=2026-10-18`。
+  - **结果核对**（WSL 侧：`cp history.db* images/ thumbs/` 到 `/tmp` 后读副本，**必须带 WAL**）：
+    行 **6 → 5**，`images/` **6 → 5**、`thumbs/` **6 → 5**；消失的正是 `T27_31天前_应清理`
+    这一行 + `images/20261018-172715-817-1f6e4724.png` + 同名 `.thumb.png`；
+    `T27_29天前_保留`（29 天，未到期）与 `T27_40天前收藏_保留*`（40 天，收藏）**都还在**，
+    收藏行的 `IsFavorite=1` 未变。存档 `artifacts/t27t28/db-T27-step1-after-start.db`。
+  - **取消过期收藏的二次确认**（`scripts/verify-t27t28.ps1 -Scenario unfav -CardIndex 3`，
+    当时库里有 4 条、卡片 3 是 40 天前收藏）：点星标 → 真实 Win32 对话框
+    标题 `取消收藏`、按钮 `1:OK | 2:Cancel`，正文（读 STATIC 控件）：
+    `“T27_40天前收藏_保留”创建于 40 天前，已经超过 30 天保留期。\n\n取消收藏后，这条记录会在下次清理（启动或跨日）时被删除，图片、缩略图与记录都会永久移除。\n\n确定取消收藏吗？选择“取消”可以保持收藏、什么都不改。`
+    截图 `artifacts/t27t28/unfav-warning.png`（可见图库 + 该对话框）。
+    点 **Cancel(IDCANCEL=2)** → 状态栏 `已保持收藏“T27_40天前收藏_保留”（收藏不会被自动清理）。`，
+    该卡片星标仍是 `取消收藏`（= 仍为收藏），日志 `取消过期收藏已放弃：用户选择保留收藏`。
+    截图 `artifacts/t27t28/after-unfav-cancel.png`。
+  - **"正好 30 天 / 29 天 23 小时 / 30 天 1 秒"三个边界**由单元测试锁住
+    （`HistoryRetentionPolicyTests.IsExpired_ExactlyThirtyDays_IsExpired` /
+    `…_TwentyNineDaysTwentyThreeHours_IsNotExpired` / `…_ThirtyDaysPlusOneSecond_IsExpired`），
+    桌面侧实测的是 31 天（删）/ 29 天（留）/ 40 天收藏（留）。
+
+- 2026-10-18 **T28 真实桌面实测（同上环境；证据 `artifacts/t27t28/`）**。被测记录：
+  `截图_昨天验证`，`Id=704d94d9-c0a3-473c-8e94-a2fabdade02e`，760×480，收藏=0，
+  `CreatedAtUtc=2026-10-17T16:27:45.000Z`，`UpdatedAtUtc=2026-10-18T16:39:12.779Z`。
+  - **打开编辑窗口**：图库卡片 1 选中后用 `InvokePattern` 点 `history-action-标注-1`（UIA 名
+    `追加标注并覆盖这条记录`）；日志 `历史编辑窗口已创建：… 图片=760x480 收藏=False
+    创建=2026-10-17T16:27:45.000Z …（旧标注已在像素中，只能追加）`、`编辑窗口缩放：86%`。
+    窗口截图 `artifacts/t27t28/editor-open.png` / `editor-open-primary.png`
+    （标题栏 `Zeep Cut 编辑历史 · 截图_昨天验证`，右侧 8 个工具 + 颜色 + 粗细 + 撤销/重做/删除 +
+    缩放 + “保存并覆盖”/“取消”）。
+  - **追加标注**：点 `history-edit-tool-矩形` → 在图像内真实拖拽 → 日志
+    `编辑窗口开始画标注：工具=Rectangle 起点图像=(62,91) 图片=760x480`、
+    `编辑窗口标注抬起：工具=Rectangle 已提交=True 文档标注数=1 撤销栈=1`、
+    `编辑窗口状态：已追加 1 个标注…`。截图 `t28-editor-annotated.png`（图像上出现红框）。
+  - **首次“保存并覆盖”解释**：点 `history-edit-save` → 日志 `首次使用覆盖编辑，显示覆盖语义说明`，
+    真实 MessageBox 标题 `保存并覆盖`，正文含
+    `“截图_昨天验证”现在的标注已经合并进图片像素，不能再拆分修改，只能在这张图上继续追加标注。`
+    `点“保存并覆盖”会用新图替换这条记录原来的图片：· 名称、创建时间与收藏状态保持不变，不会新增一条历史记录；· 旧版本图片与旧标注「不会被保留」，无法撤销回编辑前的样子。`
+    `想保留一份原图，请先取消，在图库里用“另存为”导出。`
+    截图 `artifacts/t27t28/overwrite-explanation.png` / `-crop.png`（可见编辑器里已有的红框 +
+    对话框）。点 OK 后日志 `已记录“覆盖说明已解释”到 C:\Users\19427\AppData\Local\ZeepCut\history-ui.json`
+    （文件内容 `{"OverwriteExplained":true}`）。
+  - **保存结果**（日志）：
+    `编辑窗口保存并覆盖成功：名称=截图_昨天验证 Id=704d94d9-… 新尺寸=760x480 图片字节=32176
+    缩略图字节=18129 追加标注=1 创建时间保留=2026-10-17T16:27:45.000Z 收藏保留=False
+    修改时间=2026-10-18T17:31:09.217Z … 历史条数 5 → 5（不新增记录） 图片文件=images/20261018-122702-740-704d94d9.png`
+    以及 `历史编辑覆盖完成：… 历史条数 5 → 5：创建时间=… 收藏=False 修改时间=…`。
+    **WAL 快照对比**（`artifacts/t27t28/db-T28-before.db` vs `db-T28-after.db`）：
+    **行数 6 → 6、Id 集合完全相同**；逐列比对后只有 `UpdatedAtUtc` 变化
+    （`17:20:34.962Z → 17:31:09.217Z`）；`Id / Name / CreatedAtUtc / IsFavorite / RelativeImagePath /
+    RelativeThumbnailPath / Width / Height / Source` **全部一致**。
+    **文件**：`images/` **5 → 5**、`thumbs/` **5 → 5**（原地覆盖，没有多出 `.tmp` 文件）；
+    `images/20261018-122702-740-704d94d9.png` 的 sha256 `93ca87b3…` → `a8233d33…`，
+    缩略图 `4b47110b…` → `13a1f951…`（对比记录 `artifacts/t27t28/t28-before-sha.txt`）。
+    **像素**：新旧图都是 **760×480**；diff 包围盒 `(60,89)-(297,233)`、**2965 个像素变化**，
+    即新画的矩形；图里原有的界面内容完全没变（`artifacts/t27t28/t28-image-after.png`，
+    看得出两个红框：一个是本次画的、一个是上一次验证遗留的）。
+  - **取消编辑不改原图**：编辑窗口里选 `history-edit-tool-椭圆` 拖一个椭圆（日志
+    `编辑窗口标注抬起：工具=Ellipse 已提交=True 文档标注数=1`）→ 点 `history-edit-cancel` →
+    MessageBox 标题 `取消编辑`，正文 `放弃这次追加的标注吗？原图不会被修改（取消编辑不改变这条历史记录）。`
+    点 OK → 日志 `编辑窗口取消编辑：… 追加标注=1 个已丢弃，原图未修改` 与
+    `历史编辑窗口已关闭（未保存）：… 原图未修改`；**图片与缩略图 sha256 与编辑前逐字节相同**，
+    `images/`、`thumbs/` 文件数不变。截图 `cancel-confirm.png`。
+  - **编辑期间记录被删除**：编辑窗口开着时，在图库对同一条记录点 `history-action-删除-2` 并确认
+    （这一步同时暴露了下面 bug #1），再回编辑窗口点“保存并覆盖” → 日志
+    `[WARN] 编辑窗口保存失败（侧栏按钮）：记录已被删除 Id=cffafdc0-… 名称=T27_29天前_保留，不写任何文件`，
+    真实 MessageBox 标题 `保存并覆盖`，正文
+    `“T27_29天前_保留”在编辑期间已被删除，本次修改没有保存（原记录不存在，也不会新建一条）。`
+    **进程未崩溃**、没有新行、没有新文件。截图 `save-deleted-warning.png`。
+  - **图库端佐证**：保存后 `历史图库刷新：… 命中=5 显示=5 分组=今天=1 | 昨天=1 | 2026-09-19 星期六=1 |
+    2026-09-08 星期二=2 总记录=5`，卡片 1 的 meta 仍是 `2026-10-17 12:27:45 · 760×480 · 截图`
+    （时间/尺寸不变），缩略图重新生成（`t28-thumb-after.png` 320×202）。
+
 
 - 2026-10-18 **T25/T26 构建+测试（最终代码）**：`powershell.exe -NoProfile -ExecutionPolicy Bypass -File
   '\\wsl.localhost\Ubuntu\home\camellya\workspace\Zeep-Cut\scripts\build.ps1'` → `Build succeeded.`、

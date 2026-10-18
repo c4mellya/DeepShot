@@ -30,7 +30,7 @@ public sealed class AnnotationLayer : FrameworkElement
 {
     private readonly AnnotationDocument _document;
     private readonly Func<Annotation?> _previewProvider;
-    private readonly double _dipPerPixel;
+    private double _dipPerPixel;
     private readonly BitmapSource? _sourceImage;
     private readonly PixelRect? _cropRect;
 
@@ -78,9 +78,36 @@ public sealed class AnnotationLayer : FrameworkElement
     }
 
     private readonly int _dpi;
+    private int? _dipPerPixelOverride;
 
     /// <summary>目标屏幕 DPI。</summary>
-    public int Dpi => _dpi;
+    public int Dpi => _dipPerPixelOverride.HasValue ? _dipPerPixelOverride.Value : _dpi;
+
+    /// <summary>
+    /// 覆写 DPI（T28 历史编辑窗口用）：窗口在 <c>Loaded</c> 之后才知道自己落在哪块屏上，
+    /// 此时把真实 DPI 交给标注层，`OnRender` 里的 <c>pixelsPerDip</c> 才与 WPF 实际渲染一致
+    /// （否则 125% 屏上文字/线宽会偏差 25%）。设置后需要 <see cref="InvalidateVisual"/>。
+    /// </summary>
+    public int? DpiOverride
+    {
+        get => _dipPerPixelOverride;
+        set
+        {
+            if (value.HasValue && value.Value <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(value), value, "DPI 必须为正数。");
+            }
+
+            _dipPerPixelOverride = value;
+            if (value.HasValue)
+            {
+                _dipPerPixel = 96.0 / value.Value;
+                InvalidateMosaicCache();
+            }
+
+            InvalidateVisual();
+        }
+    }
 
     /// <summary>清除马赛克缓存（选区变化或源图变化后调用）。</summary>
     public void InvalidateMosaicCache() => _mosaicCache.Clear();

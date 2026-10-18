@@ -55,11 +55,20 @@ internal static class HistoryUi
     }
 
     /// <summary>创建一段文字。</summary>
+    /// <param name="text">文字。</param>
+    /// <param name="fontSize">字号。</param>
+    /// <param name="foreground">颜色（默认主文字色）。</param>
+    /// <param name="weight">字重。</param>
+    /// <param name="measureNaturalWidth">
+    /// 去掉 <see cref="TextTrimming.CharacterEllipsis"/> 让文本按内容测宽。
+    /// 默认的省略号样式放进 Grid 自动列/按钮内容里会被量得很窄，把中文裁成一条。
+    /// </param>
     internal static TextBlock Text(
         string text,
         double fontSize = 13,
         Brush? foreground = null,
-        FontWeight? weight = null)
+        FontWeight? weight = null,
+        bool measureNaturalWidth = false)
     {
         var block = new TextBlock
         {
@@ -68,7 +77,8 @@ internal static class HistoryUi
             FontSize = fontSize,
             Foreground = foreground ?? Foreground,
             TextWrapping = TextWrapping.NoWrap,
-            TextTrimming = TextTrimming.CharacterEllipsis,
+            TextTrimming = measureNaturalWidth ? TextTrimming.None : TextTrimming.CharacterEllipsis,
+            HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
         };
 
@@ -87,7 +97,9 @@ internal static class HistoryUi
     {
         var button = new Button
         {
-            Content = text,
+            // 内容用 TextBlock 而不是裸字符串：保证中文字形一定按本类的字体族渲染
+            // （裸 Content 会走按钮模板的默认字体，缺中文字形时会画出方块）。
+            Content = Text(text, 13, measureNaturalWidth: true),
             Padding = new Thickness(12, 5, 12, 5),
             Margin = new Thickness(0, 0, 6, 0),
             FontFamily = new FontFamily(FontFamilyName),
