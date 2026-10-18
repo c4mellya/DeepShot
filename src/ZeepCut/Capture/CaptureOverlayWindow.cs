@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
@@ -8,10 +9,12 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using Microsoft.Win32;
+using ZeepCut.Core.Annotations;
 using ZeepCut.Core.Capture;
 using ZeepCut.Core.Geometry;
 using ZeepCut.Core.Output;
 using ZeepCut.Core.Selection;
+using ZeepCut.Editor;
 using ZeepCut.Output;
 using ZeepCut.Pins;
 using ZeepCut.Platform;
@@ -63,12 +66,22 @@ public sealed class CaptureOverlayWindow : Window
     private static readonly Color ButtonBorderColor = Color.FromArgb(0x4D, 0xFF, 0xFF, 0xFF);
     private static readonly Color StatusErrorColor = Color.FromRgb(0xFF, 0xA0, 0x80);
     private static readonly Color StatusInfoColor = Color.FromRgb(0xB8, 0xD8, 0xB8);
+    private static readonly Color ToolSelectedColor = Color.FromArgb(0x66, 0x00, 0xA2, 0xFF);
+    private static readonly Color SwatchSelectedStrokeColor = Color.FromRgb(0xFF, 0xFF, 0xFF);
+    private static readonly Color SwatchStrokeColor = Color.FromArgb(0x66, 0xFF, 0xFF, 0xFF);
+
+    /// <summary>文字输入框相对点击点的偏移（DIP），避免框盖住正在输入的基线。</summary>
+    private const double TextEditorOffsetY = 4;
+    private const double TextEditorMinWidth = 160;
 
     private readonly ScreenCaptureResult _capture;
     private readonly IReadOnlyList<WindowCandidate> _candidates;
     private readonly DpiTransform _transform;
     private readonly SelectionController _selection;
     private readonly ICaptureSink _sink;
+
+    /// <summary>标注会话：文档 + 撤销历史 + 工具设置 + 草稿/文字输入状态（T14/T15）。</summary>
+    private readonly AnnotationSession _session = new();
 
     private readonly Path _dim;
     private readonly Rectangle _border;
@@ -78,12 +91,30 @@ public sealed class CaptureOverlayWindow : Window
     private readonly Border _toolbar;
     private readonly TextBlock _toolbarSizeText;
     private readonly TextBlock _statusText;
+    private Border? _lockBadge;
+    private TextBlock? _lockText;
+    private readonly Canvas _annotationHost;
     private readonly List<(string Label, Button Element)> _toolbarButtons = new();
+    private readonly List<(AnnotationTool? Tool, Button Element)> _toolButtons = new();
+    private readonly List<(AnnotationColor Color, Button Element)> _colorSwatches = new();
+    private readonly List<(int Thickness, Button Element)> _thicknessButtons = new();
+
+    /// <summary>遮罩窗口 DIP ↔ 截图图像物理像素（选区定稿后才有值）。</summary>
+    private AnnotationCanvasTransform? _canvas;
+
+    /// <summary>选区内绘制层（随选区位置/尺寸摆放）。</summary>
+    private AnnotationLayer? _annotationLayer;
+
+    /// <summary>文字输入框宿主（覆盖在选区上方的一层）。</summary>
+    private Border? _textEditorHost;
+    private TextBox? _textEditor;
 
     private readonly SolidColorBrush _selectionStroke = CreateFrozenBrush(Colors.White);
     private readonly SolidColorBrush _hoverStroke = CreateFrozenBrush(HoverStrokeColor);
     private readonly SolidColorBrush _statusErrorBrush = CreateFrozenBrush(StatusErrorColor);
     private readonly SolidColorBrush _statusInfoBrush = CreateFrozenBrush(StatusInfoColor);
+
+    private bool _annotationPointerDown;
 
     private int _lastPhysicalX;
     private int _lastPhysicalY;
@@ -94,6 +125,8 @@ public sealed class CaptureOverlayWindow : Window
     private PixelRect? _lastHoverLogged;
     private SelectionState _lastLoggedState = SelectionState.None;
     private bool _toolbarLogged;
+    private bool _lockLogged;
+
 
     public CaptureOverlayWindow(
         ScreenCaptureResult capture,
@@ -172,13 +205,20 @@ public sealed class CaptureOverlayWindow : Window
             IsHitTestVisible = false,
         };
 
-        visualLayer.Children.Add(_dim);
         visualLayer.Children.Add(_border);
         visualLayer.Children.Add(_sizeBadge);
         foreach (var handle in CreateHandles())
         {
             visualLayer.Children.Add(handle.Value);
         }
+
+        // --- 标注层宿主：只覆盖选区，随选区摆放；标注画在压暗层之上、边框/手柄之下。 ---
+        _annotationHost = new Canvas
+        {
+            IsHitTestVisible = false,
+            ClipToBounds = true,
+            Visibility = Visibility.Collapsed,
+        };
 
         // --- 交互层：工具栏按钮必须能被点到。 ---
         _toolbarSizeText = new TextBlock
@@ -206,6 +246,12 @@ public sealed class CaptureOverlayWindow : Window
         var chromeLayer = new Canvas();
         chromeLayer.Children.Add(_toolbar);
 
+        // --- 文字输入层：最上层，输入框在选区内。 ---
+        _textEditorHost = CreateTextEditorHost();
+        var textLayer = new Canvas();
+        textLayer.Children.Add(_textEditorHost);
+        textLayer.Children.Add(CreateLockIndicator());
+
         var image = new Image
         {
             Source = capture.Image,
@@ -217,9 +263,16 @@ public sealed class CaptureOverlayWindow : Window
         RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
 
         var root = new Grid { Background = Brushes.Black };
+        // Grid 不支持 Canvas 定位，标注层套一层 Canvas 才能按选区摆放。
+        var annotationCanvas = new Canvas { IsHitTestVisible = false };
+        annotationCanvas.Children.Add(_annotationHost);
+
         root.Children.Add(image);
+        root.Children.Add(_dim);
+        root.Children.Add(annotationCanvas);
         root.Children.Add(visualLayer);
         root.Children.Add(chromeLayer);
+        root.Children.Add(textLayer);
         Content = root;
 
         SourceInitialized += OnSourceInitialized;
@@ -384,16 +437,58 @@ public sealed class CaptureOverlayWindow : Window
 
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
+        // 文字输入时按键归输入框：Enter 确认文字、Esc 取消文字，绝不能触发复制/关闭遮罩。
+        if (_session.IsTextEditing)
+        {
+            if (e.Key == Key.Escape)
+            {
+                e.Handled = true;
+                CancelTextInput("Esc");
+            }
+            else if (e.Key == Key.Enter && (Keyboard.Modifiers & ModifierKeys.Shift) != ModifierKeys.Shift)
+            {
+                // Shift+Enter 插换行，普通 Enter 确认文字（都不触发复制）。
+                e.Handled = true;
+                CommitTextInput("Enter");
+            }
+
+            return;
+        }
+
+        var isCtrl = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
+        if (isCtrl && e.Key is Key.Z or Key.Y)
+        {
+            e.Handled = true;
+            if (e.Key == Key.Z)
+            {
+                UndoAnnotation("Ctrl+Z");
+            }
+            else
+            {
+                RedoAnnotation("Ctrl+Y");
+            }
+
+            return;
+        }
+
         switch (e.Key)
         {
             case Key.Escape:
                 e.Handled = true;
+                if (_session.IsDrafting)
+                {
+                    _session.CancelDraft();
+                    ReleaseAnnotationPointer();
+                    AppLog.Info("Editor", "取消正在拖拽的标注草稿（Esc）");
+                    UpdateVisuals();
+                    return;
+                }
+
                 Cancel("Esc");
                 break;
 
             case Key.Enter:
                 e.Handled = true;
-                // 文字编辑（T12 之后）尚未实现，Enter 直接触发真实的复制动作。
                 TriggerCopy("键盘 Enter");
                 break;
         }
@@ -409,11 +504,64 @@ public sealed class CaptureOverlayWindow : Window
             return;
         }
 
+        // 点在文字输入框上时交给输入框（移动插入点/选择文字）。
+        if (IsInsideTextEditor(position))
+        {
+            return;
+        }
+
+        // 在别处按下：先提交正在输入的文字，再进行本次操作。
+        if (_session.IsTextEditing)
+        {
+            CommitTextInput("点击其它位置");
+        }
+
         // 点击遮罩时确保窗口有键盘焦点，Enter/Esc 才能一直生效。
         Activate();
         Focus();
         Keyboard.Focus(this);
         ClearStatus();
+
+        if (CanDrawAnnotation())
+        {
+            var canvas = _canvas!.Value;
+            if (IsInsideSelectionPhysical(canvas, position))
+            {
+                BeginAnnotationAt(canvas, position);
+                e.Handled = true;
+                UpdateVisuals(position);
+                return;
+            }
+        }
+
+        // 已选绘制工具时不允许用拖动改选区（否则会无意中把标注的坐标系挪走）。
+        // 要重新框选请先点工具栏“选择”。
+        if (_session.ActiveTool.HasValue && _selection.IsCaptureReady)
+        {
+            if (!_lockLogged)
+            {
+                _lockLogged = true;
+                AppLog.Info("Editor", "已选绘制工具，选区外按下被忽略（先点工具栏“选择”才能重新框选/调整选区）");
+            }
+
+            e.Handled = true;
+            return;
+        }
+
+        // 选区已锁定（已开始标注）时禁止移动/调整选区，点选区外只记日志。
+        if (_session.IsSelectionLocked && _selection.IsCaptureReady)
+        {
+            if (!_lockLogged)
+            {
+                _lockLogged = true;
+                AppLog.Info(
+                    "Editor",
+                    $"选区已锁定（文档中有 {_session.Count} 个标注），忽略选区外点击，只允许继续画标注");
+            }
+
+            e.Handled = true;
+            return;
+        }
 
         var (physicalX, physicalY) = ToPhysical(position);
         var previousState = _selection.State;
@@ -447,6 +595,37 @@ public sealed class CaptureOverlayWindow : Window
 
     private void OnPreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
+        if (_annotationPointerDown)
+        {
+            _annotationPointerDown = false;
+            if (IsMouseCaptured)
+            {
+                ReleaseMouseCapture();
+            }
+
+            var canvas = _canvas!.Value;
+            var dip = e.GetPosition(this);
+            var imagePoint = canvas.ToImageClamped(dip.X, dip.Y);
+            _session.UpdateDraft(imagePoint);
+
+            var draft = _session.Draft;
+            var tool = draft?.Tool.ToString() ?? "无";
+            var start = draft?.Start ?? default;
+            var bounds = draft?.Annotation.Bounds ?? default;
+            var points = draft?.PointCount ?? 0;
+            var committed = _session.CommitDraft();
+
+            AppLog.Info(
+                "Editor",
+                $"标注抬起：工具={tool} 起点图像={start} 终点图像={imagePoint} 包围盒={bounds} 画笔点数={points} " +
+                $"已提交={committed} 文档标注数={_session.Count} " +
+                $"撤销栈={_session.History.UndoCount} 重做栈={_session.History.RedoCount} " +
+                $"选区锁定={_session.IsSelectionLocked}");
+            e.Handled = true;
+            UpdateVisuals(dip);
+            return;
+        }
+
         if (!_pointerDown)
         {
             return;
@@ -490,6 +669,14 @@ public sealed class CaptureOverlayWindow : Window
         _lastPhysicalX = physicalX;
         _lastPhysicalY = physicalY;
 
+        if (_annotationPointerDown && _canvas is { } canvas)
+        {
+            _session.UpdateDraft(canvas.ToImageClamped(position.X, position.Y));
+            _annotationLayer?.InvalidateVisual();
+            UpdateVisuals(position);
+            return;
+        }
+
         if (_pointerDown)
         {
             _selection.PointerDragged(physicalX, physicalY);
@@ -520,6 +707,12 @@ public sealed class CaptureOverlayWindow : Window
     private void OnLostMouseCapture(object sender, MouseEventArgs e)
     {
         // 未收到 MouseUp 就丢失捕获（例如 Alt+Tab）时，用最后位置定稿，避免卡在 Dragging。
+        if (_annotationPointerDown)
+        {
+            FinishAnnotationDrag("捕获丢失");
+            return;
+        }
+
         if (!_pointerDown)
         {
             return;
@@ -548,6 +741,328 @@ public sealed class CaptureOverlayWindow : Window
     private DipRect ToDip(PixelRect physical) =>
         WindowCandidateSelector.ToDipBounds(physical, _capture.Bounds, _capture.Dpi);
 
+    // --- T14/T15 标注：工具、绘制层、文字输入、撤销重做。 ---
+
+    /// <summary>
+    /// 是否可以把鼠标按下解释为“画标注”：选区已定稿、没有在调整，且当前有绘制工具。
+    /// </summary>
+    private bool CanDrawAnnotation() =>
+        _canvas.HasValue &&
+        _session.ActiveTool.HasValue &&
+        _selection.State == SelectionState.Selected &&
+        _selection.IsCaptureReady &&
+        !_session.IsTextEditing;
+
+    /// <summary>窗口内 DIP 点是否落在选区内部（按下开始绘制的前提）。</summary>
+    private bool IsInsideSelectionPhysical(AnnotationCanvasTransform canvas, Point dip)
+    {
+        var screenX = _capture.Bounds.Left + _transform.DipToPixel(dip.X);
+        var screenY = _capture.Bounds.Top + _transform.DipToPixel(dip.Y);
+        return canvas.Selection.Contains(screenX, screenY);
+    }
+
+    /// <summary>在选区内的 DIP 位置开始画标注（拖拽草稿或文字输入）。</summary>
+    private void BeginAnnotationAt(AnnotationCanvasTransform canvas, Point dip)
+    {
+        var imagePoint = canvas.ToImageClamped(dip.X, dip.Y);
+        ClearStatus();
+
+        if (_session.ActiveTool == AnnotationTool.Text)
+        {
+            BeginTextInput(canvas, imagePoint);
+            return;
+        }
+
+        try
+        {
+            _session.BeginDraft(imagePoint);
+        }
+        catch (InvalidOperationException ex)
+        {
+            AppLog.Warn("Editor", $"无法开始标注：{ex.Message}");
+            SetStatus("当前状态不能绘制标注");
+            return;
+        }
+
+        _annotationPointerDown = true;
+        CaptureMouse();
+        AppLog.Info(
+            "Editor",
+            $"开始画标注：工具={_session.ActiveTool} 起点图像={imagePoint} 颜色={_session.Settings.Color} " +
+            $"粗细={_session.Settings.Thickness} 选区={_selection.Selection} 屏幕DPI={_capture.Dpi}");
+    }
+
+    /// <summary>鼠标在画标注时结束草稿（丢失捕获兜底，用最后位置定稿）。</summary>
+    private void FinishAnnotationDrag(string reason)
+    {
+        if (!_annotationPointerDown)
+        {
+            return;
+        }
+
+        _annotationPointerDown = false;
+        if (_canvas is { } canvas)
+        {
+            _session.UpdateDraft(canvas.ToImageClamped(
+                _transform.PixelToDip(_lastPhysicalX - _capture.Bounds.Left),
+                _transform.PixelToDip(_lastPhysicalY - _capture.Bounds.Top)));
+        }
+
+        var committed = _session.CommitDraft();
+        AppLog.Warn(
+            "Editor",
+            $"标注拖拽被中断（{reason}），已用最后位置提交={committed}，文档标注数={_session.Count}");
+        UpdateVisuals();
+    }
+
+    private void ReleaseAnnotationPointer()
+    {
+        _annotationPointerDown = false;
+        if (IsMouseCaptured)
+        {
+            ReleaseMouseCapture();
+        }
+    }
+
+    private void BeginTextInput(AnnotationCanvasTransform canvas, PixelPoint imagePoint)
+    {
+        TextAnnotation pending;
+        try
+        {
+            pending = _session.BeginText(imagePoint);
+        }
+        catch (InvalidOperationException ex)
+        {
+            AppLog.Warn("Editor", $"无法开始文字输入：{ex.Message}");
+            SetStatus("当前状态不能输入文字");
+            return;
+        }
+
+        var origin = canvas.ToDip(imagePoint);
+        var editor = EnsureTextEditor();
+        editor.Text = string.Empty;
+        _session.UpdateTextPreview(string.Empty);
+
+        var available = canvas.SelectionDip.Width - (origin.X - canvas.SelectionDip.Left) - 8;
+        var width = Math.Clamp(available, TextEditorMinWidth, 360);
+        _textEditorHost!.Width = width;
+        Canvas.SetLeft(_textEditorHost, origin.X);
+        Canvas.SetTop(_textEditorHost, origin.Y + TextEditorOffsetY);
+        _textEditorHost.Visibility = Visibility.Visible;
+        // 输入框字号与标注字号一致（物理像素 → DIP），所见即所得。
+        editor.FontSize = Math.Max(8, canvas.ToDipLength(pending.FontSize));
+        _textEditorHost.UpdateLayout();
+
+        AppLog.Info(
+            "Editor",
+            $"文字输入开始：图像坐标={imagePoint} 锚点DIP=({origin.X:0.##},{origin.Y:0.##}) " +
+            $"输入框DIP=({Canvas.GetLeft(_textEditorHost):0.##},{Canvas.GetTop(_textEditorHost):0.##}) " +
+            $"宽度={width:0.##} 字号={pending.FontSize} 颜色={pending.Color} " +
+            $"（Enter 确认文字、Esc 取消文字，均不触发复制/关闭遮罩）");
+
+        // 输入框自己拿键盘焦点；遮罩的 PreviewKeyDown 仍先收到按键，用于拦截 Enter/Esc。
+        _textEditorHost.Focus();
+        editor.Focus();
+        Keyboard.Focus(editor);
+        editor.CaretIndex = 0;
+    }
+
+    private void CommitTextInput(string source)
+    {
+        if (!_session.IsTextEditing)
+        {
+            return;
+        }
+
+        var text = _textEditor?.Text ?? string.Empty;
+        var committed = _session.CommitText(text);
+        HideTextEditor();
+        RestoreOverlayFocus();
+
+        AppLog.Info(
+            "Editor",
+            $"文字提交（{source}）：长度={text.Length} 内容=\"{TextPreview(text)}\" 已提交={committed} " +
+            $"文档标注数={_session.Count} 撤销栈={_session.History.UndoCount}");
+        UpdateVisuals();
+    }
+
+    private void CancelTextInput(string source)
+    {
+        if (!_session.IsTextEditing)
+        {
+            return;
+        }
+
+        var text = _textEditor?.Text ?? string.Empty;
+        _session.CancelText();
+        HideTextEditor();
+        RestoreOverlayFocus();
+        AppLog.Info("Editor", $"文字输入取消（{source}）：丢弃内容=\"{TextPreview(text)}\"，不产生标注");
+        UpdateVisuals();
+    }
+
+    private static string TextPreview(string text)
+    {
+        var single = text.Replace("\r", string.Empty, StringComparison.Ordinal)
+            .Replace("\n", "\\n", StringComparison.Ordinal);
+        return single.Length <= 40 ? single : single[..40] + "…";
+    }
+
+    private void HideTextEditor()
+    {
+        if (_textEditorHost is not null)
+        {
+            _textEditorHost.Visibility = Visibility.Collapsed;
+        }
+
+        if (_textEditor is not null)
+        {
+            _textEditor.Text = string.Empty;
+        }
+    }
+
+    private bool IsInsideTextEditor(Point dip)
+    {
+        if (_textEditorHost is null || _textEditorHost.Visibility != Visibility.Visible)
+        {
+            return false;
+        }
+
+        var left = Canvas.GetLeft(_textEditorHost);
+        var top = Canvas.GetTop(_textEditorHost);
+        if (double.IsNaN(left))
+        {
+            left = 0;
+        }
+
+        if (double.IsNaN(top))
+        {
+            top = 0;
+        }
+
+        var width = _textEditorHost.ActualWidth > 0 ? _textEditorHost.ActualWidth : _textEditorHost.DesiredSize.Width;
+        var height = _textEditorHost.ActualHeight > 0
+            ? _textEditorHost.ActualHeight
+            : _textEditorHost.DesiredSize.Height;
+
+        return dip.X >= left && dip.X <= left + width && dip.Y >= top && dip.Y <= top + height;
+    }
+
+    private TextBox EnsureTextEditor() =>
+        _textEditor ?? throw new InvalidOperationException("文字输入框尚未创建。");
+
+    private void UndoAnnotation(string source)
+    {
+        var description = _session.History.NextUndoDescription ?? "无";
+        var done = _session.Undo();
+        AppLog.Info(
+            "Editor",
+            $"撤销（{source}）：{description} 成功={done} 文档标注数={_session.Count} " +
+            $"撤销栈={_session.History.UndoCount} 重做栈={_session.History.RedoCount} " +
+            $"选区锁定={_session.IsSelectionLocked}");
+
+        if (!done)
+        {
+            SetStatus("没有可撤销的标注");
+            return;
+        }
+
+        _annotationLayer?.InvalidateVisual();
+        UpdateVisuals();
+    }
+
+    private void RedoAnnotation(string source)
+    {
+        var description = _session.History.NextRedoDescription ?? "无";
+        var done = _session.Redo();
+        AppLog.Info(
+            "Editor",
+            $"重做（{source}）：{description} 成功={done} 文档标注数={_session.Count} " +
+            $"撤销栈={_session.History.UndoCount} 重做栈={_session.History.RedoCount} " +
+            $"选区锁定={_session.IsSelectionLocked}");
+
+        if (!done)
+        {
+            SetStatus("没有可重做的标注");
+            return;
+        }
+
+        _annotationLayer?.InvalidateVisual();
+        UpdateVisuals();
+    }
+
+    /// <summary>选区变化时更新标注画布：换算、摆放绘制层、刷新工具选中态。</summary>
+    private void UpdateAnnotationCanvas(DipRect selectionDip)
+    {
+        if (!_selection.IsCaptureReady || selectionDip.IsEmpty)
+        {
+            _canvas = null;
+            _annotationHost.Visibility = Visibility.Collapsed;
+            _annotationHost.Children.Clear();
+            _annotationLayer = null;
+            if (_session.IsDrafting)
+            {
+                _session.CancelDraft();
+            }
+
+            return;
+        }
+
+        var canvas = new AnnotationCanvasTransform(
+            _capture.Bounds,
+            _capture.Dpi,
+            _selection.Selection);
+        _canvas = canvas;
+
+        var layer = _annotationLayer;
+        if (layer is null || layer.Dpi != _capture.Dpi)
+        {
+            layer = new AnnotationLayer(_session.Document, _capture.Dpi, () => _session.Preview);
+            _annotationLayer = layer;
+            _annotationHost.Children.Clear();
+            _annotationHost.Children.Add(layer);
+        }
+
+        layer.Width = selectionDip.Width;
+        layer.Height = selectionDip.Height;
+        Canvas.SetLeft(_annotationHost, selectionDip.Left);
+        Canvas.SetTop(_annotationHost, selectionDip.Top);
+        _annotationHost.Width = selectionDip.Width;
+        _annotationHost.Height = selectionDip.Height;
+        _annotationHost.Visibility = Visibility.Visible;
+        layer.InvalidateVisual();
+    }
+
+    private void UpdateToolSelectionVisuals()
+    {
+        foreach (var (tool, button) in _toolButtons)
+        {
+            var selected = tool == _session.ActiveTool;
+            button.Background = CreateFrozenBrush(selected ? ToolSelectedColor : ButtonBackgroundColor);
+            button.FontWeight = selected ? FontWeights.Bold : FontWeights.Normal;
+        }
+
+        foreach (var (color, element) in _colorSwatches)
+        {
+            var selected = color == _session.Settings.Color;
+            element.BorderBrush = CreateFrozenBrush(selected ? SwatchSelectedStrokeColor : SwatchStrokeColor);
+            element.BorderThickness = new Thickness(selected ? 2 : 1);
+        }
+
+        foreach (var (thickness, element) in _thicknessButtons)
+        {
+            var selected = thickness == _session.Settings.Thickness;
+            element.Background = CreateFrozenBrush(selected ? ToolSelectedColor : ButtonBackgroundColor);
+        }
+
+        if (_lockText is not null)
+        {
+            var locked = _session.IsSelectionLocked;
+            _lockText.Text = locked ? $"选区已锁定（{_session.Count} 个标注）" : string.Empty;
+            _lockText.Visibility = locked ? Visibility.Visible : Visibility.Collapsed;
+        }
+    }
+
     private void UpdateVisuals(Point? pointerDip = null)
     {
         var clientWidth = ActualWidth;
@@ -570,11 +1085,14 @@ public sealed class CaptureOverlayWindow : Window
 
         DipRect? highlight = physicalHighlight.HasValue ? ToDip(physicalHighlight.Value) : null;
 
+        UpdateAnnotationCanvas(_selection.IsCaptureReady ? ToDip(_selection.Selection) : DipRect.Empty);
         UpdateDim(client, highlight);
         UpdateBorder(highlight);
         UpdateHandles(highlight);
         UpdateSizeBadge(client, highlight);
         UpdateToolbar(client, highlight);
+        UpdateToolSelectionVisuals();
+        UpdateLockBadge(client, highlight);
 
         var pointer = pointerDip ?? new Point(
             _transform.PixelToDip(_lastPhysicalX - _capture.Bounds.Left),
@@ -622,7 +1140,11 @@ public sealed class CaptureOverlayWindow : Window
 
     private void UpdateHandles(DipRect? highlight)
     {
-        var show = _selection.State is SelectionState.Selected or SelectionState.Adjusting;
+        // 选区锁定（已开始标注）或处于绘制工具模式时隐藏手柄：此时不允许再调整选区尺寸。
+        var show = _selection.State is SelectionState.Selected or SelectionState.Adjusting
+                   && !_session.IsSelectionLocked
+                   && !_session.ActiveTool.HasValue;
+
         if (!show || !highlight.HasValue || highlight.Value.IsEmpty)
         {
             foreach (var handle in _handles.Values)
@@ -748,13 +1270,29 @@ public sealed class CaptureOverlayWindow : Window
 
     private void UpdateCursor(Point pointerDip)
     {
-        if (IsInsideToolbar(pointerDip))
+        if (IsInsideToolbar(pointerDip) || IsInsideTextEditor(pointerDip))
         {
             Cursor = Cursors.Arrow;
             return;
         }
 
+        // 绘制工具 + 已定稿选区：选区内是十字（可画），选区外是箭头（画出界无效）。
+        if (_session.ActiveTool.HasValue && _selection.IsCaptureReady && !_session.IsTextEditing)
+        {
+            Cursor = _canvas is { } canvas && IsInsideSelectionPhysical(canvas, pointerDip)
+                ? Cursors.Cross
+                : Cursors.Arrow;
+            return;
+        }
+
         if (_pointerDown || _selection.State == SelectionState.Dragging)
+        {
+            Cursor = Cursors.Cross;
+            return;
+        }
+
+        // 选区锁定后不再提供移动/八向光标（此时选区不可调整）。
+        if (_session.IsSelectionLocked)
         {
             Cursor = Cursors.Cross;
             return;
@@ -1147,21 +1685,56 @@ public sealed class CaptureOverlayWindow : Window
             VerticalAlignment = VerticalAlignment.Center,
         };
 
-        panel.Children.Add(_toolbarSizeText);
-        panel.Children.Add(_statusText);
-        panel.Children.Add(new Border
-        {
-            Width = 1,
-            Height = 18,
-            Margin = new Thickness(10, 0, 0, 0),
-            Background = CreateFrozenBrush(Color.FromArgb(0x4D, 0xFF, 0xFF, 0xFF)),
-            VerticalAlignment = VerticalAlignment.Center,
-        });
+        // 两行：上行标注工具，下行颜色/粗细 + 撤销重做 + 输出动作。
+        var rows = new StackPanel { Orientation = Orientation.Vertical };
 
-        panel.Children.Add(CreateToolbarButton("复制", () => TriggerCopy("工具栏按钮“复制”")));
-        panel.Children.Add(CreateToolbarButton("另存为", () => TriggerSaveAs("工具栏按钮“另存为”")));
-        panel.Children.Add(CreateToolbarButton("贴图", () => TriggerPin("工具栏按钮“贴图”")));
-        panel.Children.Add(CreateToolbarButton("取消", () => Cancel("工具栏取消按钮"), emphasize: true));
+        var toolRow = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Margin = new Thickness(0, 0, 0, 5),
+        };
+
+        toolRow.Children.Add(CreateToolButton("选择", null));
+        toolRow.Children.Add(CreateToolButton("矩形", AnnotationTool.Rectangle));
+        toolRow.Children.Add(CreateToolButton("椭圆", AnnotationTool.Ellipse));
+        toolRow.Children.Add(CreateToolButton("箭头", AnnotationTool.Arrow));
+        toolRow.Children.Add(CreateToolButton("直线", AnnotationTool.Line));
+        toolRow.Children.Add(CreateToolButton("画笔", AnnotationTool.Freehand));
+        toolRow.Children.Add(CreateToolButton("文字", AnnotationTool.Text));
+        toolRow.Children.Add(CreateToolButton("马赛克", AnnotationTool.Mosaic));
+
+        var actionRow = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        actionRow.Children.Add(_toolbarSizeText);
+        actionRow.Children.Add(_statusText);
+        actionRow.Children.Add(CreateToolbarSeparator());
+
+        foreach (var color in AnnotationPalette.Colors)
+        {
+            actionRow.Children.Add(CreateColorSwatch(color));
+        }
+
+        actionRow.Children.Add(CreateToolbarSeparator());
+
+        foreach (var thickness in AnnotationPalette.Thicknesses)
+        {
+            actionRow.Children.Add(CreateThicknessButton(thickness));
+        }
+
+        actionRow.Children.Add(CreateToolbarSeparator());
+        actionRow.Children.Add(CreateToolbarButton("撤销", () => UndoAnnotation("工具栏按钮“撤销”")));
+        actionRow.Children.Add(CreateToolbarButton("重做", () => RedoAnnotation("工具栏按钮“重做”")));
+        actionRow.Children.Add(CreateToolbarButton("复制", () => TriggerCopy("工具栏按钮“复制”")));
+        actionRow.Children.Add(CreateToolbarButton("另存为", () => TriggerSaveAs("工具栏按钮“另存为”")));
+        actionRow.Children.Add(CreateToolbarButton("贴图", () => TriggerPin("工具栏按钮“贴图”")));
+        actionRow.Children.Add(CreateToolbarButton("取消", () => Cancel("工具栏取消按钮"), emphasize: true));
+
+        rows.Children.Add(toolRow);
+        rows.Children.Add(actionRow);
 
         return new Border
         {
@@ -1170,9 +1743,256 @@ public sealed class CaptureOverlayWindow : Window
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(6),
             Padding = new Thickness(12, 6, 12, 6),
-            Child = panel,
+            Child = rows,
             Visibility = Visibility.Collapsed,
         };
+    }
+
+    /// <summary>上行标注工具按钮：“选择”传 <c>null</c> 表示回到不绘制模式。</summary>
+    private Button CreateToolButton(string label, AnnotationTool? tool)
+    {
+        var button = new Button
+        {
+            Content = label,
+            Foreground = Brushes.White,
+            Background = CreateFrozenBrush(ButtonBackgroundColor),
+            BorderBrush = CreateFrozenBrush(ButtonBorderColor),
+            BorderThickness = new Thickness(1),
+            Padding = new Thickness(8, 4, 8, 4),
+            Margin = new Thickness(0, 0, 6, 0),
+            FontSize = 12,
+            FontFamily = new FontFamily("Segoe UI"),
+            Focusable = false,
+            IsTabStop = false,
+            Cursor = Cursors.Hand,
+        };
+
+        button.Click += (_, _) => SelectTool(tool);
+        AutomationProperties.SetName(button, $"工具{label}");
+        _toolButtons.Add((tool, button));
+        _toolbarButtons.Add(($"工具{label}", button));
+        return button;
+    }
+
+    /// <summary>下行颜色按钮：18×18 色块，选中的加白色粗边框。</summary>
+    private Button CreateColorSwatch(AnnotationColor color)
+    {
+        var button = new Button
+        {
+            Width = 20,
+            Height = 20,
+            Background = CreateFrozenBrush(Color.FromArgb(color.Alpha, color.Red, color.Green, color.Blue)),
+            BorderBrush = CreateFrozenBrush(SwatchStrokeColor),
+            BorderThickness = new Thickness(1),
+            Margin = new Thickness(0, 0, 4, 0),
+            Focusable = false,
+            IsTabStop = false,
+            Cursor = Cursors.Hand,
+            ToolTip = color.ToString(),
+        };
+
+        button.Click += (_, _) => SelectColor(color);
+        var label = $"颜色{color}";
+        AutomationProperties.SetName(button, label);
+        _colorSwatches.Add((color, button));
+        _toolbarButtons.Add((label, button));
+        return button;
+    }
+
+    /// <summary>下行粗细按钮：显示像素数字，选中高亮。</summary>
+    private Button CreateThicknessButton(int thickness)
+    {
+        var button = new Button
+        {
+            Content = thickness.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            Foreground = Brushes.White,
+            Background = CreateFrozenBrush(ButtonBackgroundColor),
+            BorderBrush = CreateFrozenBrush(ButtonBorderColor),
+            BorderThickness = new Thickness(1),
+            Padding = new Thickness(6, 2, 6, 2),
+            Margin = new Thickness(0, 0, 4, 0),
+            FontSize = 11,
+            FontFamily = new FontFamily("Segoe UI"),
+            Focusable = false,
+            IsTabStop = false,
+            Cursor = Cursors.Hand,
+            ToolTip = $"粗细 {thickness} 像素",
+        };
+
+        button.Click += (_, _) => SelectThickness(thickness);
+        var label = $"粗细{thickness}";
+        AutomationProperties.SetName(button, label);
+        _thicknessButtons.Add((thickness, button));
+        _toolbarButtons.Add((label, button));
+        return button;
+    }
+
+    private static Border CreateToolbarSeparator() => new()
+    {
+        Width = 1,
+        Height = 18,
+        Margin = new Thickness(6, 0, 6, 0),
+        Background = CreateFrozenBrush(Color.FromArgb(0x4D, 0xFF, 0xFF, 0xFF)),
+        VerticalAlignment = VerticalAlignment.Center,
+    };
+
+    /// <summary>切换绘制工具（“选择”= 不绘制）。绘制中不允许切换。</summary>
+    private void SelectTool(AnnotationTool? tool)
+    {
+        if (_session.IsDrafting)
+        {
+            AppLog.Info("Editor", $"正在拖拽标注，忽略切换到工具 {tool?.ToString() ?? "选择"}");
+            return;
+        }
+
+        if (_session.IsTextEditing)
+        {
+            CommitTextInput("切换工具");
+        }
+
+        try
+        {
+            _session.SetActiveTool(tool);
+        }
+        catch (InvalidOperationException ex)
+        {
+            AppLog.Warn("Editor", $"切换工具失败：{ex.Message}");
+            return;
+        }
+
+        AppLog.Info(
+            "Editor",
+            $"标注工具切换：{(_session.ActiveTool?.ToString() ?? "选择")}；" +
+            $"颜色={_session.Settings.Color} 粗细={_session.Settings.Thickness} 字号={_session.Settings.FontSize}；" +
+            $"选区锁定={_session.IsSelectionLocked} 文档标注数={_session.Count}");
+        UpdateToolSelectionVisuals();
+        UpdateVisuals();
+    }
+
+    /// <summary>选颜色：只影响之后创建的标注。</summary>
+    private void SelectColor(AnnotationColor color)
+    {
+        _session.Settings.Color = color;
+        AppLog.Info("Editor", $"标注颜色切换：{color}（对之后创建的标注生效）");
+        UpdateToolSelectionVisuals();
+    }
+
+    /// <summary>选粗细：只影响之后创建的标注。</summary>
+    private void SelectThickness(int thickness)
+    {
+        _session.Settings.Thickness = thickness;
+        AppLog.Info("Editor", $"标注粗细切换：{_session.Settings.Thickness} 像素（对之后创建的标注生效）");
+        UpdateToolSelectionVisuals();
+    }
+
+    /// <summary>文字输入框：随点击位置出现在选区内，Enter 确认 / Esc 取消。</summary>
+    private Border CreateTextEditorHost()
+    {
+        _textEditor = new TextBox
+        {
+            Foreground = Brushes.White,
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            FontSize = 14,
+            FontFamily = new FontFamily("Segoe UI"),
+            CaretBrush = Brushes.White,
+            Padding = new Thickness(0),
+            AcceptsReturn = true,
+            TextWrapping = TextWrapping.NoWrap,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Hidden,
+        };
+
+        _textEditor.TextChanged += (_, _) =>
+        {
+            if (_session.IsTextEditing)
+            {
+                _session.UpdateTextPreview(_textEditor.Text);
+                _annotationLayer?.InvalidateVisual();
+            }
+        };
+
+        // 输入框内也拦截 Enter（确认文字），避免它被当成复制；Shift+Enter 换行。
+        _textEditor.PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key == Key.Enter && (Keyboard.Modifiers & ModifierKeys.Shift) != ModifierKeys.Shift)
+            {
+                e.Handled = true;
+                CommitTextInput("文字输入框 Enter");
+            }
+            else if (e.Key == Key.Escape)
+            {
+                e.Handled = true;
+                CancelTextInput("文字输入框 Esc");
+            }
+        };
+
+        var host = new Border
+        {
+            Background = CreateFrozenBrush(Color.FromArgb(0xE6, 0x10, 0x10, 0x10)),
+            BorderBrush = CreateFrozenBrush(Color.FromRgb(0x00, 0xA2, 0xFF)),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(3),
+            Padding = new Thickness(4, 2, 4, 2),
+            Child = _textEditor,
+            Visibility = Visibility.Collapsed,
+        };
+
+        AutomationProperties.SetName(host, "标注文字输入框");
+        return host;
+    }
+
+    /// <summary>选区锁定的可视化提示（选区右上方小标签），一开始标注就显示。</summary>
+    private Border CreateLockIndicator()
+    {
+        _lockText = new TextBlock
+        {
+            Foreground = Brushes.White,
+            FontSize = 11,
+            FontFamily = new FontFamily("Segoe UI"),
+            Visibility = Visibility.Visible,
+        };
+
+        _lockBadge = new Border
+        {
+            Background = CreateFrozenBrush(Color.FromArgb(0xCC, 0x1E, 0x1E, 0x1E)),
+            BorderBrush = CreateFrozenBrush(Color.FromArgb(0x59, 0xFF, 0xFF, 0xFF)),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(3),
+            Padding = new Thickness(6, 2, 6, 2),
+            Child = _lockText,
+            Visibility = Visibility.Collapsed,
+            IsHitTestVisible = false,
+        };
+
+        return _lockBadge;
+    }
+
+    /// <summary>把锁定标签摆到选区右上方（放不下就放右下方），并夹在窗口内。</summary>
+    private void UpdateLockBadge(DipRect client, DipRect? selection)
+    {
+        if (_lockBadge is null)
+        {
+            return;
+        }
+
+        if (!_session.IsSelectionLocked || !selection.HasValue || selection.Value.IsEmpty)
+        {
+            _lockBadge.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        _lockBadge.Visibility = Visibility.Visible;
+        _lockBadge.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        var size = _lockBadge.DesiredSize;
+        var rect = selection.Value;
+
+        var left = Math.Clamp(rect.Right - size.Width, client.Left, Math.Max(client.Left, client.Right - size.Width));
+        var above = rect.Top - size.Height - BadgeGap;
+        var top = above >= client.Top ? above : rect.Bottom + BadgeGap;
+        top = Math.Clamp(top, client.Top, Math.Max(client.Top, client.Bottom - size.Height));
+
+        Canvas.SetLeft(_lockBadge, left);
+        Canvas.SetTop(_lockBadge, top);
     }
 
     private Button CreateToolbarButton(string text, Action onClick, bool emphasize = false)
