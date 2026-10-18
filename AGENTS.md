@@ -1,0 +1,49 @@
+# Zeep Cut — Agent 工作手册
+
+本文件是每一轮新会话的**第一份必读材料**。每轮开始时按顺序读：
+
+1. `AGENTS.md`（本文件，环境与规则）
+2. `STATE.md`（当前进度、下一步、已知问题）
+3. `ROADMAP.md`（任务清单与验收项）
+4. `ARCHITECTURE.md`（模块划分与关键技术决策）
+5. `PLAN.md`（产品需求，唯一需求来源）
+
+## 硬性规则
+
+- 需求以 `PLAN.md` 为准。不要重新做需求调研，不要扩大首版范围（不做长截图、OCR、录屏、云同步、跨屏框选、控件级识别、鼠标穿透、贴图恢复）。
+- 每轮结束前必须更新 `STATE.md`（做了什么、验证结果、下一步、遗留问题）。这是下一位接手者的唯一记忆。
+- 只报告真实执行过的验证。编译通过 ≠ 桌面行为已验证。无法验证的项明确写“未验证”并说明原因。
+- 每轮做**一个可交付的完整小步**，保持仓库可编译、测试通过。宁可小步完成，不要大范围半成品。
+- 不要删除或重写 `PLAN.md`。不要修改其他 agent 未完成的半成品而声称完成。
+- 提交前必须跑 `scripts/build.ps1`（构建 + 测试）并通过。
+
+## 环境事实（重要）
+
+- 工作区是 WSL 路径：`/home/camellya/workspace/Zeep-Cut`，Windows 侧等价路径为
+  `\\wsl.localhost\Ubuntu\home\camellya\workspace\Zeep-Cut`。
+- **WSL 里没有 dotnet**。所有构建、测试、运行必须通过 Windows 端 dotnet：
+  ```bash
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File '\\wsl.localhost\Ubuntu\home\camellya\workspace\Zeep-Cut\scripts\build.ps1'
+  ```
+- Windows 已安装 .NET SDK 10.0.100；`net10.0-windows` WPF 项目可直接在 UNC 路径上构建。
+- 构建产物：`src/ZeepCut/bin/Debug/net10.0-windows/ZeepCut.exe`（Debug 不启用 RID）。
+- 桌面显示器（真实环境）：
+  - `\\.\DISPLAY1` 主屏 2048×1152，原点 (0,0)
+  - `\\.\DISPLAY2` 副屏 1080×1920，**原点 (-1080,0)**（负坐标，可用于验证多屏定位）
+  - 两者当前都是 **100% 缩放**。**混合 DPI 无法在本机真实验证**，只能用 Core 层单元测试验证换算逻辑。
+- 桌面环境可交互：GUI 能启动，可用脚本截屏、发送按键。参考 `scripts/` 下：
+  - `screenshot.ps1`：截取整屏/指定屏到 PNG（可自行 read_image 查看）
+  - `keys.ps1`：向前台窗口发送按键（如 `-Keys '^%a'` = Ctrl+Alt+A）
+  - `run.ps1`：启动已构建程序并报告进程状态
+- Inno Setup 当前**未安装**（winget 可用）。阶段四再尝试安装；失败则交付便携版并如实说明。
+
+## 使用 Powershell 的坑
+
+- `powershell.exe` 的当前目录是 UNC 路径，dotnet 无法在 UNC 下工作。用 `-File <UNC绝对路径>` 调用脚本，脚本内部用 `$PSScriptRoot` 定位，不要依赖 cwd。
+- WPF 项目**不要**启用 `UseWindowsForms`：会和 `System.Windows.Application` 名称冲突。托盘用 Win32 `Shell_NotifyIcon` P/Invoke 实现。
+- 脚本文件用 UTF-8 **带 BOM** + CRLF，避免 Windows PowerShell 5.1 中文乱码。
+
+## 提交约定
+
+- 用 `git` 提交，信息格式：`feat(capture): ...` / `fix(pins): ...` / `test(core): ...`。
+- 每次提交前确认 `git status` 无意外大文件；`bin/`、`obj/` 已在 `.gitignore`。
