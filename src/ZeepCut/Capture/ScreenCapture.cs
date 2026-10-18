@@ -19,7 +19,8 @@ public sealed record ScreenCaptureResult(
     BitmapSource Image,
     PixelRect Bounds,
     string DeviceName,
-    bool IsPrimary)
+    bool IsPrimary,
+    int Dpi)
 {
     /// <summary>图像宽度（物理像素）。</summary>
     public int PixelWidth => Image.PixelWidth;
@@ -81,13 +82,35 @@ public static class ScreenCapture
         }
 
         var isPrimary = (info.dwFlags & NativeMethods.MONITORINFOF_PRIMARY) != 0;
+        var dpi = GetEffectiveDpi(monitor);
         AppLog.Info(
             "Capture",
             $"鼠标 ({cursor.X},{cursor.Y}) → 屏幕 {info.szDevice}（主屏={isPrimary}），" +
-            $"物理矩形=({bounds.Left},{bounds.Top}) {bounds.Width}x{bounds.Height}");
+            $"物理矩形=({bounds.Left},{bounds.Top}) {bounds.Width}x{bounds.Height} DPI={dpi}");
 
         var image = CaptureRectangle(bounds);
-        return new ScreenCaptureResult(image, bounds, info.szDevice, isPrimary);
+        return new ScreenCaptureResult(image, bounds, info.szDevice, isPrimary, dpi);
+    }
+
+    /// <summary>
+    /// 目标屏幕的每屏 DPI（PerMonitorV2 下由 <c>GetDpiForMonitor</c> 返回）。
+    /// 失败时回退 96，保证遮罩仍可显示，同时留下 WARN 日志。
+    /// </summary>
+    private static int GetEffectiveDpi(IntPtr monitor)
+    {
+        var result = NativeMethods.GetDpiForMonitor(
+            monitor,
+            NativeMethods.MDT_EFFECTIVE_DPI,
+            out var dpiX,
+            out _);
+
+        if (result == 0 && dpiX > 0)
+        {
+            return (int)dpiX;
+        }
+
+        AppLog.Warn("Capture", $"GetDpiForMonitor 失败（HRESULT=0x{result:X8}），按 96 DPI 处理");
+        return 96;
     }
 
     /// <summary>把虚拟桌面坐标中的物理像素矩形复制为冻结的 <see cref="BitmapSource"/>。</summary>

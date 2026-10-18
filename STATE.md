@@ -6,10 +6,10 @@
 
 - 日期：2026-10-18
 - 当前阶段：阶段一（截图闭环）
-- 本轮任务：**T5 全局热键 + T6 屏幕捕获**
-- 下一步任务：**T7 冻结遮罩窗口**
+- 本轮任务：**T7 冻结遮罩窗口 + T8 窗口识别**
+- 下一步任务：**T9 框选交互**（拖动框选、移动选区、八向调整、尺寸提示、限制在屏幕内）
 - 构建状态：✅ 编译通过，0 warning 0 error
-- 测试状态：✅ 254 个测试通过（本轮新增 113 个 ShortcutSpec 测试用例；T1/T2 旧测试全绿）
+- 测试状态：✅ 274 个测试通过（本轮新增 20 个 WindowCandidateSelector 测试；T1/T2/T5 旧测试全绿）
 
 ## 已完成
 
@@ -44,6 +44,15 @@
   - 输出 `ScreenCaptureResult`：冻结的 `BitmapSource`（`BGR32` → `FormatConvertedBitmap(Pbgra32)` → 复制到 `WriteableBitmap` 后释放 GDI 位图，确保像素独立）、`Bounds`（物理像素，可负）、`DeviceName`、`IsPrimary`、`PixelWidth/PixelHeight`。
   - 调试落盘：`AppPaths.CaptureDebugDirectory` = `%LOCALAPPDATA%\ZeepCut\logs\capture-debug\`；文件名含时间、设备名、屏幕原点、像素尺寸；每次捕获写 INFO 日志（鼠标坐标、屏幕名、物理矩形、图像尺寸、文件路径）。
   - 触发入口：全局热键 `Alt+A` 与托盘菜单“截图”共用同一捕获方法；本轮捕获后只存 PNG，尚未显示冻结遮罩（T7）。
+- 2026-10-18 **T7 冻结遮罩窗口**：
+  - `Capture/ScreenCapture.cs` 的 `ScreenCaptureResult` 新增 `Dpi`：`GetDpiForMonitor(MDT_EFFECTIVE_DPI)` 取目标屏幕 DPI，失败回退 96 并 WARN。
+  - 新增 `Capture/CaptureOverlayWindow.cs`：无边框、`Topmost`、`ShowInTaskbar=false`、`WS_EX_TOOLWINDOW`；用 `DpiTransform.ToDip(屏幕物理矩形)` 设置 WPF 的 DIP `Left/Top/Width/Height`；冻结图以 `Image(Stretch=Fill, NearestNeighbor)` 1:1 铺满；`Loaded` 时 `GetWindowRect` 复核物理矩形，不一致时 `SetWindowPos` 校正；Esc 取消；鼠标 DIP→物理换算后按 Z 序命中窗口，并绘制 3 DIP 蓝色边框。
+  - `App.StartCapture`：**先捕获、再 `WindowEnumerator.Enumerate`、最后 `Show` 遮罩**；遮罩期间重复触发被忽略；托盘“截图”共用入口；退出时关闭遮罩。Alt+A 不再自动保存 debug PNG（T6 临时行为结束，`SaveDebugPng` 保留为诊断工具）。
+- 2026-10-18 **T8 窗口识别**：
+  - Core 新增 `ZeepCut.Core.Capture.WindowCandidate` + `WindowCandidateSelector`：`ClipToScreen` 保留 Z 序并丢弃空交集；`HitTest` 取首个命中；`HitTestDip` 按目标屏幕 DPI 把 DIP 换算为物理像素再加屏幕原点（负坐标）；`ToDipBounds` 供高亮绘制。
+  - WPF 新增 `Capture/WindowEnumerator.cs`：`EnumWindows` 顶层 Z 序；过滤不可见、最小化、`WS_EX_TOOLWINDOW`、自身进程、DWM cloaked、`GetWindowRect` 失败、宽或高为 0；`DWMWA_EXTENDED_FRAME_BOUNDS` 优先、失败回退 `GetWindowRect`；最后用 Core 裁剪到目标屏幕，并按 Z# 记录候选（含标题）。
+  - 新增 `tests/ZeepCut.Tests/Capture/WindowCandidateSelectorTests.cs`（20 个）：Z 序取首个命中、跨屏只保留交集、空交集丢弃、负坐标屏幕、125%/100% DIP 映射、半开边界、非法输入。
+  - 新增验证脚本：`scripts/screenshot-physical.ps1`（PerMonitorV2 物理像素截图，支持按屏/整屏）、`scripts/window.ps1`（把窗口摆到物理坐标，用于副屏/跨屏验证）；`scripts/mouse.ps1` 改为 DPI-aware 并回读 `GetCursorPos`。
 
 ## 验证证据
 
@@ -78,23 +87,61 @@
 - 2026-10-18 **退出注销（真实桌面）**：正常注册 Alt+A/Alt+S 后通过托盘菜单“退出”（`PostMessage(WM_TRAYICON)` 打开菜单，点击“退出”）。日志：
   `已注销全局热键 Alt+A（id=1）` → `已注销全局热键 Alt+S（id=2）` → `托盘图标已从通知区域移除` → `退出完成 (exit code=0)`；
   之后 `Get-Process ZeepCut` 无输出（进程已结束）。
+- 2026-10-18 **T7/T8 构建+测试（最终代码）**：`powershell.exe -NoProfile -ExecutionPolicy Bypass -File '\\wsl.localhost\Ubuntu\home\camellya\workspace\Zeep-Cut\scripts\build.ps1'` →
+  `Build succeeded.`、`0 Warning(s)`、`0 Error(s)`；测试 → `Passed! - Failed: 0, Passed: 274, Skipped: 0, Total: 274`（本轮新增 20）；末尾 `BUILD+TEST OK`。
+- 2026-10-18 **主屏遮罩（真实桌面，pid 33848）**：鼠标物理 (1800,900) → `Alt+A`。日志：
+  `鼠标 (1800,900) → 屏幕 \\.\DISPLAY1（主屏=True），物理矩形=(0,0) 2560x1440 DPI=120` →
+  `冻结遮罩：屏幕=\\.\DISPLAY1 主屏=True 物理=(0,0) 2560x1440 图像=2560x1440 DPI=120 → DIP=(0,0) 2048x1152，窗口候选=8` →
+  `Loaded：遮罩物理矩形与目标屏幕一致 (0,0) 2560x1440` →
+  `遮罩窗口：... DPI=120（WPF PixelsPerDip=1.25）；期望 DIP=(0,0) 2048x1152，实际 DIP=2048x1152`。
+  截图 `artifacts/t7t8/primary-overlay.png`（2560×1440，read_image 查看：整屏冻结画面，DSH 窗口周围有蓝色高亮边框）。
+  候选 `Z#0 "Windows截图工具规划与实现 — DeepSeek Harness" (534,245) 1603x1033`；鼠标处命中该窗口，日志 `边框 DIP=(427.2,196) 1282.4x826.4`（= 物理/1.25）。
+- 2026-10-18 **冻结证明（真实桌面）**：遮罩显示期间用 WMI 启动 notepad（PID 58816），再次截主屏 →
+  `artifacts/t7t8/primary-overlay-notepad-frozen.png` 与 `primary-overlay.png` **SHA-256 完全相同**
+  （489,862 bytes，`8e2bb1d4186c9feeae724c9c9361c80d0ee19bc7d52e3559e0828d642bf1bb64`），任务栏时钟停在 4:49:10；
+  按 Esc 后 `artifacts/t7t8/primary-after-esc.png` 显示 Notepad 已出现、时钟 4:49:30。证明遮罩期间画面确实冻结、Notepad 没有被画进冻结图。
+- 2026-10-18 **Esc 取消（真实桌面）**：日志 `取消本次截图（Esc）：屏幕=\\.\DISPLAY1 ... 不写入历史` →
+  `遮罩窗口已关闭 ... 已取消=True` → `截图结束 ... 已取消=True`；`Get-Process ZeepCut` 仍返回 pid 33848；
+  `%LOCALAPPDATA%\ZeepCut` 下只有日志（无 `history.db`、`images/` 文件），本次未产生任何记录（历史功能尚未实现）。
+- 2026-10-18 **副屏（负坐标）遮罩（真实桌面）**：鼠标物理 (-540,900) → `Alt+A`。日志
+  `屏幕 \\.\DISPLAY2（主屏=False），物理矩形=(-1080,0) 1080x1920 DPI=96` →
+  `冻结遮罩：... 图像=1080x1920 DPI=96 → DIP=(-1080,0) 1080x1920`。
+  **WPF 首次摆放副屏时确实按主屏 125% 换算错了**：
+  `Loaded：遮罩物理矩形 (-1350,0) 1350x1942 与目标屏幕 (-1080,0) 1080x1920 不一致，用 SetWindowPos 校正` →
+  `Loaded：校正后遮罩物理矩形 (-1080,0) 1080x1920` → `期望 DIP=(-1080,0) 1080x1920，实际 DIP=1080x1920`。
+  截图 `artifacts/t7t8/secondary-overlay.png`（1080×1920，壁纸铺满，无黑边/错位）。
+- 2026-10-18 **副屏窗口高亮（真实桌面）**：用 `scripts/window.ps1` 把 Notepad 摆到副屏物理 (-950,300)，触发后候选
+  `Z#0 0x3B80F78 (-943,300) 386x313 "Untitled - Notepad"`；鼠标物理 (-700,450) 时日志
+  `高亮窗口候选 ... 边框 DIP=(137,300) 386x313`（137 = -943 - (-1080)）。
+  截图 `artifacts/t7t8/secondary-overlay-highlight.png`：Notepad 周围蓝色边框，位置正确。
+- 2026-10-18 **跨屏窗口裁剪（真实桌面）**：Notepad 摆到物理 (-500,300,640x320)（跨越 x=0），在副屏触发后主屏枚举到
+  `Z#1 0x54079C (0,300) 133x313 "Untitled - Notepad"`（只保留主屏交集）；主屏悬停物理 (100,400) 命中该候选，
+  截图 `artifacts/t7t8/cross-screen-clipped-highlight.png`：只在主屏左边缘显示 133px 宽的截断高亮。
+- 2026-10-18 **重复触发保护（真实桌面）**：遮罩显示期间再按 `Alt+A`，日志
+  `已有截图遮罩显示中，忽略本次触发：全局热键 Alt+A`，没有出现第二张遮罩。
+- 2026-10-18 **重编译后冒烟（最终代码）**：重新构建（274 测试通过）后启动（pid 52688），主屏 `Alt+A` → 遮罩物理 (0,0) 2560x1440、
+  DIP 2048x1152、命中 DSH 窗口；Esc 关闭，日志与前述一致；截图 `artifacts/t7t8/final-smoke-primary.png`。
 - 2026-10-18 **未验证**：
   - 非 1409 的热键注册失败分支（如权限/参数异常）未注入。
   - 通知气球/Toast 的视觉呈现未能在截图中确认（见上）；`MessageBox` 兜底已真实验证。
-  - T7 冻结遮罩与 DIP 定位未开始；本轮只验证了“物理像素捕获”，未验证遮罩窗口在 125%/100% 混合 DPI 下的 WPF 坐标。
+  - 150% 缩放、三屏以上、竖屏以外的特殊排列未测试（本机只有 125%+100% 双屏）。
+  - 窗口过滤中的“最小化 / `WS_EX_TOOLWINDOW` / cloaked”没有单独注入验证；只验证了真实桌面上枚举结果正确（主屏 8–9 个候选、副屏 0/1 个候选）且本进程遮罩未进入候选。
+  - 遮罩聚焦后被新启动的窗口（如测试用 Notepad）抢焦点时，Esc 不会送到遮罩；验证时先点击遮罩再按 Esc。正常截图过程中不会新建窗口，但这是已知的焦点限制。
+  - 仅验证了 Esc 关闭；Alt+F4 / 托盘退出关闭遮罩路径只从代码上处理，未逐一真实验证（退出时 `DisposeCaptureOverlay` 会视作取消）。
   - 受保护内容、HDR、安全桌面等特殊捕获场景按 PLAN 不承诺，未测试。
 
 ## 已知问题 / 风险
 
 - 托盘图标默认进入 Windows 11 的“显示隐藏的图标”溢出面板，不在任务栏直接可见；用户可手动固定到任务栏。
-- 菜单占位：从剪贴板贴图仍是空方法（仅写日志）；显示/隐藏全部贴图、历史、设置、检查更新弹“尚未实现”。截图菜单已接真实捕获。
-- `capture-debug` 是 T6 临时调试产物，接入 T23 历史后应移除或改为诊断开关；验证时生成的 PNG 留在 `%LOCALAPPDATA%\ZeepCut\logs\capture-debug\`。
-- 本机当前是**混合 DPI**（主屏 125%、副屏 100%）。本轮 T6 已用物理像素在主/副屏分别验证；但 T1 的 DIP 换算仍只有单元测试，WPF 遮罩的真实 DIP 定位要到 T7 才能验证。
+- 菜单占位：从剪贴板贴图仍是空方法（仅写日志）；显示/隐藏全部贴图、历史、设置、检查更新弹“尚未实现”。截图菜单已接真实捕获与冻结遮罩。
+- `capture-debug` 是 T6 临时调试产物；T7 起 Alt+A 不再自动落盘，`ScreenCapture.SaveDebugPng` 仅保留为诊断方法，目录仍由 `AppPaths.EnsureCreated` 创建。
+- 本机是**混合 DPI**（主屏 125%、副屏 100%）。T7 实测：主屏 WPF 按目标 DIP 摆放一次成功（物理 (0,0) 2560×1440、DIP 2048×1152）；副屏 WPF **首次按主屏 125% 摆放成 (-1350,0) 1350×1942**，由 `Loaded` 里的 `GetWindowRect` 复核 + `SetWindowPos` 校正为 (-1080,0) 1080×1920。当前做法已真实验证正确，但依赖“显示后校正”这一步；若以后 WPF 行为变化或出现可见闪烁，优先检查这里。
+- 遮罩窗口显示期间点击左键目前没有动作（T9 才实现框选）；Esc 需要遮罩处于键盘焦点。若截图期间有新窗口抢焦点，Esc 可能收不到，需要先点一下遮罩。
 - 主屏物理 2560×1440、逻辑 2048×1152。若按旧文档期待“2048×1152 PNG”会误判；产品按 PLAN/ARCHITECTURE 使用物理像素，捕获结果 2560×1440 是正确行为。
 - Windows 通知横幅在本机自动截图中不可见；热键冲突已用启动 MessageBox 兜底，不影响另外的热键注册。
 - 本机 Windows PowerShell 5.1 的 `Start-Process` 会因环境变量 `NO_PROXY`/`no_proxy` 大小写重复键抛 `Item has already been added`；且 GUI 进程继承 WSL 管道会让调用一直等待。`scripts/run.ps1` 已改用 `Invoke-CimMethod Win32_Process Create`（立即返回、不继承管道）。GUI 自动化时 UIA 坐标与 `scripts/mouse.ps1` 坐标一致（本机托盘按钮 1747,81,50,50）。
-- `scripts/screenshot.ps1` 是 DPI-unaware 的 WinForms 脚本：在本机主屏上截到的是逻辑 2048×1152，而产品捕获为物理 2560×1440。需要物理像素对比时不能直接拿它当基准。
-- 本轮为精确把鼠标放到物理坐标，临时用了 DPI-aware 的 PowerShell 辅助脚本（`SetProcessDpiAwarenessContext(-4)` + `SetCursorPos`/`keybd_event`）；`scripts/mouse.ps1` 未改动。若后续自动化经常需要在混合 DPI 下定位，应把 DPI 感知加进脚本。
+- `scripts/screenshot.ps1` 是 DPI-unaware 的 WinForms 脚本：在本机主屏上截到的是逻辑 2048×1152，而产品捕获为物理 2560×1440。需要物理像素基准时用新增的 `scripts/screenshot-physical.ps1`。
+- T7 起 `scripts/mouse.ps1` 自己声明 PerMonitorV2 并回读 `GetCursorPos`；`scripts/window.ps1` 用物理坐标摆放测试窗口，`scripts/screenshot-physical.ps1` 截物理像素。
 - Inno Setup 未安装，阶段四需尝试 winget 安装；失败则只交付便携版并说明。
 - 尚无真实更新渠道地址（`AppInfo.UpdateManifestUrl` 为空），实现时必须显示“尚未配置更新渠道”。
 - 无代码签名证书，安装包将为未签名。
@@ -123,3 +170,10 @@
 - T6 捕获坐标以 `MONITORINFOEXW.rcMonitor` 的物理像素为准（进程 PerMonitorV2）；负坐标屏幕不做平移，直接作为 BitBlt 源坐标，避免“负坐标转正”的错位。
 - T6 输出先 `FormatConvertedBitmap` 转 `Pbgra32`，再复制到 `WriteableBitmap` 并 `Freeze`，保证 GDI 位图释放后像素仍有效，也能跨线程交给 T7 遮罩。
 - T6 调试 PNG 放 `logs/capture-debug/`，文件名带设备/原点/尺寸，便于按屏幕核对；T7 接入后不再需要每张都落盘。
+- T7 遮罩用 WPF DIP 属性按“目标屏幕 DPI”摆放，但**不盲信首次摆放**：`Loaded` 用 `GetWindowRect` 比对物理矩形，不一致时 `SetWindowPos` 校正。实测副屏首次会被 WPF 按主屏 125% 算错，这一步是混合 DPI 下正确性的保证。
+- T7 遮罩不透明、不调暗、不加工具栏（T9/T10 再做），冻结图 1:1 `Fill` 铺满；遮罩设 `WS_EX_TOOLWINDOW` 并排除在任务栏/Alt+Tab 之外。
+- T7 捕获、窗口枚举都在 `Show()` 之前完成；`App` 用 `_captureOverlay` 单实例守卫，重复 Alt+A 只记日志；退出时把遮罩按取消关闭。
+- T8 窗口候选模型（`WindowCandidate`/`WindowCandidateSelector`）放 Core：裁剪、Z 序命中、DIP→物理映射都可单测；WPF `WindowEnumerator` 只负责 Win32 枚举与 DWM 边框。
+- T8 过滤链：可见、非最小化、非 `WS_EX_TOOLWINDOW`、非自身进程、非 DWM cloaked、`GetWindowRect` 成功、宽高 > 0；DWM 扩展边框失败回退 `GetWindowRect`，最终交集在 Core 完成。
+- T8 高亮用 3 DIP 蓝色边框（内缩半个线宽）；鼠标位置用 `HitTestDip` 按目标屏幕 DPI 换算，避免把 WPF DIP 当物理像素。
+- T8 新增 `screenshot-physical.ps1` / `window.ps1` 并把 `mouse.ps1` 改成 DPI-aware，混合 DPI 下的桌面验证不再依赖临时脚本。

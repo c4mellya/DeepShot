@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace ZeepCut.Platform;
 
@@ -60,8 +61,29 @@ internal static class NativeMethods
     public const uint SRCCOPY = 0x00CC0020;
     public const uint CAPTUREBLT = 0x40000000;
 
+    /// <summary>GetWindowLong 的扩展样式索引（GWL_EXSTYLE）。</summary>
+    public const int GWL_EXSTYLE = -20;
+
+    /// <summary>工具窗口样式：不显示在任务栏/Alt+Tab，窗口识别时应排除。</summary>
+    public const int WS_EX_TOOLWINDOW = 0x00000080;
+
+    /// <summary>DWM 真实边框（不含不可见缩放边框）。</summary>
+    public const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
+
+    /// <summary>DWM 窗口是否被隐藏（例如其他虚拟桌面/最小化的 UWP）。</summary>
+    public const int DWMWA_CLOAKED = 14;
+
+    public const uint SWP_NOZORDER = 0x0004;
+    public const uint SWP_NOACTIVATE = 0x0010;
+
+    /// <summary>GetDpiForMonitor 的有效 DPI 类型。</summary>
+    public const int MDT_EFFECTIVE_DPI = 0;
+
     /// <summary>窗口过程委托；必须保持存活，否则原生回调会崩溃。</summary>
     public delegate IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+    /// <summary>EnumWindows 回调；返回 false 会停止枚举。</summary>
+    public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     public struct WndClassEx
@@ -254,4 +276,55 @@ internal static class NativeMethods
         out IntPtr phiconLarge,
         out IntPtr phiconSmall,
         uint nIcons);
+
+    [DllImport("shcore.dll")]
+    public static extern int GetDpiForMonitor(IntPtr hmonitor, int dpiType, out uint dpiX, out uint dpiY);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    public static extern bool IsWindowVisible(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    public static extern bool IsIconic(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    public static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+
+    [DllImport("user32.dll")]
+    public static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool GetWindowRect(IntPtr hWnd, out Rect lpRect);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool SetWindowPos(
+        IntPtr hWnd,
+        IntPtr hWndInsertAfter,
+        int x,
+        int y,
+        int cx,
+        int cy,
+        uint uFlags);
+
+    [DllImport("dwmapi.dll")]
+    public static extern int DwmGetWindowAttribute(
+        IntPtr hwnd,
+        int dwAttribute,
+        out Rect pvAttribute,
+        int cbAttribute);
+
+    [DllImport("dwmapi.dll", EntryPoint = "DwmGetWindowAttribute")]
+    public static extern int DwmGetWindowAttributeInt(
+        IntPtr hwnd,
+        int dwAttribute,
+        out int pvAttribute,
+        int cbAttribute);
 }

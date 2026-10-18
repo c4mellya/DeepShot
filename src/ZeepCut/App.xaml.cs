@@ -2,6 +2,8 @@ using System.Windows;
 using System.Windows.Threading;
 using ZeepCut.Capture;
 using ZeepCut.Core;
+using ZeepCut.Core.Capture;
+using ZeepCut.Core.Geometry;
 using ZeepCut.Core.Shortcuts;
 using ZeepCut.Platform;
 
@@ -26,6 +28,7 @@ public partial class App : Application
     private bool _ownsSingleInstanceMutex;
     private TrayIcon? _trayIcon;
     private GlobalHotkey? _globalHotkey;
+    private CaptureOverlayWindow? _captureOverlay;
 
     public App()
     {
@@ -224,24 +227,78 @@ public partial class App : Application
         AppLog.Warn("Hotkey", $"热键 {shortcut.Format()} 没有绑定动作");
     }
 
-    /// <summary>T6 调试入口：捕获鼠标所在屏幕并存 PNG，用于真实桌面验证。</summary>
+    /// <summary>
+    /// 截图入口：先捕获鼠标所在屏幕、枚举窗口候选，再显示冻结遮罩。
+    /// 捕获与枚举都发生在遮罩显示之前，因此遮罩不会进入画面，也不会成为候选。
+    /// </summary>
     private void StartCapture(string trigger)
     {
+        if (_captureOverlay is not null)
+        {
+            AppLog.Info("Capture", $"已有截图遮罩显示中，忽略本次触发：{trigger}");
+            return;
+        }
+
         AppLog.Info("Capture", $"截图触发：{trigger}");
         try
         {
             var capture = ScreenCapture.CaptureMonitorUnderCursor();
-            var path = ScreenCapture.SaveDebugPng(capture);
+            var dip = new DpiTransform(capture.Dpi).ToDip(capture.Bounds);
+
+            IReadOnlyList<WindowCandidate> candidates;
+            try
+            {
+                candidates = WindowEnumerator.Enumerate(capture.Bounds);
+            }
+            catch (Exception ex)
+            {
+                // 窗口识别失败不应阻断冻结遮罩：仍可显示画面、按 Esc 取消。
+                AppLog.Error("Capture", "窗口候选枚举失败，本次仅显示冻结图", ex);
+                candidates = Array.Empty<WindowCandidate>();
+            }
+
             AppLog.Info(
                 "Capture",
-                $"T6 捕获完成：屏幕={capture.DeviceName} 主屏={capture.IsPrimary} " +
-                $"物理矩形={capture.Bounds} 图像={capture.PixelWidth}x{capture.PixelHeight} 文件={path}");
+                $"冻结遮罩：屏幕={capture.DeviceName} 主屏={capture.IsPrimary} 物理={capture.Bounds} " +
+                $"图像={capture.PixelWidth}x{capture.PixelHeight} DPI={capture.Dpi} " +
+                $"→ DIP=({dip.Left:0.##},{dip.Top:0.##}) {dip.Width:0.##}x{dip.Height:0.##}，" +
+                $"窗口候选={candidates.Count}");
+
+            var overlay = new CaptureOverlayWindow(capture, candidates);
+            overlay.Closed += OnCaptureOverlayClosed;
+            _captureOverlay = overlay;
+
+            try
+            {
+                overlay.Show();
+            }
+            catch
+            {
+                // 显示失败时清掉引用，避免后续触发被误判为“已有遮罩显示中”。
+                overlay.Closed -= OnCaptureOverlayClosed;
+                _captureOverlay = null;
+                throw;
+            }
         }
         catch (Exception ex)
         {
-            AppLog.Error("Capture", "屏幕捕获失败", ex);
-            NotifyUser("截图失败", $"屏幕捕获失败：{ex.Message}");
+            AppLog.Error("Capture", "屏幕捕获或冻结遮罩显示失败", ex);
+            NotifyUser("截图失败", $"截图失败：{ex.Message}");
         }
+    }
+
+    private void OnCaptureOverlayClosed(object? sender, EventArgs e)
+    {
+        if (sender is CaptureOverlayWindow overlay)
+        {
+            overlay.Closed -= OnCaptureOverlayClosed;
+            AppLog.Info(
+                "Capture",
+                $"截图结束：屏幕={overlay.ScreenBounds} DPI={overlay.ScreenDpi} " +
+                $"已取消={overlay.WasCancelled}（历史记录尚未实现，不写入）");
+        }
+
+        _captureOverlay = null;
     }
 
     // TODO(T18–T22): 读取剪贴板图片并创建贴图窗口。本轮仅保留热键与菜单入口。
@@ -283,9 +340,24 @@ public partial class App : Application
     private void ExitFromTray()
     {
         AppLog.Info("App", "退出：用户选择托盘菜单“退出”");
+        DisposeCaptureOverlay();
         DisposeGlobalHotkey();
         DisposeTrayIcon();
         Shutdown();
+    }
+
+    /// <summary>退出时关闭仍在显示的遮罩（视作取消，不产生历史）。</summary>
+    private void DisposeCaptureOverlay()
+    {
+        if (_captureOverlay is null)
+        {
+            return;
+        }
+
+        var overlay = _captureOverlay;
+        _captureOverlay = null;
+        overlay.Closed -= OnCaptureOverlayClosed;
+        overlay.Cancel();
     }
 
     private void DisposeGlobalHotkey()
@@ -316,6 +388,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        DisposeCaptureOverlay();
         DisposeGlobalHotkey();
         DisposeTrayIcon();
 
