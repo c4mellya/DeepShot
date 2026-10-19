@@ -63,6 +63,9 @@ public sealed record AppSettings
     /// <summary>默认剪贴板贴图快捷键。</summary>
     public const string DefaultPinShortcut = "Alt+S";
 
+    public const string DefaultQuickViewShortcut = "Alt+Q";
+    public const int CurrentSettingsVersion = 2;
+
     /// <summary>设置文件名。</summary>
     public const string FileName = "settings.json";
 
@@ -72,8 +75,8 @@ public sealed record AppSettings
     /// <summary>从剪贴板贴图的快捷键（规范文本，例如 <c>Alt+S</c>）。</summary>
     public string PinShortcut { get; init; } = DefaultPinShortcut;
 
-    /// <summary>可选快览快捷键；空字符串表示不注册，仍可点击托盘打开。</summary>
-    public string QuickViewShortcut { get; init; } = string.Empty;
+    /// <summary>默认 Alt+Q；用户清除后仍可点击托盘打开。</summary>
+    public string QuickViewShortcut { get; init; } = DefaultQuickViewShortcut;
 
     /// <summary>界面语言（默认跟随系统）。</summary>
     public AppLanguage Language { get; init; } = AppLanguage.System;
@@ -93,8 +96,8 @@ public sealed record AppSettings
     /// </remarks>
     public bool LaunchAtStartup { get; init; }
 
-    /// <summary>文件里记录的设置版本（将来做迁移用；本版固定 1）。</summary>
-    public int Version { get; init; } = 1;
+    /// <summary>设置版本；版本 2 将旧的空快览快捷键升级为 Alt+Q。</summary>
+    public int Version { get; init; } = CurrentSettingsVersion;
 
     /// <summary>全新安装的默认设置（所有项都是 PLAN 里的默认值）。</summary>
     public static AppSettings Default { get; } = new();
@@ -124,12 +127,14 @@ public sealed record AppSettings
                 "截图快捷键",
                 warnings),
             PinShortcut = NormalizeShortcut(settings.PinShortcut, DefaultPinShortcut, "贴图快捷键", warnings),
-            QuickViewShortcut = NormalizeOptionalShortcut(settings.QuickViewShortcut, warnings),
+            QuickViewShortcut = NormalizeOptionalShortcut(
+                settings.Version < CurrentSettingsVersion && string.IsNullOrWhiteSpace(settings.QuickViewShortcut)
+                    ? DefaultQuickViewShortcut : settings.QuickViewShortcut, warnings),
             Language = NormalizeLanguage(settings.Language, warnings),
             Theme = NormalizeTheme(settings.Theme, warnings),
             CaptureMode = NormalizeCaptureMode(settings.CaptureMode, warnings),
             LaunchAtStartup = settings.LaunchAtStartup,
-            Version = settings.Version > 0 ? settings.Version : Default.Version,
+            Version = Math.Max(settings.Version, CurrentSettingsVersion),
         };
 
         return new SanitizeResult(normalized, warnings);

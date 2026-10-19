@@ -22,6 +22,19 @@ internal static class DwmApi
     /// 让窗口标题栏跟随主题（深色主题下白字深底）。失败时返回 false（旧系统没有这个属性），
     /// 由调用方决定是否记日志 —— 绝不能因此让窗口打不开。
     /// </summary>
+    /// <summary>Win11：让无边框窗口使用系统圆角（旧系统无此属性，静默失败）。</summary>
+    public static bool TrySetRoundedCorners(Window window)
+    {
+        var handle = new WindowInteropHelper(window).Handle;
+        if (handle == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        var value = 2; // DWMWCP_ROUND
+        return SetWindowAttribute(handle, 33, ref value, sizeof(int)) == 0;
+    }
+
     public static bool TrySetDarkTitleBar(Window window, bool dark)
     {
         var handle = new WindowInteropHelper(window).Handle;

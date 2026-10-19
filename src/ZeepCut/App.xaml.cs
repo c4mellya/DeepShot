@@ -266,7 +266,7 @@ public partial class App : Application
             errors);
 
         if (!string.IsNullOrWhiteSpace(Settings.QuickViewShortcut))
-            RegisterHotkeyFor(Settings.QuickViewShortcut, () => ToggleHistoryQuickView(), errors);
+            RegisterHotkeyFor(Settings.QuickViewShortcut, () => ToggleHistoryQuickView(anchor: _globalHotkey?.TriggerCursor), errors);
 
         AppLog.Info(
             "Hotkey",
@@ -927,7 +927,7 @@ public partial class App : Application
 
     private void OnTrayQuickViewRequested() => ToggleHistoryQuickView(fromTray: true);
 
-    private void ToggleHistoryQuickView(bool fromTray = false)
+    private void ToggleHistoryQuickView(bool fromTray = false, NativeMethods.Point? anchor = null)
     {
         if (_captureOverlay is not null) return;
         if (_historyQuickView is not null)
@@ -944,6 +944,11 @@ public partial class App : Application
         }
         try
         {
+            if (anchor is null)
+            {
+                NativeMethods.GetCursorPos(out var cursor);
+                anchor = cursor;
+            }
             var window = new HistoryQuickViewWindow(
                 _historyStore,
                 (record, edit) =>
@@ -951,7 +956,7 @@ public partial class App : Application
                     ShowHistoryGallery("快览");
                     if (record is not null) HistoryGallery.Current?.RevealRecord(record, edit);
                 },
-                () => ShowSettings("快览"));
+                () => ShowSettings("快览"), anchor.Value, anchorAtTopLeft: !fromTray);
             _historyQuickView = window;
             window.Closed += (_, _) =>
             {

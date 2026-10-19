@@ -227,7 +227,7 @@ internal static class OverlayChrome
             Text = text,
             Foreground = foreground,
             FontSize = 12.5,
-            FontWeight = FontWeights.Medium,
+            FontWeight = FontWeights.SemiBold,
             Margin = new Thickness(6, 0, 0, 0),
             VerticalAlignment = VerticalAlignment.Center,
         });

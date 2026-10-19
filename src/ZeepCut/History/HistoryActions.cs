@@ -64,9 +64,38 @@ internal static class HistoryActions
         data.SetData("Preferred DropEffect", preferredEffect, autoConvert: false);
         var effect = DragDrop.DoDragDrop(source, data, DragDropEffects.Copy);
         AppLog.Info("History", $"历史图片拖放结束：Id={record.Id} 结果={effect}");
-        return StringsUi.Get((effect & DragDropEffects.Copy) != 0
-            ? "S.History.DragDelivered"
-            : "S.History.DragCancelled");
+        // Cancelling a drag is not a result worth reporting.
+        return (effect & DragDropEffects.Copy) != 0 ? StringsUi.Get("S.History.DragDelivered") : string.Empty;
+    }
+
+    /// <summary>Downsample a history image to the size it will actually be shown at.</summary>
+    internal static BitmapSource? LoadScaled(HistoryStore store, HistoryRecord record, int boxWidth, int boxHeight, double scale)
+    {
+        var image = LoadImage(store, record);
+        if (image is null || boxWidth <= 0 || boxHeight <= 0) return image;
+        var target = Math.Min(boxWidth * scale / image.PixelWidth, boxHeight * scale / image.PixelHeight);
+        // Upscaling never adds detail; leave small images untouched.
+        if (target >= 1 || target <= 0) return image;
+        try
+        {
+            // HighQuality (Fant) from the full-resolution source avoids the blurry double downscale
+            // that WPF's live layout scaling produces for large screenshots.
+            var decoded = new BitmapImage();
+            decoded.BeginInit();
+            decoded.CacheOption = BitmapCacheOption.OnLoad;
+            decoded.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
+            decoded.DecodePixelWidth = Math.Max(1, (int)Math.Round(image.PixelWidth * target));
+            decoded.UriSource = new Uri(store.Repository.GetImageAbsolutePath(record), UriKind.Absolute);
+            decoded.EndInit();
+            decoded.Freeze();
+            AppLog.Info("History", $"快览缩略渲染：Id={record.Id} 原图={image.PixelWidth}x{image.PixelHeight} 显示={decoded.PixelWidth}x{decoded.PixelHeight}");
+            return decoded;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn("History", $"快览缩放解码失败，回退原图：{ex.Message}");
+            return image;
+        }
     }
 
     /// <summary>复制到剪贴板（PNG 图像格式）。</summary>

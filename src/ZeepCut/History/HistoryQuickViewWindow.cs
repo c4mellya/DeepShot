@@ -21,6 +21,7 @@ internal sealed class HistoryQuickViewWindow : Window
     private readonly Action<HistoryRecord?, bool> _openGallery;
     private readonly Action _openSettings;
     private readonly Image _picture;
+    private readonly Border _imageFrame;
     private readonly StackPanel _empty;
     private readonly TextBlock _emptyText;
     private readonly TextBlock _name;
@@ -32,29 +33,50 @@ internal sealed class HistoryQuickViewWindow : Window
     private readonly Button _next;
     private readonly List<Button> _imageActions = new();
     private readonly List<Border> _thumbnailBorders = new();
+    private readonly DispatcherTimer _resizeTimer = new() { Interval = TimeSpan.FromMilliseconds(120) };
     private IReadOnlyList<HistoryRecord> _records = Array.Empty<HistoryRecord>();
     private int _index;
     private int _wheelDelta;
     private int _interactionDepth;
     private bool _closed;
+    private readonly NativeMethods.Point _anchor;
+    private readonly bool _anchorAtTopLeft;
 
     private HistoryRecord? Current => _records.Count == 0 ? null : _records[_index];
 
     internal HistoryQuickViewWindow(
         HistoryStore store,
         Action<HistoryRecord?, bool> openGallery,
-        Action openSettings)
+        Action openSettings,
+        NativeMethods.Point anchor,
+        bool anchorAtTopLeft)
     {
         _store = store;
         _openGallery = openGallery;
         _openSettings = openSettings;
+        _anchor = anchor;
+        _anchorAtTopLeft = anchorAtTopLeft;
         Title = StringsUi.Get("S.QuickView.Title");
-        Width = 452;
-        Height = 560;
+        Width = 424;
+        Height = 532;
         WindowStyle = WindowStyle.None;
-        AllowsTransparency = true;
-        Background = Brushes.Transparent;
         ResizeMode = ResizeMode.NoResize;
+
+        // 不用 AllowsTransparency：分层窗口会走软件渲染、丢掉 ClearType，整窗发糊。
+        // 圆角与阴影交给 DWM（Win11 原生圆角；WindowChrome 的 1px 玻璃边让无边框窗口也有系统阴影）。
+        System.Windows.Shell.WindowChrome.SetWindowChrome(this, new System.Windows.Shell.WindowChrome
+        {
+            CaptionHeight = 0,
+            CornerRadius = new CornerRadius(0),
+            ResizeBorderThickness = new Thickness(0),
+            GlassFrameThickness = new Thickness(1),
+            UseAeroCaptionButtons = false,
+        });
+        SetResourceReference(BackgroundProperty, HistoryUi.Keys.Surface);
+        UseLayoutRounding = true;
+        SnapsToDevicePixels = true;
+        TextOptions.SetTextFormattingMode(this, TextFormattingMode.Display);
+        TextOptions.SetTextRenderingMode(this, TextRenderingMode.ClearType);
         WindowStartupLocation = WindowStartupLocation.Manual;
         ShowInTaskbar = false;
         ShowActivated = true;
@@ -126,12 +148,18 @@ internal sealed class HistoryQuickViewWindow : Window
         imageHost.MouseEnter += (_, _) => FadeNav(1);
         imageHost.MouseLeave += (_, _) => FadeNav(0);
 
-        var imageFrame = new Border { CornerRadius = new CornerRadius(12), ClipToBounds = true, Child = imageHost };
-        imageFrame.SetResourceReference(Border.BackgroundProperty, HistoryUi.Keys.SurfaceAlt);
-        Add(root, imageFrame, 1);
+        _imageFrame = new Border { CornerRadius = new CornerRadius(12), ClipToBounds = true, Child = imageHost };
+        _imageFrame.SetResourceReference(Border.BackgroundProperty, HistoryUi.Keys.SurfaceAlt);
+        _imageFrame.SizeChanged += (_, _) =>
+        {
+            // First layout pass: decode immediately so the image is crisp on first paint.
+            if (_picture.Source is null) RefreshPicture();
+            else OnImageFrameResized();
+        };
+        Add(root, _imageFrame, 1);
 
         // --- 名称 + 尺寸 ---
-        _name = HistoryUi.Text(string.Empty, 13, weight: FontWeights.Medium);
+        _name = HistoryUi.Text(string.Empty, 13, weight: FontWeights.SemiBold);
         _name.HorizontalAlignment = HorizontalAlignment.Left;
         _dimensions = HistoryUi.Text(string.Empty, 12, brushKey: HistoryUi.Keys.Secondary, measureNaturalWidth: true);
         _dimensions.Margin = new Thickness(12, 0, 0, 0);
@@ -186,35 +214,20 @@ internal sealed class HistoryQuickViewWindow : Window
 
         var card = new Border
         {
-            Margin = new Thickness(0),
-            CornerRadius = new CornerRadius(16),
             BorderThickness = new Thickness(1),
             Child = root,
         };
         card.SetResourceReference(Border.BackgroundProperty, HistoryUi.Keys.Surface);
         card.SetResourceReference(Border.BorderBrushProperty, HistoryUi.Keys.Divider);
-
-        // 外圈留出阴影空间（窗口本身透明）。
-        var shell = new Border
-        {
-            Margin = new Thickness(14),
-            Child = card,
-            Effect = new System.Windows.Media.Effects.DropShadowEffect
-            {
-                BlurRadius = 26,
-                ShadowDepth = 5,
-                Direction = 270,
-                Opacity = 0.32,
-                Color = Colors.Black,
-            },
-        };
-        Content = shell;
+        Content = card;
 
         SourceInitialized += (_, _) =>
         {
             var hwnd = new WindowInteropHelper(this).Handle;
             var style = NativeMethods.GetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE);
             NativeMethods.SetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE, style | NativeMethods.WS_EX_TOOLWINDOW);
+            DwmApi.TrySetRoundedCorners(this);
+            PlaceNearCursor();
         };
         Loaded += (_, _) =>
         {
@@ -223,12 +236,20 @@ internal sealed class HistoryQuickViewWindow : Window
             Activate();
             Focus();
         };
-        ContentRendered += (_, _) => PlaceNearCursor();
         Deactivated += (_, _) => Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
         {
             if (!_closed && _interactionDepth == 0 && !IsActive) Close();
         }));
-        Closed += (_, _) => _closed = true;
+        _resizeTimer.Tick += (_, _) =>
+        {
+            _resizeTimer.Stop();
+            RefreshPicture();
+        };
+        Closed += (_, _) =>
+        {
+            _resizeTimer.Stop();
+            _closed = true;
+        };
         PreviewMouseWheel += OnMouseWheel;
         PreviewKeyDown += OnKeyDown;
         Reload();
@@ -268,7 +289,7 @@ internal sealed class HistoryQuickViewWindow : Window
     private static Button ActionButton(string key, string id, string icon, Action action, bool primary)
     {
         var text = StringsUi.Get(key);
-        var label = HistoryUi.Text(text, 13, weight: FontWeights.Medium, measureNaturalWidth: true);
+        var label = HistoryUi.Text(text, 13, weight: FontWeights.SemiBold, measureNaturalWidth: true);
         label.ClearValue(TextBlock.ForegroundProperty);
         var glyph = HistoryIcons.Create(icon, 15, primary ? HistoryUi.Keys.OnAccent : HistoryUi.Keys.Secondary);
         glyph.Margin = new Thickness(0, 0, 7, 0);
@@ -340,6 +361,7 @@ internal sealed class HistoryQuickViewWindow : Window
                 Cursor = Cursors.Hand, ToolTip = record.Name,
                 Child = new Image { Source = preview, Stretch = Stretch.UniformToFill, IsHitTestVisible = false, Clip = new RectangleGeometry(new Rect(0, 0, 54, 40), 6, 6) }
             };
+            RenderOptions.SetBitmapScalingMode((Image)border.Child, BitmapScalingMode.HighQuality);
             border.SetResourceReference(Border.BackgroundProperty, HistoryUi.Keys.SurfaceAlt);
             AutomationProperties.SetName(border, record.Name);
             AutomationProperties.SetAutomationId(border, $"quick-view-thumbnail-{i}");
@@ -362,7 +384,10 @@ internal sealed class HistoryQuickViewWindow : Window
     private void ShowCurrent()
     {
         var record = Current;
-        _picture.Source = record is null ? null : HistoryActions.LoadImage(_store, record);
+        _picture.Source = null;
+        bool hasImage;
+        try { hasImage = record is not null && RefreshPicture(); }
+        catch (Exception ex) { AppLog.Error("History", "快览显示图片失败", ex); hasImage = false; }
         _picture.Visibility = _picture.Source is null ? Visibility.Hidden : Visibility.Visible;
         _empty.Visibility = _picture.Source is null ? Visibility.Visible : Visibility.Collapsed;
         _emptyText.Text = StringsUi.Get(record is null ? "S.QuickView.Empty" : "S.History.DragMissing");
@@ -387,6 +412,36 @@ internal sealed class HistoryQuickViewWindow : Window
 
         if (record is not null) _thumbnailBorders[_index].BringIntoView();
         ClearStatus();
+    }
+
+    private void OnImageFrameResized()
+    {
+        // Avoid re-decoding large screenshots during every layout pass of a resize.
+        _resizeTimer.Stop();
+        _resizeTimer.Start();
+    }
+
+    /// <summary>Decode at the on-screen size so large screenshots stay sharp.</summary>
+    private bool RefreshPicture()
+    {
+        var record = Current;
+        if (record is null)
+        {
+            _picture.Source = null;
+            return false;
+        }
+        var width = (int)Math.Ceiling(_imageFrame.ActualWidth);
+        var height = (int)Math.Ceiling(_imageFrame.ActualHeight);
+        var scale = VisualTreeHelper.GetDpi(this).DpiScaleX;
+        if (width < 16 || height < 16)
+        {
+            // Before layout: show the cached copy; SizeChanged decodes the display-size version.
+            _picture.Source = record.Width > 0 ? _store.TryLoadPreview(record) : null;
+            return _picture.Source is not null;
+        }
+        var image = HistoryActions.LoadScaled(_store, record, width, height, scale);
+        _picture.Source = image;
+        return image is not null;
     }
 
     private void OnMouseWheel(object sender, MouseWheelEventArgs e)
@@ -455,6 +510,7 @@ internal sealed class HistoryQuickViewWindow : Window
 
     private void SetStatus(string message)
     {
+        // Empty messages (drag cancelled and other no-ops) must not leave a visible status row.
         _status.Text = message;
         _status.Visibility = string.IsNullOrWhiteSpace(message) ? Visibility.Collapsed : Visibility.Visible;
     }
@@ -477,7 +533,8 @@ internal sealed class HistoryQuickViewWindow : Window
 
     private void PlaceNearCursor()
     {
-        if (_closed || !NativeMethods.GetCursorPos(out var cursor)) return;
+        if (_closed) return;
+        var cursor = _anchor;
         var monitor = NativeMethods.MonitorFromPoint(cursor, NativeMethods.MONITOR_DEFAULTTONEAREST);
         var info = new NativeMethods.MonitorInfoEx { cbSize = Marshal.SizeOf<NativeMethods.MonitorInfoEx>() };
         if (!NativeMethods.GetMonitorInfo(monitor, ref info)) return;
@@ -485,8 +542,10 @@ internal sealed class HistoryQuickViewWindow : Window
         var scale = dpi / 96.0;
         var width = Math.Min((int)Math.Round(Width * scale), info.rcWork.Width - 16);
         var height = Math.Min((int)Math.Round(Height * scale), info.rcWork.Height - 16);
-        var left = Math.Clamp(cursor.X - width + 12, info.rcWork.Left + 8, info.rcWork.Right - width - 8);
-        var top = Math.Clamp(cursor.Y - height - 12, info.rcWork.Top + 8, info.rcWork.Bottom - height - 8);
+        var desiredLeft = _anchorAtTopLeft ? cursor.X : cursor.X - width + 12;
+        var desiredTop = _anchorAtTopLeft ? cursor.Y : cursor.Y - height - 12;
+        var left = Math.Clamp(desiredLeft, info.rcWork.Left + 8, info.rcWork.Right - width - 8);
+        var top = Math.Clamp(desiredTop, info.rcWork.Top + 8, info.rcWork.Bottom - height - 8);
         NativeMethods.SetWindowPos(new WindowInteropHelper(this).Handle, new IntPtr(-1), left, top, width, height,
             NativeMethods.SWP_NOACTIVATE);
     }

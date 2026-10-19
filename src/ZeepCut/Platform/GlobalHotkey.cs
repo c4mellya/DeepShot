@@ -72,6 +72,9 @@ public sealed class GlobalHotkey : IDisposable
     /// <summary>热键被按下。回调在 UI 线程的 Dispatcher 上执行，不在窗口过程里。</summary>
     public event Action<ShortcutSpec>? Pressed;
 
+    /// <summary>Cursor captured when WM_HOTKEY arrived, before queued UI work.</summary>
+    internal NativeMethods.Point? TriggerCursor { get; private set; }
+
     /// <summary>已成功注册的快捷键。</summary>
     public IReadOnlyCollection<ShortcutSpec> RegisteredShortcuts => _registrations.Values;
 
@@ -168,7 +171,13 @@ public sealed class GlobalHotkey : IDisposable
 
         AppLog.Info("Hotkey", $"热键触发：{shortcut.Format()}（id={id}）");
         // 捕获/弹窗等动作不在窗口过程里同步执行，交回 Dispatcher。
-        _source.Dispatcher.BeginInvoke(new Action(() => Pressed?.Invoke(shortcut)));
+        NativeMethods.GetCursorPos(out var cursor);
+        _source.Dispatcher.BeginInvoke(new Action(() =>
+        {
+            TriggerCursor = cursor;
+            try { Pressed?.Invoke(shortcut); }
+            finally { TriggerCursor = null; }
+        }));
         return IntPtr.Zero;
     }
 }

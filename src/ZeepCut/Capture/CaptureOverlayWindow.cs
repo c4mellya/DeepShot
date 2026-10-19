@@ -150,9 +150,7 @@ public sealed class CaptureOverlayWindow : Window
     private bool _pointerDown;
     private bool _cancelRequested;
     private bool _closed;
-    private const int EscapeHotkeyId = 0x5A43;
-    private HwndSource? _escapeSource;
-    private bool _escapeRegistered;
+    private CaptureInputGuard? _inputGuard;
     private bool _saveDialogOpen;
     private IntPtr _captureHwnd;
 
@@ -360,6 +358,11 @@ public sealed class CaptureOverlayWindow : Window
         PreviewMouseRightButtonDown += (_, e) =>
         {
             e.Handled = true;
+            CaptureMouse();
+        };
+        PreviewMouseRightButtonUp += (_, e) =>
+        {
+            e.Handled = true;
             Cancel("鼠标右键");
         };
         PreviewMouseLeftButtonDown += OnPreviewMouseLeftButtonDown;
@@ -431,40 +434,21 @@ public sealed class CaptureOverlayWindow : Window
             NativeMethods.SetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE, updatedStyle);
         }
 
-        _escapeSource = HwndSource.FromHwnd(hwnd);
-        _escapeSource?.AddHook(OnEscapeMessage);
-        RegisterEscape();
+        try
+        {
+            _inputGuard = new CaptureInputGuard(
+                () => !_closed && !_saveDialogOpen && IsVisible && IsEnabled,
+                reason => Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() =>
+                {
+                    if (!_closed && !_saveDialogOpen && IsEnabled) Cancel(reason);
+                })));
+        }
+        catch (System.ComponentModel.Win32Exception ex)
+        {
+            AppLog.Error("Overlay", "截图输入拦截安装失败，保留窗口内按键处理", ex);
+        }
 
         AppLog.Info("Overlay", $"遮罩窗口已创建 hwnd=0x{hwnd.ToInt64():X}，已设置 WS_EX_TOOLWINDOW");
-    }
-
-    private void RegisterEscape()
-    {
-        if (_closed || _saveDialogOpen || _escapeRegistered || _escapeSource is null) return;
-        _escapeRegistered = NativeMethods.RegisterHotKey(
-            _escapeSource.Handle, EscapeHotkeyId, NativeMethods.MOD_NOREPEAT, 0x1B);
-        if (!_escapeRegistered)
-            AppLog.Warn("Overlay", $"截图 Esc 注册失败，使用窗口按键处理：{Marshal.GetLastWin32Error()}");
-    }
-
-    private void UnregisterEscape()
-    {
-        if (_escapeRegistered && _escapeSource is not null)
-            NativeMethods.UnregisterHotKey(_escapeSource.Handle, EscapeHotkeyId);
-        _escapeRegistered = false;
-    }
-
-    private IntPtr OnEscapeMessage(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
-    {
-        if (message == NativeMethods.WM_HOTKEY && wParam.ToInt32() == EscapeHotkeyId)
-        {
-            handled = true;
-            Dispatcher.BeginInvoke(new Action(() =>
-            {
-                if (!_closed && !_saveDialogOpen && IsEnabled) Cancel("Esc（截图快捷键）");
-            }));
-        }
-        return IntPtr.Zero;
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -1911,9 +1895,8 @@ public sealed class CaptureOverlayWindow : Window
         _closed = true;
         CaptureWindowLayer.MarkFullscreen(_captureHwnd, false);
         _captureHwnd = IntPtr.Zero;
-        UnregisterEscape();
-        _escapeSource?.RemoveHook(OnEscapeMessage);
-        _escapeSource = null;
+        _inputGuard?.Dispose();
+        _inputGuard = null;
         _lastHoverLogged = null;
         AppLog.Info(
             "Overlay",
@@ -1981,7 +1964,6 @@ public sealed class CaptureOverlayWindow : Window
             // 显示期间临时取消置顶，关闭后恢复并重新激活遮罩。
             _saveDialogOpen = true;
             CaptureWindowLayer.MarkFullscreen(_captureHwnd, false);
-            UnregisterEscape();
             Topmost = false;
             AppLog.Info("Output", $"保存对话框已打开：默认名称={dialog.FileName} 目录={dialog.InitialDirectory}");
             result = dialog.ShowDialog(this);
@@ -1996,7 +1978,6 @@ public sealed class CaptureOverlayWindow : Window
         {
             _saveDialogOpen = false;
             Topmost = wasTopmost;
-            RegisterEscape();
             CaptureWindowLayer.MarkFullscreen(_captureHwnd, wasTopmost);
             RefreshCaptureLayer();
         }
@@ -2006,7 +1987,7 @@ public sealed class CaptureOverlayWindow : Window
             AppLog.Info(
                 "Output",
                 $"另存为取消（{source}）：选区={_selection.Selection}，留在截图状态，不关闭遮罩、不写入任何记录");
-            SetStatus("已取消保存");
+            ClearStatus();
             RestoreOverlayFocus();
             return;
         }

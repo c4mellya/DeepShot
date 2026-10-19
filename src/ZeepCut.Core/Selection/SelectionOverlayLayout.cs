@@ -38,7 +38,7 @@ public static class SelectionOverlayLayout
         selection.IsEmpty ? string.Empty : FormatSize(selection.Width, selection.Height);
 
     /// <summary>
-    /// 计算工具栏位置（DIP）：优先选区下方，下方空间不足时放上方，水平方向夹取到窗口内。
+    /// 计算工具栏位置（DIP）：优先选区下方，下方空间不足时放上方；右边缘对齐选区，夹取到窗口内。
     /// 选区或窗口为空时返回 <see cref="DipRect.Empty"/>。
     /// </summary>
     /// <param name="selection">选区的窗口内 DIP 矩形。</param>
@@ -63,7 +63,7 @@ public static class SelectionOverlayLayout
         var height = Math.Min(toolbarHeight, client.Height);
 
         var maxLeft = client.Left + Math.Max(0, client.Width - width);
-        var left = Math.Clamp(selection.Left, client.Left, maxLeft);
+        var left = Math.Clamp(selection.Right - width, client.Left, maxLeft);
 
         var maxTop = client.Top + Math.Max(0, client.Height - height);
         var below = selection.Bottom + gap;

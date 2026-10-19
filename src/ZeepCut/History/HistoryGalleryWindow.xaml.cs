@@ -689,7 +689,6 @@ public sealed class HistoryGalleryWindow : Window
         if (dialog.ShowDialog() != true)
         {
             AppLog.Info("History", $"历史重命名已取消：Id={record.Id} 名称={record.Name}");
-            UpdateStatus(StringsUi.Get("S.History.RenameCancelled"));
             return;
         }
 
@@ -734,7 +733,6 @@ public sealed class HistoryGalleryWindow : Window
         if (answer != MessageBoxResult.OK)
         {
             AppLog.Info("History", $"历史删除已取消：名称={record.Name} Id={record.Id}");
-            UpdateStatus(StringsUi.Get("S.History.DeleteCancelled"));
             return;
         }
 

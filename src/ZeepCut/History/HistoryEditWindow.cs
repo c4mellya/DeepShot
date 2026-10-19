@@ -1276,7 +1276,7 @@ internal sealed class HistoryEditWindow : Window
             if (answer != MessageBoxResult.OK)
             {
                 AppLog.Info("History", "覆盖语义说明被取消，本次不保存（留在编辑窗口）");
-                SetStatus(StringsUi.Get("S.History.EditSaveCancelled"));
+                ClearStatus();
                 return;
             }
 
@@ -1412,7 +1412,7 @@ internal sealed class HistoryEditWindow : Window
 
             if (answer != MessageBoxResult.OK)
             {
-                SetStatus(StringsUi.Get("S.History.EditStayed"));
+                ClearStatus();
                 return;
             }
         }
@@ -1422,6 +1422,11 @@ internal sealed class HistoryEditWindow : Window
             $"编辑窗口取消编辑：名称={_record.Name} Id={_record.Id} 追加标注={_session.Count} 个已丢弃，" +
             "原图未修改");
         Close();
+    }
+
+    private void ClearStatus()
+    {
+        _status.Text = string.Empty;
     }
 
     private void SetStatus(string message, bool isError = false)

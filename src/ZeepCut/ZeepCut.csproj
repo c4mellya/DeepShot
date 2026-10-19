@@ -12,7 +12,7 @@
     <AssemblyName>ZeepCut</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
-    <Version>0.1.7</Version>
+    <Version>0.1.10</Version>
     <AssemblyTitle>Zeep Cut</AssemblyTitle>
     <Product>Zeep Cut</Product>
     <Company>Zeep Cut</Company>

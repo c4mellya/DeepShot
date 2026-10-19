@@ -4,7 +4,7 @@ A screenshot and desktop pin tool for Windows 10 22H2 / Windows 11 x64, built wi
 
 ## Install
 
-Run `ZeepCut-0.1.7-Setup-x64.exe` for a per-user installation, or extract `ZeepCut-0.1.7-win-x64.zip` and run `ZeepCut.exe`. Both releases include the .NET runtime. Keep all files and the Resources folder together. The installer is unsigned.
+Run `ZeepCut-0.1.10-Setup-x64.exe` for a per-user installation, or extract `ZeepCut-0.1.10-win-x64.zip` and run `ZeepCut.exe`. Both releases include the .NET runtime. Keep all files and the Resources folder together. The installer is unsigned.
 
 Zeep Cut lives in the system tray, possibly inside the hidden icons panel. Closing History or Settings keeps the application running; select Exit from the tray menu to stop it. Startup at sign-in is optional and disabled by default. A short guide appears on first launch.
 
@@ -26,7 +26,7 @@ Drag to move, scroll to zoom, Ctrl+scroll for opacity (minimum 20%). The context
 
 ## Quick view
 
-Left-click the tray icon to browse the latest 20 images. Right-click keeps the existing menu. Settings offers an optional quick-view shortcut; no key combination is reserved by default.
+Left-click the tray icon to browse the latest 20 images. Right-click keeps the existing menu. The default quick-view shortcut is **Alt+Q**, which can be changed or cleared in Settings. The shortcut aligns the panel's top-left corner with the pointer position captured at activation, constrained to the monitor's work area.
 
 Inside quick view, wheel up goes to the previous/newer image and wheel down to the next/older image. Arrow keys also browse; click a thumbnail to jump. Enter copies and closes, while Esc or clicking outside dismisses the panel. Drag the main image or a thumbnail into another app or folder. Pin, edit, and Full history actions reuse the existing tools; opening full history selects the current image.
 
