@@ -51,7 +51,10 @@ public sealed class HistoryGalleryWindow : Window
     private readonly TextBox _search;
     private readonly HistoryTabStrip _filter;
     private readonly ScrollViewer _scroll;
-    private readonly WrapPanel _cards;
+    private readonly StackPanel _cards;
+    private readonly Border _searchPill;
+    private readonly Button _searchClear;
+    private readonly TextBlock _searchHint;
     private readonly StackPanel _empty;
     private readonly TextBlock _emptyTitle;
     private readonly TextBlock _emptyBody;
@@ -75,6 +78,11 @@ public sealed class HistoryGalleryWindow : Window
     private bool _busy;
     private HistoryCard? _selected;
 
+    /// <summary>当前最后一个日期分区的卡片容器（加载更多时接着往里放）。</summary>
+    private WrapPanel? _currentWrap;
+
+    private DateOnly? _currentDate;
+
     /// <summary>T27：自动清理后写进状态栏的说明（下次有其它操作时会被覆盖）。</summary>
     private string? _retentionNotice;
 
@@ -93,47 +101,100 @@ public sealed class HistoryGalleryWindow : Window
         MinWidth = 640;
         MinHeight = 420;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        Background = HistoryUi.WindowBackground;
+        SetResourceReference(BackgroundProperty, HistoryUi.Keys.Window);
         FontFamily = new FontFamily(HistoryUi.FontFamilyName);
         AutomationProperties.SetAutomationId(this, "history-gallery-window");
         AutomationProperties.SetName(this, StringsUi.Get("S.History.WindowName"));
 
-        var content = new Grid { Margin = new Thickness(16, 12, 16, 10) };
-        content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        var content = new Grid();
         content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         content.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-        // --- 第一行：标题 + 搜索 + 收藏开关 + 刷新 ---
-        var header = new Grid();
+        // --- 顶栏：标题 | 搜索胶囊 | 全部/收藏分段 | 刷新 ---
+        var header = new Grid { Margin = new Thickness(24, 20, 24, 14) };
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-        _title = HistoryUi.Text(StringsUi.Get("S.History.Title"), 15, HistoryUi.Foreground, FontWeights.SemiBold);
+        _title = HistoryUi.Text(StringsUi.Get("S.History.Title"), 21, weight: FontWeights.SemiBold);
         _title.HorizontalAlignment = HorizontalAlignment.Left;
-        _title.Margin = new Thickness(2, 0, 16, 0);
+        _title.Margin = new Thickness(0, 0, 28, 3);
         Grid.SetColumn(_title, 0);
         header.Children.Add(_title);
 
         _search = new TextBox
         {
             FontSize = 13.5,
-            Padding = new Thickness(8, 5, 8, 5),
-            Margin = new Thickness(0, 0, 12, 0),
+            Padding = new Thickness(0, 0, 0, 1),
+            BorderThickness = new Thickness(0),
+            Background = Brushes.Transparent,
             VerticalAlignment = VerticalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
             ToolTip = StringsUi.Get("S.History.SearchPlaceholder"),
-            Background = HistoryUi.CardBackground,
-            Foreground = HistoryUi.Foreground,
-            BorderBrush = HistoryUi.Border,
         };
         AutomationProperties.SetName(_search, StringsUi.Get("S.History.SearchName"));
         AutomationProperties.SetAutomationId(_search, "history-search");
         _search.TextChanged += (_, _) => OnSearchTextChanged();
         _search.PreviewKeyDown += OnSearchKeyDown;
+
+        _searchHint = HistoryUi.Text(StringsUi.Get("S.History.SearchName"), 13.5, brushKey: HistoryUi.Keys.Secondary);
+        _searchHint.HorizontalAlignment = HorizontalAlignment.Left;
+        _searchHint.IsHitTestVisible = false;
+        _searchHint.Opacity = 0.8;
+
+        _searchClear = HistoryUi.IconButton(
+            HistoryIcons.Close,
+            StringsUi.Get("S.History.SearchClear"),
+            StringsUi.Get("S.History.SearchClear"),
+            () =>
+            {
+                _search.Text = string.Empty;
+                _search.Focus();
+            },
+            size: 26,
+            iconKey: HistoryUi.Keys.Secondary,
+            iconSize: 12);
+        _searchClear.Margin = new Thickness(0, 0, 6, 0);
+        _searchClear.Visibility = Visibility.Collapsed;
+        AutomationProperties.SetAutomationId(_searchClear, "history-search-clear");
+
+        var searchIcon = HistoryIcons.Create(HistoryIcons.Search, 16, HistoryUi.Keys.Secondary);
+        searchIcon.Margin = new Thickness(15, 0, 9, 0);
+
+        var searchGrid = new Grid();
+        searchGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        searchGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        searchGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        Grid.SetColumn(searchIcon, 0);
         Grid.SetColumn(_search, 1);
-        header.Children.Add(_search);
+        Grid.SetColumn(_searchHint, 1);
+        Grid.SetColumn(_searchClear, 2);
+        searchGrid.Children.Add(searchIcon);
+        searchGrid.Children.Add(_searchHint);
+        searchGrid.Children.Add(_search);
+        searchGrid.Children.Add(_searchClear);
+
+        _searchPill = new Border
+        {
+            Height = 38,
+            MaxWidth = 460,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            CornerRadius = new CornerRadius(19),
+            BorderThickness = new Thickness(1),
+            Margin = new Thickness(0, 0, 16, 0),
+            Child = searchGrid,
+        };
+        _searchPill.SetResourceReference(Border.BackgroundProperty, HistoryUi.Keys.Surface);
+        _searchPill.SetResourceReference(Border.BorderBrushProperty, HistoryUi.Keys.Border);
+        _searchPill.IsKeyboardFocusWithinChanged += (_, _) =>
+            _searchPill.SetResourceReference(
+                Border.BorderBrushProperty,
+                _searchPill.IsKeyboardFocusWithin ? HistoryUi.Keys.Accent : HistoryUi.Keys.Border);
+        _searchPill.MouseLeftButtonDown += (_, _) => _search.Focus();
+        Grid.SetColumn(_searchPill, 1);
+        header.Children.Add(_searchPill);
 
         _filter = new HistoryTabStrip(
             showAll: () => SetFavoritesOnly(false),
@@ -141,14 +202,19 @@ public sealed class HistoryGalleryWindow : Window
             StringsUi.Get("S.History.FilterAll"),
             StringsUi.Get("S.History.FilterFavorites"));
         _filter.Margin = new Thickness(0, 0, 12, 0);
+        _filter.Apply(false);
         Grid.SetColumn(_filter, 2);
         header.Children.Add(_filter);
 
-        _refreshButton = HistoryUi.Button(
+        _refreshButton = HistoryUi.IconButton(
+            HistoryIcons.Refresh,
             StringsUi.Get("S.History.Refresh"),
-            StringsUi.Get("S.History.Refresh"),
-            Reload);
-        _refreshButton.Margin = new Thickness(0);
+            StringsUi.Get("S.History.Refresh") + " (F5)",
+            Reload,
+            size: 38,
+            iconSize: 16);
+        HistoryUi.StyleButton(_refreshButton, primary: false);
+        _refreshButton.BorderThickness = new Thickness(1);
         AutomationProperties.SetAutomationId(_refreshButton, "history-refresh");
         Grid.SetColumn(_refreshButton, 3);
         header.Children.Add(_refreshButton);
@@ -156,34 +222,38 @@ public sealed class HistoryGalleryWindow : Window
         Grid.SetRow(header, 0);
         content.Children.Add(header);
 
-        // --- 第二行：状态条（计数 / 上次操作结果） ---
-        _status = HistoryUi.Text(StringsUi.Get("S.History.Loading"), 12, HistoryUi.SecondaryForeground);
-        _status.Margin = new Thickness(2, 8, 0, 6);
-        AutomationProperties.SetAutomationId(_status, "history-status");
-        Grid.SetRow(_status, 1);
-        content.Children.Add(_status);
-
-        // --- 第三行：卡片区（卡片与空状态互斥显示） ---
-        _cards = new WrapPanel { Orientation = Orientation.Horizontal };
+        // --- 中间：日期分区 + 卡片（与空状态互斥显示） ---
+        _cards = new StackPanel { Orientation = Orientation.Vertical };
         _scroll = new ScrollViewer
         {
             Content = _cards,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            Padding = new Thickness(0, 0, 4, 0),
+            Padding = new Thickness(24, 2, 12, 16),
         };
         _scroll.ScrollChanged += OnScrollChanged;
 
-        _emptyTitle = HistoryUi.Text(StringsUi.Get("S.History.EmptyTitle"), 15, HistoryUi.Foreground, FontWeights.SemiBold);
+        var emptyIcon = new Border
+        {
+            Width = 104,
+            Height = 104,
+            CornerRadius = new CornerRadius(52),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Child = HistoryIcons.Create(HistoryIcons.Image, 46, HistoryUi.Keys.Secondary, 1.3),
+        };
+        emptyIcon.SetResourceReference(Border.BackgroundProperty, HistoryUi.Keys.SurfaceAlt);
+
+        _emptyTitle = HistoryUi.Text(StringsUi.Get("S.History.EmptyTitle"), 17, weight: FontWeights.SemiBold);
         _emptyTitle.HorizontalAlignment = HorizontalAlignment.Center;
+        _emptyTitle.Margin = new Thickness(0, 22, 0, 0);
         AutomationProperties.SetAutomationId(_emptyTitle, "history-empty-title");
 
-        _emptyBody = HistoryUi.Text(string.Empty, 12.5, HistoryUi.SecondaryForeground);
+        _emptyBody = HistoryUi.Text(string.Empty, 13, brushKey: HistoryUi.Keys.Secondary);
         _emptyBody.HorizontalAlignment = HorizontalAlignment.Center;
         _emptyBody.TextAlignment = TextAlignment.Center;
         _emptyBody.TextWrapping = TextWrapping.Wrap;
-        _emptyBody.MaxWidth = 560;
-        _emptyBody.Margin = new Thickness(0, 8, 0, 12);
+        _emptyBody.MaxWidth = 460;
+        _emptyBody.Margin = new Thickness(0, 8, 0, 18);
         AutomationProperties.SetAutomationId(_emptyBody, "history-empty-text");
 
         _clearFilters = HistoryUi.Button(
@@ -191,6 +261,7 @@ public sealed class HistoryGalleryWindow : Window
             StringsUi.Get("S.History.ClearFilters"),
             ClearFilters);
         _clearFilters.HorizontalAlignment = HorizontalAlignment.Center;
+        _clearFilters.Margin = new Thickness(0);
         AutomationProperties.SetAutomationId(_clearFilters, "history-clear-filters");
 
         _empty = new StackPanel
@@ -198,7 +269,9 @@ public sealed class HistoryGalleryWindow : Window
             VerticalAlignment = VerticalAlignment.Center,
             HorizontalAlignment = HorizontalAlignment.Center,
             Visibility = Visibility.Collapsed,
+            Margin = new Thickness(24, 0, 24, 40),
         };
+        _empty.Children.Add(emptyIcon);
         _empty.Children.Add(_emptyTitle);
         _empty.Children.Add(_emptyBody);
         _empty.Children.Add(_clearFilters);
@@ -207,21 +280,39 @@ public sealed class HistoryGalleryWindow : Window
         var body = new Grid();
         body.Children.Add(_scroll);
         body.Children.Add(_empty);
-        Grid.SetRow(body, 2);
+        Grid.SetRow(body, 1);
         content.Children.Add(body);
 
-        // --- 第四行：底部提示 ---
-        _footer = HistoryUi.Text(
-            StringsUi.Get("S.History.Footer"),
-            11.5,
-            HistoryUi.SecondaryForeground);
+        // --- 底栏：状态（计数 / 上次操作结果）+ 使用提示 ---
+        _status = HistoryUi.Text(StringsUi.Get("S.History.Loading"), 12.5, brushKey: HistoryUi.Keys.Foreground);
+        _status.HorizontalAlignment = HorizontalAlignment.Left;
+        _status.Opacity = 0.85;
+        AutomationProperties.SetAutomationId(_status, "history-status");
+
+        _footer = HistoryUi.Text(StringsUi.Get("S.History.Footer"), 11.5, brushKey: HistoryUi.Keys.Secondary);
         _footer.HorizontalAlignment = HorizontalAlignment.Left;
         _footer.TextWrapping = TextWrapping.Wrap;
-        _footer.Margin = new Thickness(2, 8, 0, 0);
-        Grid.SetRow(_footer, 3);
-        content.Children.Add(_footer);
+        _footer.TextTrimming = TextTrimming.None;
+        _footer.Margin = new Thickness(0, 3, 0, 0);
+
+        var footerStack = new StackPanel();
+        footerStack.Children.Add(_status);
+        footerStack.Children.Add(_footer);
+
+        var footerBar = new Border
+        {
+            Padding = new Thickness(24, 10, 24, 12),
+            BorderThickness = new Thickness(0, 1, 0, 0),
+            Child = footerStack,
+        };
+        footerBar.SetResourceReference(Border.BackgroundProperty, HistoryUi.Keys.Surface);
+        footerBar.SetResourceReference(Border.BorderBrushProperty, HistoryUi.Keys.Divider);
+        Grid.SetRow(footerBar, 2);
+        content.Children.Add(footerBar);
 
         Content = content;
+
+        SourceInitialized += (_, _) => DwmApi.TrySetDarkTitleBar(this, ThemeManager.Palette.IsDark);
 
         _searchTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(SearchDebounceMs) };
         _searchTimer.Tick += (_, _) =>
@@ -331,29 +422,38 @@ public sealed class HistoryGalleryWindow : Window
         }
     }
 
-    /// <summary>重建卡片：按查询顺序编号（AutomationId 与"第 N 条"日志都用它），每段前插分组标题。</summary>
+    /// <summary>重建卡片：按查询顺序编号（AutomationId 与"第 N 条"日志都用它），每个日期一个带标题的分区。</summary>
     private void RebuildCards(IReadOnlyList<HistoryRecord> records)
     {
         _cards.Children.Clear();
         _loaded.Clear();
         _selected = null;
+        _currentWrap = null;
+        _currentDate = null;
 
-        var index = 0;
-        foreach (var group in _groups)
+        AppendGroups(_groups);
+    }
+
+    /// <summary>把若干日期分组追加到列表末尾；与当前最后一个分区同一天的接着放进去（加载更多时用）。</summary>
+    private void AppendGroups(IReadOnlyList<HistoryDayGroup> groups)
+    {
+        foreach (var group in groups)
         {
-            if (_cards.Children.Count > 0)
+            if (_currentWrap is null || _currentDate != group.Date)
             {
-                _cards.Children.Add(BuildGroupBreak());
+                var section = new StackPanel();
+                section.Children.Add(BuildGroupHeader(group, first: _cards.Children.Count == 0));
+                _currentWrap = new WrapPanel { Orientation = Orientation.Horizontal };
+                section.Children.Add(_currentWrap);
+                _cards.Children.Add(section);
+                _currentDate = group.Date;
             }
-
-            _cards.Children.Add(BuildGroupHeader(group));
 
             foreach (var record in group.Items)
             {
-                var card = CreateCard(record, index, _store.TryLoadPreview(record));
-                _cards.Children.Add(card);
+                var card = CreateCard(record, _loaded.Count, _store.TryLoadPreview(record));
+                _currentWrap.Children.Add(card);
                 _loaded.Add(card);
-                index++;
             }
         }
     }
@@ -367,36 +467,41 @@ public sealed class HistoryGalleryWindow : Window
         return card;
     }
 
-    private static UIElement BuildGroupHeader(HistoryDayGroup group)
+    /// <summary>日期分区标题：小号次要色标题 + 数量徽标 + 一条延伸到行尾的分隔线。</summary>
+    private static UIElement BuildGroupHeader(HistoryDayGroup group, bool first)
     {
-        var text = HistoryUi.Text(
-            $"{group.Title}（{group.Count}）",
-            13,
-            HistoryUi.Foreground,
-            FontWeights.SemiBold);
+        var text = HistoryUi.Text(group.Title, 12.5, weight: FontWeights.SemiBold, measureNaturalWidth: true, brushKey: HistoryUi.Keys.Secondary);
+        text.HorizontalAlignment = HorizontalAlignment.Left;
         AutomationProperties.SetAutomationId(
             text,
             $"history-group-{group.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}");
         AutomationProperties.SetName(text, StringsUi.Format("S.History.GroupTitle", group.Title));
 
-        var stack = new StackPanel
+        var count = HistoryUi.Text(group.Count.ToString(CultureInfo.InvariantCulture), 11, brushKey: HistoryUi.Keys.Secondary, measureNaturalWidth: true);
+        var badge = new Border
         {
-            Orientation = Orientation.Horizontal,
-            Margin = new Thickness(2, 6, 0, 6),
+            CornerRadius = new CornerRadius(9),
+            Padding = new Thickness(7, 1, 7, 1),
+            Margin = new Thickness(8, 0, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = count,
         };
-        stack.Children.Add(text);
-        return stack;
-    }
+        badge.SetResourceReference(Border.BackgroundProperty, HistoryUi.Keys.SurfaceAlt);
 
-    /// <summary>
-    /// 让分组标题**独占一行**：<see cref="WrapPanel"/> 不认识"整行"，
-    /// 所以在标题前插一个足够宽的空占位（宽度 = 可见区宽度），它必然把标题挤到下一行；
-    /// 占位本身只占 1px 高，视觉上看不出空隙。
-    /// </summary>
-    private UIElement BuildGroupBreak()
-    {
-        var available = _scroll.ActualWidth > 64 ? _scroll.ActualWidth - 32 : 900;
-        return new Border { Width = Math.Max(available, 64), Height = 1 };
+        var line = new Border { Height = 1, Margin = new Thickness(14, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+        line.SetResourceReference(Border.BackgroundProperty, HistoryUi.Keys.Divider);
+
+        var grid = new Grid { Margin = new Thickness(2, first ? 6 : 14, 0, 14) };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        Grid.SetColumn(text, 0);
+        Grid.SetColumn(badge, 1);
+        Grid.SetColumn(line, 2);
+        grid.Children.Add(text);
+        grid.Children.Add(badge);
+        grid.Children.Add(line);
+        return grid;
     }
 
     private HistoryCardCallbacks BuildCallbacks() => new()
@@ -528,6 +633,10 @@ public sealed class HistoryGalleryWindow : Window
 
     private void OnSearchTextChanged()
     {
+        var hasText = _search.Text.Length > 0;
+        _searchHint.Visibility = hasText ? Visibility.Collapsed : Visibility.Visible;
+        _searchClear.Visibility = hasText ? Visibility.Visible : Visibility.Collapsed;
+
         // 防抖：每敲一个字符就查库会让输入卡顿，250ms 合并后再刷（Enter 立即刷）。
         _searchTimer.Stop();
         _searchTimer.Start();
@@ -796,14 +905,9 @@ public sealed class HistoryGalleryWindow : Window
             }
 
             var existing = _loaded.Select(card => card.Record.Id).ToHashSet();
-            var added = 0;
-            foreach (var record in page.Items.Where(record => !existing.Contains(record.Id)))
-            {
-                var card = CreateCard(record, _loaded.Count, _store.TryLoadPreview(record));
-                _cards.Children.Add(card);
-                _loaded.Add(card);
-                added++;
-            }
+            var fresh = page.Items.Where(record => !existing.Contains(record.Id)).ToList();
+            var added = fresh.Count;
+            AppendGroups(HistoryGrouping.GroupByDay(fresh, DateTime.Now));
 
             _filteredCount = page.TotalCount;
             AppLog.Info(
@@ -913,15 +1017,11 @@ public sealed class HistoryGalleryWindow : Window
 
     // --- T30 主题 / T31 语言 ---
 
-    /// <summary>主题切换后把新配色套到整棵树（已创建的卡片也会换色）。</summary>
+    /// <summary>主题切换：所有颜色都是主题资源引用、自动更新；这里只需要同步系统标题栏的深浅。</summary>
     private void OnThemeChanged(AppTheme effective)
     {
         var palette = ThemeManager.Palette;
-        Background = palette.WindowBackgroundBrush;
-        HistoryUi.ApplyThemeTo(Content as DependencyObject, _lastPalette);
-        _filter?.ApplyPalette();
         DwmApi.TrySetDarkTitleBar(this, palette.IsDark);
-        _lastPalette = palette;
         AppLog.Info("History", $"历史图库已按新主题刷新：{effective}（{palette}）");
     }
 
@@ -933,7 +1033,11 @@ public sealed class HistoryGalleryWindow : Window
         _title.Text = StringsUi.Get("S.History.Title");
         _search.ToolTip = StringsUi.Get("S.History.SearchPlaceholder");
         AutomationProperties.SetName(_search, StringsUi.Get("S.History.SearchName"));
-        HistoryUi.SetButtonText(_refreshButton, StringsUi.Get("S.History.Refresh"));
+        AutomationProperties.SetName(_refreshButton, StringsUi.Get("S.History.Refresh"));
+        _refreshButton.ToolTip = StringsUi.Get("S.History.Refresh") + " (F5)";
+        AutomationProperties.SetName(_searchClear, StringsUi.Get("S.History.SearchClear"));
+        _searchClear.ToolTip = StringsUi.Get("S.History.SearchClear");
+        _searchHint.Text = StringsUi.Get("S.History.SearchName");
         HistoryUi.SetButtonText(_clearFilters, StringsUi.Get("S.History.ClearFilters"));
         _footer.Text = StringsUi.Get("S.History.Footer");
         _filter.Recreate(
@@ -945,9 +1049,6 @@ public sealed class HistoryGalleryWindow : Window
         Reload();
         AppLog.Info("History", $"历史图库已按新语言刷新：{language}");
     }
-
-    /// <summary>切换前的那套调色板（主题换色时用来识别"哪个颜色是语义色"）。</summary>
-    private ThemePalette _lastPalette = ThemeManager.Palette;
 
     /// <summary>
     /// 空状态说明（T31）：与 Core <see cref="HistoryView.DescribeEmptyState"/> 同一套分支，

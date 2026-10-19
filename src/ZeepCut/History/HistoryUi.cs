@@ -2,30 +2,43 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using ZeepCut.Ui;
 
 namespace ZeepCut.History;
 
 /// <summary>
-/// 图库/预览/对话框共用的朴素样式（T25/T26）。
+/// 图库/预览/对话框共用的样式与小部件。
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>T30 起全部走主题</b>：这些属性都是 <b>属性</b> 而不是 <c>readonly</c> 字段，读的是
-/// <see cref="ThemeManager.Palette"/> 里当前的语义色。切换主题后，已创建的控件由各窗口
-/// 监听 <see cref="ThemeManager.Changed"/> 调 <see cref="ApplyThemeTo"/> 就地换色；
-/// 新建的控件自动取新颜色。
-/// </para>
-/// <para>
-/// 保留原来的属性名（<see cref="WindowBackground"/> 等），这样 T25/T26 写好的窗口代码
-/// 不用改名，只是"颜色是什么"从写死变成跟着主题。
+/// <b>全部走主题资源</b>：新建的控件一律用 <c>SetResourceReference</c> 指向 <c>Theme.*</c> 键
+/// （<see cref="ThemeManager.BrushKeys"/>），切换主题时 WPF 自动重绘，不需要窗口再手动"翻译"颜色。
+/// 少数仍需要具体画刷的地方（如 <see cref="Frozen"/>）读的是 <see cref="ThemeManager.Palette"/> 当前值。
 /// </para>
 /// </remarks>
 internal static class HistoryUi
 {
+    /// <summary>主题画刷键的短别名。</summary>
+    internal static class Keys
+    {
+        internal const string Window = ThemeManager.BrushKeys.WindowBackground;
+        internal const string Surface = ThemeManager.BrushKeys.Surface;
+        internal const string SurfaceAlt = ThemeManager.BrushKeys.SurfaceAlt;
+        internal const string Border = ThemeManager.BrushKeys.Border;
+        internal const string Divider = ThemeManager.BrushKeys.Divider;
+        internal const string Foreground = ThemeManager.BrushKeys.Foreground;
+        internal const string Secondary = ThemeManager.BrushKeys.SecondaryForeground;
+        internal const string Accent = ThemeManager.BrushKeys.Accent;
+        internal const string OnAccent = ThemeManager.BrushKeys.OnAccent;
+        internal const string Error = ThemeManager.BrushKeys.Error;
+        internal const string Star = ThemeManager.BrushKeys.Star;
+        internal const string StarInactive = ThemeManager.BrushKeys.StarInactive;
+    }
+
     private static ThemePalette Palette => ThemeManager.Palette;
 
-    /// <summary>窗口背景。</summary>
+    /// <summary>窗口背景（当前主题的具体画刷；新代码请用 <see cref="Keys"/> + 资源引用）。</summary>
     internal static Brush WindowBackground => Palette.WindowBackgroundBrush;
 
     /// <summary>内容卡片背景。</summary>
@@ -68,33 +81,61 @@ internal static class HistoryUi
         return brush;
     }
 
+    /// <summary>把元素的某个画刷属性绑定到主题键（换主题自动更新）。</summary>
+    internal static T Ref<T>(this T element, DependencyProperty property, string key)
+        where T : FrameworkElement
+    {
+        element.SetResourceReference(property, key);
+        return element;
+    }
+
+    /// <summary>用 0.15s 的缓动把 <paramref name="property"/> 动画到目标值（悬停/选中过渡）。</summary>
+    internal static void Fade(UIElement element, DependencyProperty property, double to, double milliseconds = 140)
+    {
+        var animation = new DoubleAnimation(to, TimeSpan.FromMilliseconds(milliseconds))
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+        };
+        element.BeginAnimation(property, animation);
+    }
+
     /// <summary>创建一段文字。</summary>
     /// <param name="text">文字。</param>
     /// <param name="fontSize">字号。</param>
-    /// <param name="foreground">颜色（默认主文字色）。</param>
+    /// <param name="foreground">具体画刷（旧用法）；为 null 时用 <paramref name="brushKey"/> 的主题资源引用。</param>
     /// <param name="weight">字重。</param>
     /// <param name="measureNaturalWidth">
     /// 去掉 <see cref="TextTrimming.CharacterEllipsis"/> 让文本按内容测宽。
     /// 默认的省略号样式放进 Grid 自动列/按钮内容里会被量得很窄，把中文裁成一条。
     /// </param>
+    /// <param name="brushKey">主题画刷键（默认主文字色）。</param>
     internal static TextBlock Text(
         string text,
         double fontSize = 13,
         Brush? foreground = null,
         FontWeight? weight = null,
-        bool measureNaturalWidth = false)
+        bool measureNaturalWidth = false,
+        string? brushKey = null)
     {
         var block = new TextBlock
         {
             Text = text,
             FontFamily = Font,
             FontSize = fontSize,
-            Foreground = foreground ?? Foreground,
             TextWrapping = TextWrapping.NoWrap,
             TextTrimming = measureNaturalWidth ? TextTrimming.None : TextTrimming.CharacterEllipsis,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
         };
+
+        if (foreground is not null)
+        {
+            block.Foreground = foreground;
+        }
+        else
+        {
+            block.SetResourceReference(TextBlock.ForegroundProperty, brushKey ?? Keys.Foreground);
+        }
 
         if (weight is { } value)
         {
@@ -106,48 +147,133 @@ internal static class HistoryUi
 
     /// <summary>
     /// 创建按钮：统一外观 + UIA 名字（便于真实桌面自动化按名字点击）。
+    /// 主按钮 = 强调色底；次按钮 = 面板色底 + 细边框（悬停反馈来自全局按钮样式）。
     /// </summary>
     /// <remarks>
-    /// T31：文案超过 4 个字符（英文 "Save as" / "Annotate"）时 <c>MinWidth</c> 不再压到 66，
+    /// 文案超过 4 个字符（英文 "Save as" / "Annotate"）时 <c>MinWidth</c> 不再压到固定值，
     /// 而是按 <see cref="FrameworkElement.Measure"/> 实测宽度，保证中英文都不被截断。
+    /// 内容文字不单独设颜色，继承按钮的 <c>Foreground</c>，所以选中/主按钮换色时文字跟着换。
     /// </remarks>
     internal static Button Button(string text, string automationName, Action onClick, bool primary = false)
     {
-        var palette = Palette;
-        var label = Text(text, 13, primary ? palette.OnAccentBrush : palette.ForegroundBrush, measureNaturalWidth: true);
+        var label = Text(text, 13, measureNaturalWidth: true);
+        label.ClearValue(TextBlock.ForegroundProperty);
         var button = new Button
         {
-            // 内容用 TextBlock 而不是裸字符串：保证中文字形一定按本类的字体族渲染
-            // （裸 Content 会走按钮模板的默认字体，缺中文字形时会画出方块）。
+            // 内容用 TextBlock 而不是裸字符串：保证中文字形一定按本类的字体族渲染。
             Content = label,
-            Padding = new Thickness(12, 5, 12, 5),
-            Margin = new Thickness(0, 0, 6, 0),
+            Padding = new Thickness(14, 7, 14, 7),
+            Margin = new Thickness(0, 0, 8, 0),
             FontFamily = Font,
             FontSize = 13,
-            MinWidth = 66,
-            Background = primary ? palette.AccentBrush : palette.SurfaceBrush,
-            Foreground = primary ? palette.OnAccentBrush : palette.ForegroundBrush,
-            BorderBrush = palette.BorderBrush,
+            MinWidth = 72,
             BorderThickness = new Thickness(1),
             Cursor = System.Windows.Input.Cursors.Hand,
         };
+        StyleButton(button, primary);
 
         AutomationProperties.SetName(button, automationName);
         button.Click += (_, _) => onClick();
         return button;
     }
 
+    /// <summary>给按钮套上主/次配色（资源引用，换主题自动更新）。</summary>
+    internal static void StyleButton(Button button, bool primary)
+    {
+        if (primary)
+        {
+            button.SetResourceReference(Control.BackgroundProperty, Keys.Accent);
+            button.SetResourceReference(Control.BorderBrushProperty, Keys.Accent);
+            button.SetResourceReference(Control.ForegroundProperty, Keys.OnAccent);
+        }
+        else
+        {
+            button.SetResourceReference(Control.BackgroundProperty, Keys.Surface);
+            button.SetResourceReference(Control.BorderBrushProperty, Keys.Border);
+            button.SetResourceReference(Control.ForegroundProperty, Keys.Foreground);
+        }
+    }
+
+    /// <summary>
+    /// 紧凑图标按钮（无边框透明底，悬停出现浅色覆盖层）。UIA 名字 = <paramref name="automationName"/>，
+    /// 鼠标悬停提示 = <paramref name="toolTip"/>。
+    /// </summary>
+    internal static Button IconButton(
+        string iconData,
+        string automationName,
+        string? toolTip,
+        Action onClick,
+        double size = 30,
+        string iconKey = Keys.Foreground,
+        double iconSize = 16)
+    {
+        var button = new Button
+        {
+            Content = HistoryIcons.Create(iconData, iconSize, iconKey),
+            Width = size,
+            Height = size,
+            Padding = new Thickness(0),
+            Margin = new Thickness(0),
+            BorderThickness = new Thickness(0),
+            Background = Brushes.Transparent,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Cursor = System.Windows.Input.Cursors.Hand,
+            ToolTip = toolTip ?? automationName,
+        };
+        AutomationProperties.SetName(button, automationName);
+        button.Click += (_, _) => onClick();
+        return button;
+    }
+
+    /// <summary>幽灵按钮：透明底、可选前置图标 + 文字（工具栏用）。</summary>
+    internal static Button GhostButton(string text, string? iconData, string automationName, Action onClick)
+    {
+        var row = new StackPanel { Orientation = Orientation.Horizontal };
+        if (iconData is not null)
+        {
+            var icon = HistoryIcons.Create(iconData, 15, Keys.Secondary);
+            icon.Margin = new Thickness(0, 0, 7, 0);
+            icon.VerticalAlignment = VerticalAlignment.Center;
+            row.Children.Add(icon);
+        }
+
+        var label = Text(text, 12.5, measureNaturalWidth: true);
+        label.ClearValue(TextBlock.ForegroundProperty);
+        row.Children.Add(label);
+
+        var button = new Button
+        {
+            Content = row,
+            Height = 30,
+            Padding = new Thickness(10, 0, 12, 0),
+            Margin = new Thickness(0),
+            BorderThickness = new Thickness(0),
+            Background = Brushes.Transparent,
+            FontFamily = Font,
+            FontSize = 12.5,
+            Cursor = System.Windows.Input.Cursors.Hand,
+        };
+        button.SetResourceReference(Control.ForegroundProperty, Keys.Foreground);
+        AutomationProperties.SetName(button, automationName);
+        button.Click += (_, _) => onClick();
+        return button;
+    }
+
+    /// <summary>竖向细分隔线（工具栏分组用）。</summary>
+    internal static System.Windows.Controls.Border VerticalSeparator(double height = 18) =>
+        new System.Windows.Controls.Border { Width = 1, Height = height, Margin = new Thickness(8, 0, 8, 0) }
+            .Ref(System.Windows.Controls.Border.BackgroundProperty, Keys.Divider);
+
     /// <summary>
     /// 给按钮换文案（语言切换后调用），并按新文字重测最小宽度，避免英文比中文宽时被截断。
     /// </summary>
     internal static void SetButtonText(Button button, string text)
     {
-        var primary = IsPrimaryLike(button.Background as SolidColorBrush);
-        var palette = Palette;
-        if (button.Content is TextBlock label)
+        var label = FindLabel(button.Content);
+        if (label is not null)
         {
             label.Text = text;
-            label.Foreground = primary ? palette.OnAccentBrush : palette.ForegroundBrush;
         }
         else
         {
@@ -157,111 +283,27 @@ internal static class HistoryUi
         FitButtonWidth(button);
     }
 
+    private static TextBlock? FindLabel(object? content) => content switch
+    {
+        TextBlock block => block,
+        Panel panel => panel.Children.OfType<TextBlock>().FirstOrDefault(),
+        _ => null,
+    };
+
     /// <summary>按内容实测宽度设置 <c>MinWidth</c>（内边距 + 文字宽度，不缩到比文字还窄）。</summary>
     internal static void FitButtonWidth(Button button)
     {
-        // 已经放大过的不回缩（卡片操作条的两行按钮共用同一列宽）。
+        if (button.Width > 0)
+        {
+            return;
+        }
+
         button.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         var desired = button.DesiredSize.Width;
         if (desired > button.MinWidth && !double.IsNaN(desired) && desired > 0)
         {
             button.MinWidth = Math.Ceiling(desired);
         }
-    }
-
-    /// <summary>这个按钮是不是"主按钮"（强调色底）。主题切换时要保持它的主按钮外观。</summary>
-    internal static bool IsPrimaryLike(SolidColorBrush? background) =>
-        background is not null &&
-        (Equals(background.Color, ThemePalette.Light.Accent) || Equals(background.Color, ThemePalette.Dark.Accent));
-
-    /// <summary>
-    /// 把当前主题套到一棵已建好的控件树上（切换主题后调用）。
-    /// </summary>
-    /// <remarks>
-    /// 只处理本模块自己创建的"朴素控件"（<see cref="TextBlock"/> / <see cref="Button"/> /
-    /// <see cref="Border"/> / <see cref="TextBox"/>）；判定依据是"颜色等于旧主题的某个语义色"，
-    /// 所以必须**在 <see cref="ThemeManager.Apply"/> 之后**调用，参数 <paramref name="previous"/> 是切换前的那套。
-    /// </remarks>
-    internal static void ApplyThemeTo(DependencyObject? root, ThemePalette previous)
-    {
-        if (root is null)
-        {
-            return;
-        }
-
-        var palette = Palette;
-
-        switch (root)
-        {
-            case TextBlock text:
-                text.Foreground = Translate(text.Foreground, previous, palette);
-                break;
-
-            case Button button:
-                var wasPrimary = IsPrimaryLike(button.Background as SolidColorBrush) ||
-                                 Equals((button.Background as SolidColorBrush)?.Color, previous.Accent);
-                button.Background = wasPrimary
-                    ? palette.AccentBrush
-                    : Equals((button.Background as SolidColorBrush)?.Color, previous.Surface)
-                        ? palette.SurfaceBrush
-                        : Translate(button.Background, previous, palette);
-                button.BorderBrush = Translate(button.BorderBrush, previous, palette);
-                button.Foreground = Translate(button.Foreground, previous, palette);
-                if (button.Content is TextBlock label)
-                {
-                    label.Foreground = Translate(label.Foreground, previous, palette);
-                }
-
-                break;
-
-            case TextBox box:
-                box.Background = Translate(box.Background, previous, palette);
-                box.Foreground = Translate(box.Foreground, previous, palette);
-                box.BorderBrush = Translate(box.BorderBrush, previous, palette);
-                box.CaretBrush = Translate(box.CaretBrush, previous, palette);
-                break;
-
-            case Border border:
-                border.Background = Translate(border.Background, previous, palette);
-                border.BorderBrush = Translate(border.BorderBrush, previous, palette);
-                break;
-        }
-
-        var count = VisualTreeHelper.GetChildrenCount(root);
-        for (var i = 0; i < count; i++)
-        {
-            ApplyThemeTo(VisualTreeHelper.GetChild(root, i), previous);
-        }
-    }
-
-    /// <summary>
-    /// 把"旧主题里的某个语义色"翻译成新主题里的同一个语义色。
-    /// 认不出的颜色（用户自定义的颜色块、透明底、图片）原样保留。
-    /// </summary>
-    internal static Brush Translate(Brush? brush, ThemePalette previous, ThemePalette next)
-    {
-        if (brush is not SolidColorBrush solid || solid.Color.A == 0)
-        {
-            return brush ?? Brushes.Transparent;
-        }
-
-        var color = solid.Color;
-        if (Equals(color, previous.WindowBackground)) return next.WindowBackgroundBrush;
-        if (Equals(color, previous.Surface)) return next.SurfaceBrush;
-        if (Equals(color, previous.SurfaceAlt)) return next.SurfaceAltBrush;
-        if (Equals(color, previous.Border)) return next.BorderBrush;
-        if (Equals(color, previous.Divider)) return next.DividerBrush;
-        if (Equals(color, previous.Foreground)) return next.ForegroundBrush;
-        if (Equals(color, previous.SecondaryForeground)) return next.SecondaryForegroundBrush;
-        if (Equals(color, previous.Accent)) return next.AccentBrush;
-        if (Equals(color, previous.OnAccent)) return next.OnAccentBrush;
-        if (Equals(color, previous.HoverBackground)) return next.HoverBackgroundBrush;
-        if (Equals(color, previous.Error)) return next.ErrorBrush;
-        if (Equals(color, previous.Success)) return next.SuccessBrush;
-        if (Equals(color, previous.Warning)) return next.WarningBrush;
-        if (Equals(color, previous.Star)) return next.StarBrush;
-        if (Equals(color, previous.StarInactive)) return next.StarInactiveBrush;
-        return brush;
     }
 
     /// <summary>给元素设置 UIA AutomationId（验证脚本按它精确定位某条记录的控件）。</summary>

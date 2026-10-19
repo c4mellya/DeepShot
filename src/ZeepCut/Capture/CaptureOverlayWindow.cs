@@ -62,15 +62,8 @@ public sealed class CaptureOverlayWindow : Window
 
     private static readonly Color DimColor = Color.FromArgb(0x73, 0x00, 0x00, 0x00);
     private static readonly Color HoverStrokeColor = Color.FromRgb(0x00, 0xA2, 0xFF);
-    private static readonly Color ToolbarBackgroundColor = Color.FromArgb(0xE6, 0x1E, 0x1E, 0x1E);
-    private static readonly Color ToolbarBorderColor = Color.FromArgb(0x66, 0xFF, 0xFF, 0xFF);
-    private static readonly Color ButtonBackgroundColor = Color.FromArgb(0x26, 0xFF, 0xFF, 0xFF);
-    private static readonly Color ButtonBorderColor = Color.FromArgb(0x4D, 0xFF, 0xFF, 0xFF);
     private static readonly Color StatusErrorColor = Color.FromRgb(0xFF, 0xA0, 0x80);
     private static readonly Color StatusInfoColor = Color.FromRgb(0xB8, 0xD8, 0xB8);
-    private static readonly Color ToolSelectedColor = Color.FromArgb(0x66, 0x00, 0xA2, 0xFF);
-    private static readonly Color SwatchSelectedStrokeColor = Color.FromRgb(0xFF, 0xFF, 0xFF);
-    private static readonly Color SwatchStrokeColor = Color.FromArgb(0x66, 0xFF, 0xFF, 0xFF);
     private static readonly Color EditorOutlineColor = Color.FromRgb(0x00, 0xC8, 0xFF);
 
     /// <summary>选中态虚线框线宽（DIP）与手柄边长（DIP）。</summary>
@@ -126,7 +119,7 @@ public sealed class CaptureOverlayWindow : Window
     private Border? _textEditorHost;
     private TextBox? _textEditor;
 
-    private readonly SolidColorBrush _selectionStroke = CreateFrozenBrush(Colors.White);
+    private readonly SolidColorBrush _selectionStroke = CreateFrozenBrush(Color.FromRgb(0x4A, 0x90, 0xF8));
     private readonly SolidColorBrush _hoverStroke = CreateFrozenBrush(HoverStrokeColor);
     private readonly SolidColorBrush _statusErrorBrush = CreateFrozenBrush(StatusErrorColor);
     private readonly SolidColorBrush _statusInfoBrush = CreateFrozenBrush(StatusInfoColor);
@@ -234,17 +227,18 @@ public sealed class CaptureOverlayWindow : Window
         {
             Foreground = Brushes.White,
             FontSize = 12,
+            FontWeight = FontWeights.Medium,
             FontFamily = new FontFamily("Segoe UI"),
             VerticalAlignment = VerticalAlignment.Center,
         };
 
         _sizeBadge = new Border
         {
-            Background = CreateFrozenBrush(Color.FromArgb(0xCC, 0x1E, 0x1E, 0x1E)),
-            BorderBrush = CreateFrozenBrush(Color.FromArgb(0x59, 0xFF, 0xFF, 0xFF)),
+            Background = CreateFrozenBrush(Color.FromArgb(0xE6, 0x1B, 0x1C, 0x21)),
+            BorderBrush = CreateFrozenBrush(Color.FromArgb(0x2E, 0xFF, 0xFF, 0xFF)),
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(3),
-            Padding = new Thickness(6, 2, 6, 2),
+            CornerRadius = new CornerRadius(7),
+            Padding = new Thickness(8, 3, 8, 3),
             Child = _sizeBadgeText,
             Visibility = Visibility.Collapsed,
             IsHitTestVisible = false,
@@ -1542,22 +1536,17 @@ public sealed class CaptureOverlayWindow : Window
     {
         foreach (var (tool, button) in _toolButtons)
         {
-            var selected = tool == _session.ActiveTool;
-            button.Background = CreateFrozenBrush(selected ? ToolSelectedColor : ButtonBackgroundColor);
-            button.FontWeight = selected ? FontWeights.Bold : FontWeights.Normal;
+            OverlayChrome.SetOn(button, tool == _session.ActiveTool);
         }
 
         foreach (var (color, element) in _colorSwatches)
         {
-            var selected = color == _session.Settings.Color;
-            element.BorderBrush = CreateFrozenBrush(selected ? SwatchSelectedStrokeColor : SwatchStrokeColor);
-            element.BorderThickness = new Thickness(selected ? 2 : 1);
+            OverlayChrome.SetOn(element, color == _session.Settings.Color);
         }
 
         foreach (var (thickness, element) in _thicknessButtons)
         {
-            var selected = thickness == _session.Settings.Thickness;
-            element.Background = CreateFrozenBrush(selected ? ToolSelectedColor : ButtonBackgroundColor);
+            OverlayChrome.SetOn(element, thickness == _session.Settings.Thickness);
         }
 
         if (_lockText is not null)
@@ -2261,123 +2250,86 @@ public sealed class CaptureOverlayWindow : Window
 
     private Border CreateToolbar()
     {
-        var panel = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
+        // 两行：上行 = 工具 | 颜色 | 粗细；下行 = 选区尺寸/状态（左）+ 撤销重做与输出动作（右）。
+        var toolGroup = OverlayChrome.Group(
+            CreateToolButton("S.Annotation.Tool.Select", null, "select", OverlayChrome.IconSelect, filled: true),
+            CreateToolButton("S.Annotation.Tool.Rectangle", AnnotationTool.Rectangle, "rectangle", OverlayChrome.IconRectangle),
+            CreateToolButton("S.Annotation.Tool.Ellipse", AnnotationTool.Ellipse, "ellipse", OverlayChrome.IconEllipse),
+            CreateToolButton("S.Annotation.Tool.Arrow", AnnotationTool.Arrow, "arrow", OverlayChrome.IconArrow),
+            CreateToolButton("S.Annotation.Tool.Line", AnnotationTool.Line, "line", OverlayChrome.IconLine),
+            CreateToolButton("S.Annotation.Tool.Freehand", AnnotationTool.Freehand, "freehand", OverlayChrome.IconFreehand),
+            CreateToolButton("S.Annotation.Tool.Text", AnnotationTool.Text, "text", OverlayChrome.IconText),
+            CreateToolButton("S.Annotation.Tool.Mosaic", AnnotationTool.Mosaic, "mosaic", OverlayChrome.IconMosaic, filled: true));
 
-        // 两行：上行标注工具，下行颜色/粗细 + 撤销重做 + 输出动作。
-        var rows = new StackPanel { Orientation = Orientation.Vertical };
-
-        var toolRow = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Margin = new Thickness(0, 0, 0, 5),
-        };
-
-        toolRow.Children.Add(CreateToolButton("S.Annotation.Tool.Select", null, "select"));
-        toolRow.Children.Add(CreateToolButton("S.Annotation.Tool.Rectangle", AnnotationTool.Rectangle, "rectangle"));
-        toolRow.Children.Add(CreateToolButton("S.Annotation.Tool.Ellipse", AnnotationTool.Ellipse, "ellipse"));
-        toolRow.Children.Add(CreateToolButton("S.Annotation.Tool.Arrow", AnnotationTool.Arrow, "arrow"));
-        toolRow.Children.Add(CreateToolButton("S.Annotation.Tool.Line", AnnotationTool.Line, "line"));
-        toolRow.Children.Add(CreateToolButton("S.Annotation.Tool.Freehand", AnnotationTool.Freehand, "freehand"));
-        toolRow.Children.Add(CreateToolButton("S.Annotation.Tool.Text", AnnotationTool.Text, "text"));
-        toolRow.Children.Add(CreateToolButton("S.Annotation.Tool.Mosaic", AnnotationTool.Mosaic, "mosaic"));
-
-        var actionRow = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-
-        actionRow.Children.Add(_toolbarSizeText);
-        actionRow.Children.Add(_statusText);
-        actionRow.Children.Add(CreateToolbarSeparator());
-
+        var colorRow = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
         foreach (var color in AnnotationPalette.Colors)
         {
-            actionRow.Children.Add(CreateColorSwatch(color));
+            colorRow.Children.Add(CreateColorSwatch(color));
         }
 
-        actionRow.Children.Add(CreateToolbarSeparator());
+        var thicknessGroup = OverlayChrome.Group(
+            AnnotationPalette.Thicknesses.Select(thickness => (UIElement)CreateThicknessButton(thickness)).ToArray());
 
-        foreach (var thickness in AnnotationPalette.Thicknesses)
-        {
-            actionRow.Children.Add(CreateThicknessButton(thickness));
-        }
+        var topRow = new StackPanel { Orientation = Orientation.Horizontal };
+        topRow.Children.Add(toolGroup);
+        topRow.Children.Add(OverlayChrome.Divider());
+        topRow.Children.Add(colorRow);
+        topRow.Children.Add(OverlayChrome.Divider());
+        topRow.Children.Add(thicknessGroup);
 
-        actionRow.Children.Add(CreateToolbarSeparator());
-        actionRow.Children.Add(CreateToolbarButton("S.Overlay.Undo", "undo", () => UndoAnnotation("工具栏按钮“撤销”")));
-        actionRow.Children.Add(CreateToolbarButton("S.Overlay.Redo", "redo", () => RedoAnnotation("工具栏按钮“重做”")));
-        actionRow.Children.Add(CreateToolbarButton("S.Overlay.Copy", "copy", () => TriggerCopy("工具栏按钮“复制”")));
-        actionRow.Children.Add(CreateToolbarButton("S.Overlay.SaveAs", "save-as", () => TriggerSaveAs("工具栏按钮“另存为”")));
-        actionRow.Children.Add(CreateToolbarButton("S.Overlay.Pin", "pin", () => TriggerPin("工具栏按钮“贴图”")));
-        actionRow.Children.Add(CreateToolbarButton("S.Overlay.Cancel", "cancel", () => Cancel("工具栏取消按钮"), emphasize: true));
+        OverlayChrome.StyleSizeText(_toolbarSizeText);
+        var info = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+        info.Children.Add(_toolbarSizeText);
+        info.Children.Add(_statusText);
 
-        rows.Children.Add(toolRow);
-        rows.Children.Add(actionRow);
+        var actions = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+        actions.Children.Add(OverlayChrome.Group(
+            CreateIconAction("S.Overlay.Undo", "undo", OverlayChrome.IconUndo, () => UndoAnnotation("工具栏按钮“撤销”")),
+            CreateIconAction("S.Overlay.Redo", "redo", OverlayChrome.IconRedo, () => RedoAnnotation("工具栏按钮“重做”"))));
+        actions.Children.Add(OverlayChrome.Divider());
+        actions.Children.Add(CreateToolbarButton("S.Overlay.SaveAs", "save-as", OverlayChrome.IconSave, () => TriggerSaveAs("工具栏按钮“另存为”")));
+        actions.Children.Add(CreateToolbarButton("S.Overlay.Pin", "pin", OverlayChrome.IconPin, () => TriggerPin("工具栏按钮“贴图”")));
+        actions.Children.Add(CreateToolbarButton("S.Overlay.Cancel", "cancel", OverlayChrome.IconCancel, () => Cancel("工具栏取消按钮"), danger: true));
+        var copy = CreateToolbarButton("S.Overlay.Copy", "copy", OverlayChrome.IconCopy, () => TriggerCopy("工具栏按钮“复制”"), primary: true);
+        copy.Margin = new Thickness(4, 0, 0, 0);
+        actions.Children.Add(copy);
 
-        return new Border
-        {
-            Background = CreateFrozenBrush(ToolbarBackgroundColor),
-            BorderBrush = CreateFrozenBrush(ToolbarBorderColor),
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(6),
-            Padding = new Thickness(12, 6, 12, 6),
-            Child = rows,
-            Visibility = Visibility.Collapsed,
-        };
+        var bottomRow = new Grid { Margin = new Thickness(0, 8, 0, 0) };
+        bottomRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        bottomRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 12 });
+        bottomRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        Grid.SetColumn(info, 0);
+        Grid.SetColumn(actions, 2);
+        bottomRow.Children.Add(info);
+        bottomRow.Children.Add(actions);
+
+        var rows = new StackPanel { Orientation = Orientation.Vertical };
+        rows.Children.Add(topRow);
+        rows.Children.Add(bottomRow);
+
+        return OverlayChrome.Shell(rows);
     }
 
     /// <summary>上行标注工具按钮：“选择”传 <c>null</c> 表示回到不绘制模式。</summary>
     /// <param name="textKey">语言资源键（T31）。</param>
     /// <param name="tool">工具（null = 选择模式）。</param>
     /// <param name="slug">AutomationId 后缀（语言无关，验证脚本按它定位）。</param>
-    private Button CreateToolButton(string textKey, AnnotationTool? tool, string slug)
+    private Button CreateToolButton(string textKey, AnnotationTool? tool, string slug, string iconData, bool filled = false)
     {
         var label = StringsUi.Get(textKey);
-        var button = new Button
-        {
-            Content = label,
-            Foreground = Brushes.White,
-            Background = CreateFrozenBrush(ButtonBackgroundColor),
-            BorderBrush = CreateFrozenBrush(ButtonBorderColor),
-            BorderThickness = new Thickness(1),
-            Padding = new Thickness(8, 4, 8, 4),
-            Margin = new Thickness(0, 0, 6, 0),
-            FontSize = 12,
-            FontFamily = new FontFamily("Segoe UI"),
-            Focusable = false,
-            IsTabStop = false,
-            Cursor = Cursors.Hand,
-        };
-
+        var button = OverlayChrome.IconButton(iconData, label, filled);
         button.Click += (_, _) => SelectTool(tool);
-        AutomationProperties.SetName(button, label);
-        AutomationProperties.SetAutomationId(button, $"overlay-tool-{slug}");
+        OverlayChrome.SetNames(button, label, $"overlay-tool-{slug}");
         _toolButtons.Add((tool, button));
         _toolbarButtons.Add((label, button));
         return button;
     }
 
-    /// <summary>下行颜色按钮：18×18 色块，选中的加白色粗边框。</summary>
+    /// <summary>颜色圆点：选中的带白色外环。</summary>
     private Button CreateColorSwatch(AnnotationColor color)
     {
-        var button = new Button
-        {
-            Width = 20,
-            Height = 20,
-            Background = CreateFrozenBrush(Color.FromArgb(color.Alpha, color.Red, color.Green, color.Blue)),
-            BorderBrush = CreateFrozenBrush(SwatchStrokeColor),
-            BorderThickness = new Thickness(1),
-            Margin = new Thickness(0, 0, 4, 0),
-            Focusable = false,
-            IsTabStop = false,
-            Cursor = Cursors.Hand,
-            ToolTip = color.ToString(),
-        };
-
+        var button = OverlayChrome.Swatch(Color.FromArgb(color.Alpha, color.Red, color.Green, color.Blue));
+        button.ToolTip = color.ToString();
         button.Click += (_, _) => SelectColor(color);
         var label = StringsUi.Format("S.Annotation.Color", color);
         AutomationProperties.SetName(button, label);
@@ -2386,43 +2338,18 @@ public sealed class CaptureOverlayWindow : Window
         return button;
     }
 
-    /// <summary>下行粗细按钮：显示像素数字，选中高亮。</summary>
+    /// <summary>粗细按钮：圆点大小表示粗细，选中高亮。</summary>
     private Button CreateThicknessButton(int thickness)
     {
-        var button = new Button
-        {
-            Content = thickness.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            Foreground = Brushes.White,
-            Background = CreateFrozenBrush(ButtonBackgroundColor),
-            BorderBrush = CreateFrozenBrush(ButtonBorderColor),
-            BorderThickness = new Thickness(1),
-            Padding = new Thickness(6, 2, 6, 2),
-            Margin = new Thickness(0, 0, 4, 0),
-            FontSize = 11,
-            FontFamily = new FontFamily("Segoe UI"),
-            Focusable = false,
-            IsTabStop = false,
-            Cursor = Cursors.Hand,
-            ToolTip = StringsUi.Format("S.Annotation.ThicknessTooltip", thickness),
-        };
-
+        var button = OverlayChrome.ThicknessChip(thickness);
+        button.ToolTip = StringsUi.Format("S.Annotation.ThicknessTooltip", thickness);
         button.Click += (_, _) => SelectThickness(thickness);
         var label = StringsUi.Format("S.Annotation.Thickness", thickness);
-        AutomationProperties.SetName(button, label);
-        AutomationProperties.SetAutomationId(button, $"overlay-thickness-{thickness}");
+        OverlayChrome.SetNames(button, label, $"overlay-thickness-{thickness}");
         _thicknessButtons.Add((thickness, button));
         _toolbarButtons.Add((label, button));
         return button;
     }
-
-    private static Border CreateToolbarSeparator() => new()
-    {
-        Width = 1,
-        Height = 18,
-        Margin = new Thickness(6, 0, 6, 0),
-        Background = CreateFrozenBrush(Color.FromArgb(0x4D, 0xFF, 0xFF, 0xFF)),
-        VerticalAlignment = VerticalAlignment.Center,
-    };
 
     /// <summary>切换绘制工具（“选择”= 不绘制）。绘制中不允许切换。</summary>
     private void SelectTool(AnnotationTool? tool)
@@ -2516,10 +2443,10 @@ public sealed class CaptureOverlayWindow : Window
 
         var host = new Border
         {
-            Background = CreateFrozenBrush(Color.FromArgb(0xE6, 0x10, 0x10, 0x10)),
-            BorderBrush = CreateFrozenBrush(Color.FromRgb(0x00, 0xA2, 0xFF)),
+            Background = CreateFrozenBrush(Color.FromArgb(0xE6, 0x1B, 0x1C, 0x21)),
+            BorderBrush = CreateFrozenBrush(Color.FromRgb(0x4A, 0x90, 0xF8)),
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(3),
+            CornerRadius = new CornerRadius(6),
             Padding = new Thickness(4, 2, 4, 2),
             Child = _textEditor,
             Visibility = Visibility.Collapsed,
@@ -2542,11 +2469,11 @@ public sealed class CaptureOverlayWindow : Window
 
         _lockBadge = new Border
         {
-            Background = CreateFrozenBrush(Color.FromArgb(0xCC, 0x1E, 0x1E, 0x1E)),
-            BorderBrush = CreateFrozenBrush(Color.FromArgb(0x59, 0xFF, 0xFF, 0xFF)),
+            Background = CreateFrozenBrush(Color.FromArgb(0xE6, 0x1B, 0x1C, 0x21)),
+            BorderBrush = CreateFrozenBrush(Color.FromArgb(0x2E, 0xFF, 0xFF, 0xFF)),
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(3),
-            Padding = new Thickness(6, 2, 6, 2),
+            CornerRadius = new CornerRadius(7),
+            Padding = new Thickness(8, 3, 8, 3),
             Child = _lockText,
             Visibility = Visibility.Collapsed,
             IsHitTestVisible = false,
@@ -2583,31 +2510,24 @@ public sealed class CaptureOverlayWindow : Window
         Canvas.SetTop(_lockBadge, top);
     }
 
-    private Button CreateToolbarButton(string textKey, string slug, Action onClick, bool emphasize = false)
+    /// <summary>下行方形图标按钮（撤销/重做）。</summary>
+    private Button CreateIconAction(string textKey, string slug, string iconData, Action onClick)
     {
         var text = StringsUi.Get(textKey);
-        var button = new Button
-        {
-            Content = text,
-            Foreground = Brushes.White,
-            Background = CreateFrozenBrush(emphasize
-                ? Color.FromArgb(0x33, 0xFF, 0x80, 0x60)
-                : ButtonBackgroundColor),
-            BorderBrush = CreateFrozenBrush(ButtonBorderColor),
-            BorderThickness = new Thickness(1),
-            Padding = new Thickness(10, 4, 10, 4),
-            Margin = new Thickness(8, 0, 0, 0),
-            FontSize = 12,
-            FontFamily = new FontFamily("Segoe UI"),
-            Focusable = false,
-            IsTabStop = false,
-            Cursor = Cursors.Hand,
-        };
-
-        // 按钮不抢键盘焦点，保证 Enter/Esc 始终作用于遮罩。
+        var button = OverlayChrome.IconButton(iconData, text);
         button.Click += (_, _) => onClick();
-        AutomationProperties.SetName(button, text);
-        AutomationProperties.SetAutomationId(button, $"overlay-action-{slug}");
+        OverlayChrome.SetNames(button, text, $"overlay-action-{slug}");
+        _toolbarButtons.Add((text, button));
+        return button;
+    }
+
+    /// <summary>下行图标 + 文字动作按钮（按钮不抢键盘焦点，保证 Enter/Esc 始终作用于遮罩）。</summary>
+    private Button CreateToolbarButton(string textKey, string slug, string iconData, Action onClick, bool primary = false, bool danger = false)
+    {
+        var text = StringsUi.Get(textKey);
+        var button = OverlayChrome.ActionButton(iconData, text, primary, danger);
+        button.Click += (_, _) => onClick();
+        OverlayChrome.SetNames(button, text, $"overlay-action-{slug}");
         _toolbarButtons.Add((text, button));
         return button;
     }
@@ -2630,9 +2550,11 @@ public sealed class CaptureOverlayWindow : Window
             {
                 Width = HandleSize,
                 Height = HandleSize,
+                RadiusX = HandleSize / 2,
+                RadiusY = HandleSize / 2,
                 Fill = Brushes.White,
-                Stroke = CreateFrozenBrush(Color.FromArgb(0xCC, 0x20, 0x20, 0x20)),
-                StrokeThickness = HandleStrokeThickness,
+                Stroke = _selectionStroke,
+                StrokeThickness = 1.5,
                 Visibility = Visibility.Collapsed,
                 IsHitTestVisible = false,
             };

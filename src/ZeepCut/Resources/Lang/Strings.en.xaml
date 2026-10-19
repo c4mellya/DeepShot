@@ -91,6 +91,7 @@
     <sys:String x:Key="S.History.Title">History</sys:String>
     <sys:String x:Key="S.History.SearchPlaceholder">Search by name (case-insensitive; Enter to search, Esc to clear)</sys:String>
     <sys:String x:Key="S.History.SearchName">Search history</sys:String>
+    <sys:String x:Key="S.History.SearchClear">Clear search</sys:String>
     <sys:String x:Key="S.History.FilterAll">All</sys:String>
     <sys:String x:Key="S.History.FilterFavorites">Favorites</sys:String>
     <sys:String x:Key="S.History.Refresh">Refresh</sys:String>
@@ -244,12 +245,14 @@
     <sys:String x:Key="S.Settings.Language.English">English</sys:String>
     <sys:String x:Key="S.Settings.Language.Effective">In use: {0}</sys:String>
     <sys:String x:Key="S.Settings.Section.Theme">Theme</sys:String>
+    <sys:String x:Key="S.Settings.Section.Appearance">Appearance</sys:String>
     <sys:String x:Key="S.Settings.Theme.System">Follow system</sys:String>
     <sys:String x:Key="S.Settings.Theme.Light">Light</sys:String>
     <sys:String x:Key="S.Settings.Theme.Dark">Dark</sys:String>
     <sys:String x:Key="S.Settings.Theme.Effective">Current look: {0} (system: {1})</sys:String>
     <sys:String x:Key="S.Settings.Section.Startup">Startup</sys:String>
-    <sys:String x:Key="S.Settings.Startup.Enable">Start Zeep Cut when signing in (current user, HKCU\Software\Microsoft\Windows\CurrentVersion\Run)</sys:String>
+    <sys:String x:Key="S.Settings.Startup.Enable">Start Zeep Cut when signing in</sys:String>
+    <sys:String x:Key="S.Settings.Startup.Detail">Current user, written to HKCU\Software\Microsoft\Windows\CurrentVersion\Run</sys:String>
     <sys:String x:Key="S.Settings.Startup.On">Registry startup entry written.</sys:String>
     <sys:String x:Key="S.Settings.Startup.Off">Registry startup entry removed.</sys:String>
     <sys:String x:Key="S.Settings.Startup.Failed">Updating the startup entry failed (the registry write was refused, see the log).</sys:String>

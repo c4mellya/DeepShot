@@ -3,43 +3,86 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Markup;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
+using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
+using System.Windows.Shapes;
 using ZeepCut.Core.History;
 using ZeepCut.Ui;
 
 namespace ZeepCut.History;
 
 /// <summary>
-/// 图库里的一个缩略图卡片（T25/T26）：预览图 + 名称 + 时间 + 收藏星标 + 选中后的操作条。
+/// 图库里的一个缩略图卡片：圆角 12 的卡片 + 顶部圆角裁剪的缩略图 + 名称/时间/尺寸，
+/// 星标（右上）与操作图标条（底部悬浮）在悬停 / 选中 / 键盘焦点时浮现。
 /// </summary>
 /// <remarks>
 /// <para>
-/// 卡片自己**不执行**任何操作，只把"用户想干什么"通过回调交给图库窗口：
+/// 卡片自己<b>不执行</b>任何操作，只把"用户想干什么"通过回调交给图库窗口：
 /// 这样"贴图不新增历史""删除要确认"这类规则只在一处（<see cref="HistoryActions"/>
 /// 与窗口）实现，卡片只负责长相与命中。
 /// </para>
 /// <para>
 /// <b>UIA</b>：卡片、星标、名称、操作按钮都带稳定的 AutomationId
-/// （<c>history-card-N</c> / <c>history-star-N</c> / <c>history-name-N</c>），
-/// 真实验证脚本按序号定位，不依赖屏幕坐标。
+/// （<c>history-card-N</c> / <c>history-star-N</c> / <c>history-name-N</c> / <c>history-action-SLUG-N</c>）。
+/// 操作条和星标用<b>透明度</b>而不是 Visibility 来隐藏：它们始终在 UIA 树里、始终可 Tab 到，
+/// 键盘聚焦到其中任何一个按钮时整条会浮现出来。
+/// </para>
+/// <para>
+/// <b>颜色</b>全部是 <c>Theme.*</c> 资源引用：换主题自动更新，卡片不需要再手动刷新。
 /// </para>
 /// </remarks>
 internal sealed class HistoryCard : Border
 {
     /// <summary>缩略图区域高度（DIP）。</summary>
-    internal const double ThumbnailHeight = 132;
+    internal const double ThumbnailHeight = 144;
 
     /// <summary>卡片宽度（DIP）。</summary>
-    internal const double CardWidth = 226;
+    internal const double CardWidth = 240;
+
+    private const double Radius = 12;
+
+    private static readonly Effect HoverShadow = CreateShadow();
+
+    private static readonly Lazy<ControlTemplate> StarTemplate = new(() => (ControlTemplate)XamlReader.Parse("""
+        <ControlTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                         TargetType="Button">
+          <Grid Background="Transparent" SnapsToDevicePixels="True">
+            <Ellipse x:Name="Bg" Fill="{DynamicResource Theme.Surface}" Opacity="0.94"
+                     Stroke="{DynamicResource Theme.Divider}" StrokeThickness="1" />
+            <Ellipse x:Name="Ov" Fill="{DynamicResource Theme.Foreground}" Opacity="0" IsHitTestVisible="False" />
+            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="Ov" Property="Opacity" Value="0.08" />
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+              <Setter TargetName="Ov" Property="Opacity" Value="0.16" />
+            </Trigger>
+            <Trigger Property="IsKeyboardFocused" Value="True">
+              <Setter TargetName="Bg" Property="Stroke" Value="{DynamicResource Theme.Accent}" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+        """));
 
     private readonly HistoryRecord _record;
     private readonly Border _thumbnailFrame;
     private readonly Image _picture;
     private readonly TextBlock _nameBlock;
     private readonly Button _starButton;
-    private readonly Grid _actionBar;
+    private readonly System.Windows.Controls.Viewbox _starIcon;
+    private readonly FrameworkElement _actionPill;
+    private readonly FrameworkElement _sourceChip;
+    private readonly Border _ring;
+    private readonly TranslateTransform _lift = new();
     private bool _selected;
+    private bool _hovered;
+    private bool _favorite;
 
     /// <param name="record">记录。</param>
     /// <param name="index">本页序号（用于 AutomationId 与"第 N 条"日志）。</param>
@@ -52,26 +95,29 @@ internal sealed class HistoryCard : Border
         HistoryCardCallbacks callbacks)
     {
         _record = record ?? throw new ArgumentNullException(nameof(record));
+        _favorite = record.IsFavorite;
         Index = index;
 
         Width = CardWidth;
-        Margin = new Thickness(0, 0, 12, 12);
-        Background = HistoryUi.CardBackground;
-        BorderBrush = HistoryUi.Border;
+        Margin = new Thickness(0, 0, 16, 16);
+        CornerRadius = new CornerRadius(Radius);
         BorderThickness = new Thickness(1);
-        CornerRadius = new CornerRadius(6);
-        Padding = new Thickness(8);
+        Padding = new Thickness(0);
         Cursor = Cursors.Hand;
+        SnapsToDevicePixels = true;
+        RenderTransform = _lift;
+        this.Ref(BackgroundProperty, HistoryUi.Keys.Surface).Ref(BorderBrushProperty, HistoryUi.Keys.Divider);
         ToolTip = $"{record.Name}\n{FormatTime(record)}\n{record.Width}×{record.Height} · " +
                   $"{DescribeSource(record.Source)}";
 
         AutomationProperties.SetName(this, StringsUi.Format("S.History.CardName", record.Name));
         AutomationProperties.SetAutomationId(this, $"history-card-{index}");
 
+        // --- 缩略图：UniformToFill 裁切铺满，顶部圆角 ---
         _picture = new Image
         {
             Source = preview,
-            Stretch = Stretch.Uniform,
+            Stretch = Stretch.UniformToFill,
             SnapsToDevicePixels = true,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
@@ -81,87 +127,124 @@ internal sealed class HistoryCard : Border
         _thumbnailFrame = new Border
         {
             Height = ThumbnailHeight,
-            Background = HistoryUi.ThumbnailBackground,
-            CornerRadius = new CornerRadius(4),
-            ClipToBounds = true,
+            CornerRadius = new CornerRadius(Radius - 1, Radius - 1, 0, 0),
             Child = _picture,
         };
+        _thumbnailFrame.SetResourceReference(BackgroundProperty, HistoryUi.Keys.SurfaceAlt);
+
+        // 圆角裁剪：Border 的 CornerRadius 不裁子元素，只能手动裁；矩形比控件高出一个半径，所以下边不被圆化。
+        _thumbnailFrame.SizeChanged += (_, e) =>
+            _thumbnailFrame.Clip = new RectangleGeometry(
+                new Rect(0, 0, e.NewSize.Width, e.NewSize.Height + Radius),
+                Radius - 1,
+                Radius - 1);
 
         if (preview is null)
         {
-            _thumbnailFrame.Child = new Grid
+            var icon = HistoryIcons.Create(HistoryIcons.Image, 28, HistoryUi.Keys.Secondary, 1.5);
+            icon.Margin = new Thickness(0, 0, 0, 6);
+            var holder = new StackPanel
             {
-                Children =
-                {
-                    HistoryUi.Text(StringsUi.Get("S.History.ThumbnailMissing"), 12, HistoryUi.SecondaryForeground),
-                },
+                VerticalAlignment = VerticalAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Center,
             };
-            ((Grid)_thumbnailFrame.Child).Children[0].SetValue(
-                HorizontalAlignmentProperty,
-                HorizontalAlignment.Center);
-            ((Grid)_thumbnailFrame.Child).Children[0].SetValue(
-                VerticalAlignmentProperty,
-                VerticalAlignment.Center);
+            holder.Children.Add(icon);
+            holder.Children.Add(HistoryUi.Text(
+                StringsUi.Get("S.History.ThumbnailMissing"),
+                12,
+                brushKey: HistoryUi.Keys.Secondary));
+            _thumbnailFrame.Child = holder;
         }
 
-        // 星标压在缩略图左上角：不占布局高度，点它不会触发卡片选中/预览。
+        // --- 左上角来源标签（悬停浮现） ---
+        _sourceChip = BuildSourceChip(record);
+
+        // --- 右上角星标：矢量图标按钮，点它不会触发卡片选中/预览 ---
+        _starIcon = HistoryIcons.Create(HistoryIcons.Star, 16, HistoryUi.Keys.Secondary, 1.8);
         _starButton = new Button
         {
-            Content = record.IsFavorite ? "★" : "☆",
-            Width = 26,
-            Height = 26,
-            FontSize = 15,
-            FontFamily = new FontFamily(HistoryUi.FontFamilyName),
-            Foreground = record.IsFavorite ? HistoryUi.StarBrush : HistoryUi.StarInactiveBrush,
-            Background = HistoryUi.Frozen(Color.FromArgb(0xE6, 0xFF, 0xFF, 0xFF)),
-            BorderBrush = HistoryUi.Border,
-            BorderThickness = new Thickness(1),
+            Content = _starIcon,
+            Template = StarTemplate.Value,
+            Width = 30,
+            Height = 30,
             Cursor = Cursors.Hand,
-            HorizontalAlignment = HorizontalAlignment.Left,
+            HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Top,
-            Margin = new Thickness(4),
-            ToolTip = record.IsFavorite ? StarOnHint : StarOffHint,
+            Margin = new Thickness(0, 8, 8, 0),
+            FocusVisualStyle = null,
         };
-        AutomationProperties.SetName(_starButton, record.IsFavorite ? StarOn : StarOff);
         AutomationProperties.SetAutomationId(_starButton, $"history-star-{index}");
         _starButton.Click += (_, e) =>
         {
             e.Handled = true;
             callbacks.ToggleFavorite?.Invoke(_record);
         };
+        ApplyStarVisual();
+
+        // --- 底部悬浮的图标操作条 ---
+        _actionPill = BuildActionBar(callbacks);
 
         var thumbnailHost = new Grid();
         thumbnailHost.Children.Add(_thumbnailFrame);
+        thumbnailHost.Children.Add(_sourceChip);
         thumbnailHost.Children.Add(_starButton);
+        thumbnailHost.Children.Add(_actionPill);
 
-        _nameBlock = HistoryUi.Text(
-            record.Name,
-            13,
-            HistoryUi.Foreground,
-            FontWeights.SemiBold);
-        _nameBlock.Margin = new Thickness(2, 6, 2, 0);
+        // --- 文字区 ---
+        _nameBlock = HistoryUi.Text(record.Name, 13.5, weight: FontWeights.SemiBold);
+        _nameBlock.HorizontalAlignment = HorizontalAlignment.Stretch;
+        _nameBlock.TextAlignment = TextAlignment.Left;
         AutomationProperties.SetAutomationId(_nameBlock, $"history-name-{index}");
 
         var meta = HistoryUi.Text(
-            $"{FormatTime(record)} · {record.Width}×{record.Height} · " +
-            $"{DescribeSource(record.Source)}",
-            11,
-            HistoryUi.SecondaryForeground);
-        meta.Margin = new Thickness(2, 1, 2, 0);
+            $"{FormatTime(record)} · {record.Width}×{record.Height}",
+            11.5,
+            brushKey: HistoryUi.Keys.Secondary);
+        meta.HorizontalAlignment = HorizontalAlignment.Stretch;
+        meta.TextAlignment = TextAlignment.Left;
+        meta.Margin = new Thickness(0, 3, 0, 0);
         AutomationProperties.SetAutomationId(meta, $"history-meta-{index}");
 
-        _actionBar = BuildActionBar(callbacks);
-        _actionBar.Visibility = Visibility.Collapsed;
-        _actionBar.Margin = new Thickness(0, 6, 0, 0);
+        var textArea = new StackPanel { Margin = new Thickness(14, 11, 14, 13) };
+        textArea.Children.Add(_nameBlock);
+        textArea.Children.Add(meta);
 
         var stack = new StackPanel();
         stack.Children.Add(thumbnailHost);
-        stack.Children.Add(_nameBlock);
-        stack.Children.Add(meta);
-        stack.Children.Add(_actionBar);
-        Child = stack;
+        stack.Children.Add(textArea);
+
+        // 悬停 / 选中的强调色描边：叠在卡片边框之上，用透明度过渡（没有布局抖动）。
+        _ring = new Border
+        {
+            CornerRadius = new CornerRadius(Radius),
+            BorderThickness = new Thickness(2),
+            Margin = new Thickness(-1),
+            Opacity = 0,
+            IsHitTestVisible = false,
+        };
+        _ring.SetResourceReference(BorderBrushProperty, HistoryUi.Keys.Accent);
+
+        var root = new Grid();
+        root.Children.Add(stack);
+        root.Children.Add(_ring);
+        Child = root;
+
+        _actionPill.Opacity = 0;
+        _sourceChip.Opacity = 0;
+        _starButton.Opacity = _favorite ? 1 : 0;
 
         MouseLeftButtonDown += OnMouseLeftButtonDown;
+        MouseEnter += (_, _) =>
+        {
+            _hovered = true;
+            UpdateChrome();
+        };
+        MouseLeave += (_, _) =>
+        {
+            _hovered = false;
+            UpdateChrome();
+        };
+        IsKeyboardFocusWithinChanged += (_, _) => UpdateChrome();
     }
 
     /// <summary>本页序号（日志/AutomationId 用）。</summary>
@@ -170,26 +253,23 @@ internal sealed class HistoryCard : Border
     /// <summary>这条记录（窗口按 Id 对账）。</summary>
     internal HistoryRecord Record => _record;
 
-    /// <summary>是否被选中（选中后展开操作条）。</summary>
+    /// <summary>是否被选中（选中后强调色描边 + 操作条常驻）。</summary>
     internal bool IsSelected
     {
         get => _selected;
         set
         {
             _selected = value;
-            BorderBrush = value ? HistoryUi.SelectedBorder : HistoryUi.Border;
-            BorderThickness = new Thickness(value ? 2 : 1);
-            _actionBar.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
+            UpdateChrome();
         }
     }
 
     /// <summary>收藏状态变化后更新星标（不重建控件，避免丢失焦点）。</summary>
     internal void ApplyFavorite(bool favorite)
     {
-        _starButton.Content = favorite ? "★" : "☆";
-        _starButton.Foreground = favorite ? HistoryUi.StarBrush : HistoryUi.StarInactiveBrush;
-        _starButton.ToolTip = favorite ? StarOnHint : StarOffHint;
-        AutomationProperties.SetName(_starButton, favorite ? StarOn : StarOff);
+        _favorite = favorite;
+        ApplyStarVisual();
+        UpdateChrome();
     }
 
     /// <summary>重命名后更新名称（不重建控件）。</summary>
@@ -228,57 +308,151 @@ internal sealed class HistoryCard : Border
 
     private static string StarOffHint => StringsUi.Get("S.History.StarOffHint");
 
-    private Grid BuildActionBar(HistoryCardCallbacks callbacks)
+    private static Effect CreateShadow()
     {
-        var grid = new Grid();
-        grid.ColumnDefinitions.Add(new ColumnDefinition());
-        grid.ColumnDefinitions.Add(new ColumnDefinition());
-
-        var firstRow = new StackPanel { Orientation = Orientation.Horizontal };
-        firstRow.Children.Add(Small(StringsUi.Get("S.Common.Copy"), Slugs.Copy, () => callbacks.Copy?.Invoke(_record)));
-        firstRow.Children.Add(Small(StringsUi.Get("S.Common.Pin"), Slugs.Pin, () => callbacks.Pin?.Invoke(_record)));
-
-        var secondRow = new StackPanel { Orientation = Orientation.Horizontal };
-        secondRow.Children.Add(Small(StringsUi.Get("S.Common.Rename"), Slugs.Rename, () => callbacks.Rename?.Invoke(_record)));
-        secondRow.Children.Add(Small(
-            StringsUi.Get("S.Common.Delete"),
-            Slugs.Delete,
-            () => callbacks.Delete?.Invoke(_record)));
-
-        // T28：追加标注并覆盖（在现有图片上继续标注，保存回同一条记录）。
-        secondRow.Children.Add(Small(
-            StringsUi.Get("S.Common.Annotation"),
-            Slugs.Annotation,
-            () => callbacks.Edit?.Invoke(_record)));
-
-        var thirdRow = new StackPanel
+        var shadow = new DropShadowEffect
         {
-            Orientation = Orientation.Horizontal,
-            Margin = new Thickness(0, 4, 0, 0),
+            Color = Colors.Black,
+            BlurRadius = 22,
+            ShadowDepth = 5,
+            Direction = 270,
+            Opacity = 0.2,
         };
-        thirdRow.Children.Add(Small(StringsUi.Get("S.Common.SaveAs"), Slugs.SaveAs, () => callbacks.SaveAs?.Invoke(_record)));
-        thirdRow.Children.Add(Small(
+        shadow.Freeze();
+        return shadow;
+    }
+
+    private static FrameworkElement BuildSourceChip(HistoryRecord record)
+    {
+        var label = HistoryUi.Text(DescribeSource(record.Source), 11, brushKey: HistoryUi.Keys.Secondary, measureNaturalWidth: true);
+        var chip = new Border
+        {
+            CornerRadius = new CornerRadius(10),
+            Padding = new Thickness(9, 3, 9, 3),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(8, 8, 0, 0),
+            BorderThickness = new Thickness(1),
+            IsHitTestVisible = false,
+            Child = label,
+        };
+        chip.SetResourceReference(BackgroundProperty, HistoryUi.Keys.Surface);
+        chip.SetResourceReference(BorderBrushProperty, HistoryUi.Keys.Divider);
+        return chip;
+    }
+
+    /// <summary>星标图标：已收藏 = 金色实心；未收藏 = 次要色空心。同时更新 UIA 名字与提示。</summary>
+    private void ApplyStarVisual()
+    {
+        var path = HistoryIcons.PathOf(_starIcon);
+        if (_favorite)
+        {
+            path.SetResourceReference(Shape.StrokeProperty, HistoryUi.Keys.Star);
+            path.SetResourceReference(Shape.FillProperty, HistoryUi.Keys.Star);
+        }
+        else
+        {
+            path.SetResourceReference(Shape.StrokeProperty, HistoryUi.Keys.Secondary);
+            path.Fill = Brushes.Transparent;
+        }
+
+        _starButton.ToolTip = _favorite ? StarOnHint : StarOffHint;
+        AutomationProperties.SetName(_starButton, _favorite ? StarOn : StarOff);
+    }
+
+    /// <summary>按"悬停 / 选中 / 键盘焦点 / 收藏"刷新描边、阴影、上浮、操作条和星标。</summary>
+    private void UpdateChrome()
+    {
+        var focus = IsKeyboardFocusWithin;
+        var hot = _hovered || _selected || focus;
+
+        _ring.BorderThickness = new Thickness(_selected ? 2 : 1.5);
+        HistoryUi.Fade(_ring, OpacityProperty, _selected ? 1 : hot ? 0.55 : 0);
+        HistoryUi.Fade(_actionPill, OpacityProperty, hot ? 1 : 0);
+        HistoryUi.Fade(_sourceChip, OpacityProperty, hot ? 1 : 0);
+        HistoryUi.Fade(_starButton, OpacityProperty, hot || _favorite ? 1 : 0);
+
+        Effect = _hovered ? HoverShadow : null;
+        var lift = new DoubleAnimation(_hovered ? -2 : 0, TimeSpan.FromMilliseconds(140))
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+        };
+        _lift.BeginAnimation(TranslateTransform.YProperty, lift);
+    }
+
+    private FrameworkElement BuildActionBar(HistoryCardCallbacks callbacks)
+    {
+        var row = new StackPanel { Orientation = Orientation.Horizontal };
+        row.Children.Add(ActionButton(StringsUi.Get("S.Common.Copy"), null, Slugs.Copy, HistoryIcons.Copy, () => callbacks.Copy?.Invoke(_record)));
+        row.Children.Add(ActionButton(StringsUi.Get("S.Common.Pin"), null, Slugs.Pin, HistoryIcons.Pin, () => callbacks.Pin?.Invoke(_record)));
+        row.Children.Add(ActionButton(
             StringsUi.Get("S.Common.Preview"),
+            StringsUi.Get("S.History.ActionPreviewHint"),
             Slugs.Preview,
+            HistoryIcons.Preview,
             () => callbacks.Preview?.Invoke(_record)));
 
-        var stack = new StackPanel();
-        stack.Children.Add(firstRow);
-        stack.Children.Add(secondRow);
-        stack.Children.Add(thirdRow);
+        // T28：追加标注并覆盖（在现有图片上继续标注，保存回同一条记录）。
+        row.Children.Add(ActionButton(
+            StringsUi.Get("S.Common.Annotation"),
+            StringsUi.Get("S.History.ActionAnnotateHint"),
+            Slugs.Annotation,
+            HistoryIcons.Annotate,
+            () => callbacks.Edit?.Invoke(_record)));
+        row.Children.Add(ActionButton(
+            StringsUi.Get("S.Common.Rename"),
+            null,
+            Slugs.Rename,
+            HistoryIcons.Rename,
+            () => callbacks.Rename?.Invoke(_record)));
+        row.Children.Add(ActionButton(StringsUi.Get("S.Common.SaveAs"), null, Slugs.SaveAs, HistoryIcons.SaveAs, () => callbacks.SaveAs?.Invoke(_record)));
+        row.Children.Add(ActionButton(
+            StringsUi.Get("S.Common.Delete"),
+            StringsUi.Get("S.History.ActionDeleteHint"),
+            Slugs.Delete,
+            HistoryIcons.Delete,
+            () => callbacks.Delete?.Invoke(_record),
+            HistoryUi.Keys.Error));
 
-        grid.Children.Add(stack);
-        AutomationProperties.SetAutomationId(grid, $"history-actions-{Index}");
-        return grid;
+        var pill = new Border
+        {
+            CornerRadius = new CornerRadius(11),
+            BorderThickness = new Thickness(1),
+            Padding = new Thickness(3),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Bottom,
+            Margin = new Thickness(0, 0, 0, 10),
+            Child = row,
+            Effect = PillShadow,
+        };
+        pill.SetResourceReference(BackgroundProperty, HistoryUi.Keys.Surface);
+        pill.SetResourceReference(BorderBrushProperty, HistoryUi.Keys.Divider);
+        AutomationProperties.SetAutomationId(pill, $"history-actions-{Index}");
+        return pill;
+    }
+
+    private static readonly Effect PillShadow = CreatePillShadow();
+
+    private static Effect CreatePillShadow()
+    {
+        var shadow = new DropShadowEffect
+        {
+            Color = Colors.Black,
+            BlurRadius = 10,
+            ShadowDepth = 2,
+            Direction = 270,
+            Opacity = 0.18,
+        };
+        shadow.Freeze();
+        return shadow;
     }
 
     /// <summary>
     /// 操作按钮的 AutomationId 后缀（语言无关，验证脚本按它定位）。
     /// </summary>
     /// <remarks>
-    /// T31 起这些 id 不再拼中文：T25/T26 的验证脚本用的是 <c>history-action-复制-N</c>，
-    /// 切到英文后那种 id 会变，脚本就找不到了；固定 slug 让脚本与语言无关。
-    /// T25/T26 脚本已同步改成 slug（见 <c>scripts/verify-t25t26.ps1</c> 的 <c>Report-Actions</c>）。
+    /// T31 起这些 id 不再拼中文：固定 slug 让脚本与语言无关
+    /// （见 <c>scripts/verify-t25t26.ps1</c> 的 <c>Report-Actions</c>）。
     /// </remarks>
     private static class Slugs
     {
@@ -297,24 +471,17 @@ internal sealed class HistoryCard : Border
         internal const string Preview = "preview";
     }
 
-    private Button Small(string text, string automationSlug, Action onClick)
+    /// <summary>一个紧凑的图标操作按钮：UIA 名字 = 文案，悬停提示 = 文案或更详细的说明。</summary>
+    private Button ActionButton(
+        string text,
+        string? hint,
+        string automationSlug,
+        string iconData,
+        System.Action onClick,
+        string iconKey = HistoryUi.Keys.Foreground)
     {
-        var button = HistoryUi.Button(text, text, onClick);
-        button.MinWidth = 0;
-        button.Padding = new Thickness(7, 2, 7, 2);
-        button.Margin = new Thickness(0, 0, 4, 4);
-        button.FontSize = 11.5;
-
-        // 显式字体族：只沿用了字号/内边距时按钮可能继承到不带中文字形的字体，
-        // 会出现“标注”被画成一个方块/缺字（本轮真实桌面实测到过一次）。
-        button.Content = HistoryUi.Text(text, 11.5, HistoryUi.Foreground, measureNaturalWidth: true);
-        button.FontFamily = new FontFamily(HistoryUi.FontFamilyName);
+        var button = HistoryUi.IconButton(iconData, text, hint ?? text, onClick, 28, iconKey, 15);
         AutomationProperties.SetAutomationId(button, $"history-action-{automationSlug}-{Index}");
-        AutomationProperties.SetName(button, text);
-
-        // 宽度按文字实测：HistoryUi.Text 默认带 CharacterEllipsis 与 NoWrap，放进 Grid 的
-        // 自动列时会被量成很小的宽度（实测“标注”按钮只有 49px、字被裁成一条）。
-        HistoryUi.FitButtonWidth(button);
         return button;
     }
 
@@ -357,22 +524,10 @@ internal sealed class HistoryCard : Border
     /// 容器里按下卡片的空白处并拖动 = 滚动图库（触屏/鼠标都能用）。
     /// </summary>
     /// <remarks>
-    /// 卡片本身是按钮语义（单击选中、双击预览），所以**不能**靠 <c>BringIntoView</c>
+    /// 卡片本身是按钮语义（单击选中、双击预览），所以<b>不能</b>靠 <c>BringIntoView</c>
     /// 之类会改变滚动位置的行为来实现；这里只把垂直方向的像素增量交给外层
     /// <see cref="ScrollViewer"/>，横向与其它命中一律不处理。
     /// </remarks>
-    /// <summary>主题切换后按新配色刷新（切换后才知道旧色，所以由窗口在 Changed 里调）。</summary>
-    internal void ApplyTheme(ThemePalette previous)
-    {
-        var palette = ThemeManager.Palette;
-        Background = palette.SurfaceBrush;
-        BorderBrush = IsSelected ? palette.AccentBrush : palette.BorderBrush;
-        _thumbnailFrame.Background = palette.SurfaceAltBrush;
-        _starButton.Foreground = _record.IsFavorite ? palette.StarBrush : palette.StarInactiveBrush;
-        _starButton.BorderBrush = palette.BorderBrush;
-        HistoryUi.ApplyThemeTo(Child as DependencyObject, previous);
-    }
-
     internal void SetDragScroll(ScrollViewer? scroll)
     {
         Point? origin = null;

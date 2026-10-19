@@ -94,6 +94,7 @@
     <sys:String x:Key="S.History.Title">历史记录</sys:String>
     <sys:String x:Key="S.History.SearchPlaceholder">按名称搜索（不区分大小写；Enter 立即搜索，Esc 清空）</sys:String>
     <sys:String x:Key="S.History.SearchName">搜索历史</sys:String>
+    <sys:String x:Key="S.History.SearchClear">清除搜索</sys:String>
     <sys:String x:Key="S.History.FilterAll">全部</sys:String>
     <sys:String x:Key="S.History.FilterFavorites">只看收藏</sys:String>
     <sys:String x:Key="S.History.Refresh">刷新</sys:String>
@@ -247,12 +248,14 @@
     <sys:String x:Key="S.Settings.Language.English">English</sys:String>
     <sys:String x:Key="S.Settings.Language.Effective">当前使用：{0}</sys:String>
     <sys:String x:Key="S.Settings.Section.Theme">主题</sys:String>
+    <sys:String x:Key="S.Settings.Section.Appearance">外观</sys:String>
     <sys:String x:Key="S.Settings.Theme.System">跟随系统</sys:String>
     <sys:String x:Key="S.Settings.Theme.Light">浅色</sys:String>
     <sys:String x:Key="S.Settings.Theme.Dark">深色</sys:String>
     <sys:String x:Key="S.Settings.Theme.Effective">当前外观：{0}（系统为{1}）</sys:String>
     <sys:String x:Key="S.Settings.Section.Startup">开机启动</sys:String>
-    <sys:String x:Key="S.Settings.Startup.Enable">开机时自动启动 Zeep Cut（当前用户，写入 HKCU\Software\Microsoft\Windows\CurrentVersion\Run）</sys:String>
+    <sys:String x:Key="S.Settings.Startup.Enable">开机时自动启动 Zeep Cut</sys:String>
+    <sys:String x:Key="S.Settings.Startup.Detail">当前用户，写入 HKCU\Software\Microsoft\Windows\CurrentVersion\Run</sys:String>
     <sys:String x:Key="S.Settings.Startup.On">已写入注册表启动项。</sys:String>
     <sys:String x:Key="S.Settings.Startup.Off">已从注册表启动项移除。</sys:String>
     <sys:String x:Key="S.Settings.Startup.Failed">更新开机启动失败（注册表写入被拒绝，详见日志）。</sys:String>

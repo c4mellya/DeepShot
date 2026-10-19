@@ -235,6 +235,7 @@ public static class ThemeManager
                 if (application is not null)
                 {
                     application.Resources.MergedDictionaries.Add(_dynamic);
+                    UiStyles.Install(application);
                 }
             }
         }

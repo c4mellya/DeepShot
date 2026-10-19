@@ -38,7 +38,6 @@ internal sealed class HistoryPreviewWindow : Window
     private readonly ScrollViewer _scroll;
     private readonly TextBlock _status;
     private readonly Dictionary<string, Button> _buttons = new();
-    private ThemePalette _lastPalette = ThemeManager.Palette;
     private double _zoom = 1.0;
 
     /// <param name="owner">父窗口（图库窗口；非模态展示，方便同时操作图库）。</param>
@@ -63,7 +62,7 @@ internal sealed class HistoryPreviewWindow : Window
         MinHeight = 320;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         ShowInTaskbar = false;
-        Background = HistoryUi.WindowBackground;
+        SetResourceReference(BackgroundProperty, HistoryUi.Keys.Window);
         FontFamily = new FontFamily(HistoryUi.FontFamilyName);
         AutomationProperties.SetAutomationId(this, "history-preview-window");
 
@@ -85,48 +84,72 @@ internal sealed class HistoryPreviewWindow : Window
             Content = _picture,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            Background = HistoryUi.ThumbnailBackground,
-            Padding = new Thickness(8),
+            Padding = new Thickness(16),
         };
+        _scroll.SetResourceReference(Control.BackgroundProperty, HistoryUi.Keys.SurfaceAlt);
         _scroll.PreviewMouseWheel += OnPreviewMouseWheel;
 
-        _status = HistoryUi.Text(DescribeRecord(), 12, HistoryUi.SecondaryForeground);
-        _status.Margin = new Thickness(14, 8, 14, 0);
+        // --- 顶部：记录信息条 ---
+        _status = HistoryUi.Text(DescribeRecord(), 12.5, brushKey: HistoryUi.Keys.Secondary);
+        _status.HorizontalAlignment = HorizontalAlignment.Left;
         AutomationProperties.SetAutomationId(_status, "history-preview-meta");
 
-        var copy = Track("copy", HistoryUi.Button(StringsUi.Get("S.Common.Copy"), "预览复制", () => onCopy(_record)));
-        var pin = Track("pin", HistoryUi.Button(StringsUi.Get("S.Common.Pin"), "预览贴图", () => onPin(_record)));
-        var fit = Track("fit", HistoryUi.Button(StringsUi.Get("S.History.PreviewFit"), "预览适应窗口", FitToWindow));
-        var actual = Track("actual", HistoryUi.Button(StringsUi.Get("S.History.PreviewActualSize"), "预览实际大小", () => SetZoom(1.0)));
+        var infoBar = new Border
+        {
+            Padding = new Thickness(20, 12, 20, 12),
+            BorderThickness = new Thickness(0, 0, 0, 1),
+            Child = _status,
+        };
+        infoBar.SetResourceReference(Border.BackgroundProperty, HistoryUi.Keys.Surface);
+        infoBar.SetResourceReference(Border.BorderBrushProperty, HistoryUi.Keys.Divider);
 
-        var zoomOut = Track("zoom-out", HistoryUi.Button("－", "预览缩小", () => SetZoom(_zoom / 1.2)));
-        zoomOut.MinWidth = 40;
-        var zoomIn = Track("zoom-in", HistoryUi.Button("＋", "预览放大", () => SetZoom(_zoom * 1.2)));
-        zoomIn.MinWidth = 40;
+        // --- 底部：居中的幽灵按钮工具条（缩放 | 尺寸 | 复制/贴图） ---
+        var copy = Track("copy", HistoryUi.GhostButton(StringsUi.Get("S.Common.Copy"), HistoryIcons.Copy, "预览复制", () => onCopy(_record)));
+        var pin = Track("pin", HistoryUi.GhostButton(StringsUi.Get("S.Common.Pin"), HistoryIcons.Pin, "预览贴图", () => onPin(_record)));
+        var fit = Track("fit", HistoryUi.GhostButton(StringsUi.Get("S.History.PreviewFit"), HistoryIcons.Fit, "预览适应窗口", FitToWindow));
+        var actual = Track(
+            "actual",
+            HistoryUi.GhostButton(StringsUi.Get("S.History.PreviewActualSize"), HistoryIcons.ActualSize, "预览实际大小", () => SetZoom(1.0)));
+
+        var zoomOut = Track("zoom-out", HistoryUi.IconButton(HistoryIcons.ZoomOut, "预览缩小", "－", () => SetZoom(_zoom / 1.2), 30));
+        var zoomIn = Track("zoom-in", HistoryUi.IconButton(HistoryIcons.ZoomIn, "预览放大", "＋", () => SetZoom(_zoom * 1.2), 30));
 
         var bar = new StackPanel
         {
             Orientation = Orientation.Horizontal,
-            Margin = new Thickness(14, 6, 14, 10),
+            HorizontalAlignment = HorizontalAlignment.Center,
         };
         bar.Children.Add(zoomOut);
         bar.Children.Add(zoomIn);
+        bar.Children.Add(HistoryUi.VerticalSeparator());
         bar.Children.Add(actual);
         bar.Children.Add(fit);
+        bar.Children.Add(HistoryUi.VerticalSeparator());
         bar.Children.Add(copy);
         bar.Children.Add(pin);
+
+        var toolbar = new Border
+        {
+            Padding = new Thickness(16, 10, 16, 10),
+            BorderThickness = new Thickness(0, 1, 0, 0),
+            Child = bar,
+        };
+        toolbar.SetResourceReference(Border.BackgroundProperty, HistoryUi.Keys.Surface);
+        toolbar.SetResourceReference(Border.BorderBrushProperty, HistoryUi.Keys.Divider);
 
         var grid = new Grid();
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        Grid.SetRow(_status, 0);
+        Grid.SetRow(infoBar, 0);
         Grid.SetRow(_scroll, 1);
-        Grid.SetRow(bar, 2);
-        grid.Children.Add(_status);
+        Grid.SetRow(toolbar, 2);
+        grid.Children.Add(infoBar);
         grid.Children.Add(_scroll);
-        grid.Children.Add(bar);
+        grid.Children.Add(toolbar);
         Content = grid;
+
+        SourceInitialized += (_, _) => DwmApi.TrySetDarkTitleBar(this, ThemeManager.Palette.IsDark);
 
         if (owner is { IsVisible: true })
         {
@@ -177,15 +200,10 @@ internal sealed class HistoryPreviewWindow : Window
         return button;
     }
 
-    /// <summary>主题切换：换窗口底色、滚动区底色与按钮配色。</summary>
+    /// <summary>主题切换：颜色都是主题资源引用、自动更新；这里只同步系统标题栏的深浅。</summary>
     private void OnThemeChanged(AppTheme effective)
     {
-        var palette = ThemeManager.Palette;
-        Background = palette.WindowBackgroundBrush;
-        _scroll.Background = palette.SurfaceAltBrush;
-        HistoryUi.ApplyThemeTo(Content as DependencyObject, _lastPalette);
-        DwmApi.TrySetDarkTitleBar(this, palette.IsDark);
-        _lastPalette = palette;
+        DwmApi.TrySetDarkTitleBar(this, ThemeManager.Palette.IsDark);
         AppLog.Info("History", $"历史预览已按新主题刷新：{effective}");
     }
 

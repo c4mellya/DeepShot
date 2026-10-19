@@ -6,6 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using Shapes = System.Windows.Shapes;
 using System.Windows.Threading;
 using ZeepCut.Capture;
 using ZeepCut.Core;
@@ -43,8 +44,8 @@ public sealed class SettingsWindow : Window
     private readonly ShortcutBox _screenshotBox;
     private readonly ShortcutBox _pinBox;
     private readonly ComboBox _language;
-    private readonly ComboBox _theme;
-    private readonly ComboBox _captureMode;
+    private readonly SegmentedControl<AppTheme> _theme;
+    private readonly SegmentedControl<CaptureSelectionMode> _captureMode;
     private TextBlock _languageLabel = null!;
     private TextBlock _themeLabel = null!;
 
@@ -65,26 +66,26 @@ public sealed class SettingsWindow : Window
         _store = store ?? throw new ArgumentNullException(nameof(store));
 
         Title = StringsUi.Get("S.Settings.WindowTitle");
-        Width = 660;
-        Height = 760;
+        Width = 680;
+        Height = 780;
         MinWidth = 560;
         MinHeight = 480;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        Background = ThemeManager.Palette.WindowBackgroundBrush;
-        FontFamily = new FontFamily(ThemeManager.FontFamilyName);
+        SetResourceReference(BackgroundProperty, ThemeManager.BrushKeys.WindowBackground);
+        SetResourceReference(FontFamilyProperty, ThemeManager.FontFamilyKey);
         AutomationProperties.SetAutomationId(this, "settings-window");
         AutomationProperties.SetName(this, StringsUi.Get("S.Settings.WindowName"));
 
         var settings = _store.Current;
 
-        _header = MakeText(StringsUi.Get("S.Settings.Heading"), 20, ThemeManager.Palette.ForegroundBrush, FontWeights.SemiBold);
+        _header = MakeText(StringsUi.Get("S.Settings.Heading"), 24, ThemeManager.BrushKeys.Foreground, FontWeights.SemiBold);
         AutomationProperties.SetAutomationId(_header, "settings-heading");
         _header.HorizontalAlignment = HorizontalAlignment.Left;
 
-        _subtitle = MakeText(StringsUi.Get("S.Settings.Subtitle"), 12, ThemeManager.Palette.SecondaryForegroundBrush);
+        _subtitle = MakeText(StringsUi.Get("S.Settings.Subtitle"), 12.5, ThemeManager.BrushKeys.SecondaryForeground);
         _subtitle.TextWrapping = TextWrapping.Wrap;
         _subtitle.HorizontalAlignment = HorizontalAlignment.Left;
-        _subtitle.Margin = new Thickness(0, 2, 0, 0);
+        _subtitle.Margin = new Thickness(0, 3, 0, 0);
 
         _screenshotBox = new ShortcutBox("settings-shortcut-screenshot");
         _screenshotBox.SetValue(settings.ScreenshotShortcut);
@@ -94,103 +95,113 @@ public sealed class SettingsWindow : Window
         _pinBox.SetValue(settings.PinShortcut);
         _pinBox.Committed += OnPinShortcutCommitted;
 
-        _language = CreateCombo("settings-language");
+        _language = new ComboBox { MinWidth = 190, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center, FontSize = 13 };
+        AutomationProperties.SetAutomationId(_language, "settings-language");
         _language.Items.Add(new ComboItem<AppLanguage>(AppLanguage.System, "S.Settings.Language.System"));
         _language.Items.Add(new ComboItem<AppLanguage>(AppLanguage.ZhHans, "S.Settings.Language.ZhHans"));
         _language.Items.Add(new ComboItem<AppLanguage>(AppLanguage.English, "S.Settings.Language.English"));
         _language.SelectionChanged += (_, _) => OnLanguageChanged();
 
-        _theme = CreateCombo("settings-theme");
-        _theme.Items.Add(new ComboItem<AppTheme>(AppTheme.System, "S.Settings.Theme.System"));
-        _theme.Items.Add(new ComboItem<AppTheme>(AppTheme.Light, "S.Settings.Theme.Light"));
-        _theme.Items.Add(new ComboItem<AppTheme>(AppTheme.Dark, "S.Settings.Theme.Dark"));
-        _theme.SelectionChanged += (_, _) => OnThemeChanged();
+        _theme = new SegmentedControl<AppTheme>();
+        _theme.HorizontalAlignment = HorizontalAlignment.Right;
+        _theme.Add(AppTheme.System, "S.Settings.Theme.System", "settings-theme-system");
+        _theme.Add(AppTheme.Light, "S.Settings.Theme.Light", "settings-theme-light");
+        _theme.Add(AppTheme.Dark, "S.Settings.Theme.Dark", "settings-theme-dark");
+        AutomationProperties.SetAutomationId(_theme, "settings-theme");
+        _theme.UserSelected += OnThemeChosen;
 
-        _captureMode = CreateCombo("settings-capture-mode");
-        _captureMode.Items.Add(new ComboItem<CaptureSelectionMode>(CaptureSelectionMode.Rectangle, "S.Settings.CaptureMode.Rectangle"));
-        _captureMode.Items.Add(new ComboItem<CaptureSelectionMode>(CaptureSelectionMode.Window, "S.Settings.CaptureMode.Window"));
-        _captureMode.SelectionChanged += (_, _) => OnCaptureModeChanged();
+        _captureMode = new SegmentedControl<CaptureSelectionMode>();
+        _captureMode.HorizontalAlignment = HorizontalAlignment.Right;
+        _captureMode.Add(CaptureSelectionMode.Rectangle, "S.Settings.CaptureMode.Rectangle", "settings-capture-mode-rectangle");
+        _captureMode.Add(CaptureSelectionMode.Window, "S.Settings.CaptureMode.Window", "settings-capture-mode-window");
+        AutomationProperties.SetAutomationId(_captureMode, "settings-capture-mode");
+        _captureMode.UserSelected += OnCaptureModeChosen;
 
-        var startupLabel = MakeText(StringsUi.Get("S.Settings.Startup.Enable"), 12.5, ThemeManager.Palette.ForegroundBrush);
-        startupLabel.TextWrapping = TextWrapping.Wrap;
-        startupLabel.TextTrimming = TextTrimming.None;
-        startupLabel.HorizontalAlignment = HorizontalAlignment.Left;
         _startup = new CheckBox
         {
-            Content = startupLabel,
             IsChecked = settings.LaunchAtStartup,
-            VerticalContentAlignment = VerticalAlignment.Center,
-            HorizontalContentAlignment = HorizontalAlignment.Left,
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            Margin = new Thickness(0, 2, 0, 2),
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Right,
         };
         AutomationProperties.SetAutomationId(_startup, "settings-startup");
+        AutomationProperties.SetName(_startup, StringsUi.Get("S.Settings.Startup.Enable"));
         _startup.Click += (_, _) => OnStartupToggled();
 
-        _dataPath = MakeText(AppPaths.DataRoot, 12.5, ThemeManager.Palette.ForegroundBrush);
+        _dataPath = MakeText(AppPaths.DataRoot, 12.5, ThemeManager.BrushKeys.Foreground);
         _dataPath.TextWrapping = TextWrapping.Wrap;
-        _dataPath.TextTrimming = TextTrimming.None;
         _dataPath.HorizontalAlignment = HorizontalAlignment.Left;
         AutomationProperties.SetAutomationId(_dataPath, "settings-data-path");
 
-        _dataCounts = MakeText(string.Empty, 11.5, ThemeManager.Palette.SecondaryForegroundBrush);
+        _dataCounts = MakeText(string.Empty, 12, ThemeManager.BrushKeys.SecondaryForeground);
         _dataCounts.HorizontalAlignment = HorizontalAlignment.Left;
+        _dataCounts.TextWrapping = TextWrapping.Wrap;
+        _dataCounts.Margin = new Thickness(0, 3, 0, 0);
         AutomationProperties.SetAutomationId(_dataCounts, "settings-data-counts");
 
-        _retentionRule = MakeText(DescribeRetentionRule(), 12.5, ThemeManager.Palette.SecondaryForegroundBrush);
+        _retentionRule = MakeText(DescribeRetentionRule(), 12.5, ThemeManager.BrushKeys.SecondaryForeground);
         _retentionRule.TextWrapping = TextWrapping.Wrap;
         _retentionRule.HorizontalAlignment = HorizontalAlignment.Left;
-        _retentionRule.MaxWidth = 600;
         AutomationProperties.SetAutomationId(_retentionRule, "settings-retention-rule");
 
-        _status = MakeText(string.Empty, 12, ThemeManager.Palette.SecondaryForegroundBrush);
+        _status = MakeText(string.Empty, 12.5, ThemeManager.BrushKeys.SecondaryForeground);
         _status.HorizontalAlignment = HorizontalAlignment.Left;
+        _status.VerticalAlignment = VerticalAlignment.Center;
         _status.TextWrapping = TextWrapping.Wrap;
         AutomationProperties.SetAutomationId(_status, "settings-status");
 
         var closeButton = MakeButton(StringsUi.Get("S.Settings.Close"), "settings-close", Close, primary: true);
-        AutomationProperties.SetAutomationId(closeButton, "settings-close");
+        closeButton.Margin = new Thickness(12, 0, 0, 0);
 
-        var sections = new StackPanel();
-        _sections = sections;
+        _sections = new StackPanel { MaxWidth = 640, Margin = new Thickness(28, 4, 28, 20) };
 
         var scroll = new ScrollViewer
         {
-            Content = sections,
+            Content = _sections,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            Padding = new Thickness(0, 0, 8, 0),
         };
 
-        // 三行布局：头部（标题 + 副标题）/ 可滚动的内容 / 底部状态 + 关闭按钮。
-        // 每个元素只能有一个父级：先建好容器再往里加，绝不能"先加到 root 再 Remove"。
-        var headerStack = new StackPanel();
-        headerStack.Children.Add(_header);
-        headerStack.Children.Add(_subtitle);
+        // 头部：渐变徽标 + 标题/副标题。
+        var headerTextStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(16, 0, 0, 0) };
+        headerTextStack.Children.Add(_header);
+        headerTextStack.Children.Add(_subtitle);
 
-        var footer = new Grid { Margin = new Thickness(0, 8, 0, 0) };
-        footer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        footer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var headerGrid = new Grid { MaxWidth = 640, Margin = new Thickness(28, 26, 28, 16) };
+        headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        var badge = BuildBadge();
+        Grid.SetColumn(badge, 0);
+        Grid.SetColumn(headerTextStack, 1);
+        headerGrid.Children.Add(badge);
+        headerGrid.Children.Add(headerTextStack);
+
+        var footerGrid = new Grid { MaxWidth = 640, Margin = new Thickness(28, 12, 28, 14) };
+        footerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        footerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         Grid.SetColumn(_status, 0);
         Grid.SetColumn(closeButton, 1);
-        footer.Children.Add(_status);
-        footer.Children.Add(closeButton);
+        footerGrid.Children.Add(_status);
+        footerGrid.Children.Add(closeButton);
 
-        var root = new Grid { Margin = new Thickness(18, 14, 18, 12) };
+        var footer = new Border { BorderThickness = new Thickness(0, 1, 0, 0), Child = footerGrid };
+        footer.SetResourceReference(Border.BorderBrushProperty, ThemeManager.BrushKeys.Divider);
+        footer.SetResourceReference(Border.BackgroundProperty, ThemeManager.BrushKeys.Surface);
+
+        var root = new Grid();
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        Grid.SetRow(headerStack, 0);
+        Grid.SetRow(headerGrid, 0);
         Grid.SetRow(scroll, 1);
         Grid.SetRow(footer, 2);
-        root.Children.Add(headerStack);
+        root.Children.Add(headerGrid);
         root.Children.Add(scroll);
         root.Children.Add(footer);
         Content = root;
 
         BuildSections();
 
-        // 主题/语言变化时（设置窗口自己触发的，或跟随系统变化）刷新本地配色。
+        // 主题/语言变化时（设置窗口自己触发的，或跟随系统变化）刷新说明文字与标题栏。
         ThemeManager.Changed += OnThemeChanged;
         StringsUi.Changed += OnLanguageChanged;
         Closed += (_, _) =>
@@ -201,6 +212,7 @@ public sealed class SettingsWindow : Window
 
         SyncControlsFromSettings();
         RefreshDataSummary();
+        SourceInitialized += (_, _) => DwmApi.TrySetDarkTitleBar(this, ThemeManager.Palette.IsDark);
         DwmApi.TrySetDarkTitleBar(this, ThemeManager.Palette.IsDark);
 
         AppLog.Info(
@@ -270,12 +282,52 @@ public sealed class SettingsWindow : Window
 
     // --- 构建界面 ---
 
+    /// <summary>头部的品牌徽标：强调色圆角方块 + 白色裁剪图标 + 顶部高光。</summary>
+    private static FrameworkElement BuildBadge()
+    {
+        var icon = new Shapes.Path
+        {
+            Data = Geometry.Parse("M7,3 V17 H21 M3,7 H17 V21"),
+            StrokeThickness = 2.2,
+            StrokeStartLineCap = PenLineCap.Round,
+            StrokeEndLineCap = PenLineCap.Round,
+            StrokeLineJoin = PenLineJoin.Round,
+        };
+        icon.SetResourceReference(Shapes.Shape.StrokeProperty, ThemeManager.BrushKeys.OnAccent);
+        var canvas = new Canvas { Width = 24, Height = 24 };
+        canvas.Children.Add(icon);
+
+        var gloss = new Border
+        {
+            CornerRadius = new CornerRadius(14),
+            IsHitTestVisible = false,
+            Background = new LinearGradientBrush(
+                Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF),
+                Color.FromArgb(0x00, 0xFF, 0xFF, 0xFF),
+                90),
+        };
+
+        var grid = new Grid();
+        grid.Children.Add(gloss);
+        grid.Children.Add(new Viewbox { Width = 24, Height = 24, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Child = canvas });
+
+        var badge = new Border
+        {
+            Width = 48,
+            Height = 48,
+            CornerRadius = new CornerRadius(14),
+            Child = grid,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        badge.SetResourceReference(Border.BackgroundProperty, ThemeManager.BrushKeys.Accent);
+        return badge;
+    }
+
     private void BuildSections()
     {
         // 语言切换会重建整块内容，但 _language / _theme / _startup / 几段文字是**复用**的
-        // 长期控件：它们还挂在旧的容器上，先摘下来再重新摆放（桌面实测撞出来的
+        // 长期控件：它们还挂在旧的容器上，先摘下来再重新摆放（否则 Add 会抛
         // "Specified element is already the logical child of another element"）。
-        // 复用控件先从旧父级上摘下来（否则 Add 会抛"already the logical child"）。
         foreach (var element in new FrameworkElement[]
                  {
                      _screenshotBox, _pinBox, _language, _theme, _captureMode, _startup,
@@ -286,73 +338,78 @@ public sealed class SettingsWindow : Window
         }
 
         _sections.Children.Clear();
+
+        // 快捷键
         _sections.Children.Add(Section(StringsUi.Get("S.Settings.Section.Shortcuts")));
-        _sections.Children.Add(Field(StringsUi.Get("S.Settings.Shortcut.Screenshot"), _screenshotBox));
-        _sections.Children.Add(Field(StringsUi.Get("S.Settings.Shortcut.Pin"), _pinBox));
+        _sections.Children.Add(Card(
+            Row(StringsUi.Get("S.Settings.Shortcut.Screenshot"), null, _screenshotBox),
+            Row(StringsUi.Get("S.Settings.Shortcut.Pin"), null, _pinBox)));
+        _sections.Children.Add(Hint(StringsUi.Get("S.Settings.Shortcut.Hint")));
 
-        var hint = MakeText(StringsUi.Get("S.Settings.Shortcut.Hint"), 11.5, ThemeManager.Palette.SecondaryForegroundBrush);
-        hint.TextWrapping = TextWrapping.Wrap;
-        hint.HorizontalAlignment = HorizontalAlignment.Left;
-        hint.Margin = new Thickness(0, 2, 0, 8);
-        _sections.Children.Add(hint);
-
+        // 截图方式
         _sections.Children.Add(Section(StringsUi.Get("S.Settings.Section.Capture")));
-        _sections.Children.Add(Field(StringsUi.Get("S.Settings.CaptureMode.Label"), _captureMode));
-        var modeHint = MakeText(StringsUi.Get("S.Settings.CaptureMode.Hint"), 11.5, ThemeManager.Palette.SecondaryForegroundBrush);
-        modeHint.TextWrapping = TextWrapping.Wrap;
-        modeHint.Margin = new Thickness(0, 2, 0, 8);
-        _sections.Children.Add(modeHint);
+        _sections.Children.Add(Card(
+            Row(StringsUi.Get("S.Settings.CaptureMode.Label"), StringsUi.Get("S.Settings.CaptureMode.Hint"), _captureMode)));
 
-        _sections.Children.Add(Section(StringsUi.Get("S.Settings.Section.Language")));
-        _sections.Children.Add(Field(string.Empty, _language, out _languageLabel));
-        _sections.Children.Add(Section(StringsUi.Get("S.Settings.Section.Theme")));
-        _sections.Children.Add(Field(string.Empty, _theme, out _themeLabel));
+        // 外观（语言 + 主题）
+        _sections.Children.Add(Section(StringsUi.Get("S.Settings.Section.Appearance")));
+        _sections.Children.Add(Card(
+            Row(StringsUi.Get("S.Settings.Section.Language"), string.Empty, _language, out _languageLabel),
+            Row(StringsUi.Get("S.Settings.Section.Theme"), string.Empty, _theme, out _themeLabel)));
         RefreshEffectiveLabels();
 
+        // 开机启动
         _sections.Children.Add(Section(StringsUi.Get("S.Settings.Section.Startup")));
-        _sections.Children.Add(_startup);
+        _sections.Children.Add(Card(
+            Row(StringsUi.Get("S.Settings.Startup.Enable"), StringsUi.Get("S.Settings.Startup.Detail"), _startup)));
 
+        // 数据目录
         _sections.Children.Add(Section(StringsUi.Get("S.Settings.Section.Data")));
-        _sections.Children.Add(_dataPath);
-        _sections.Children.Add(_dataCounts);
-
-        var dataButtons = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 8, 0, 4) };
+        var dataLeft = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        dataLeft.Children.Add(_dataPath);
+        dataLeft.Children.Add(_dataCounts);
         var openData = MakeButton(StringsUi.Get("S.Settings.Data.Open"), "settings-open-data", OpenDataFolder);
-        dataButtons.Children.Add(openData);
-        dataButtons.HorizontalAlignment = HorizontalAlignment.Left;
-        _sections.Children.Add(dataButtons);
+        openData.Margin = new Thickness(0);
+        openData.VerticalAlignment = VerticalAlignment.Center;
+        openData.HorizontalAlignment = HorizontalAlignment.Right;
 
-        var settingsFile = MakeText(StringsUi.Format("S.Settings.SavePath", _store.FilePath), 11, ThemeManager.Palette.SecondaryForegroundBrush);
+        var settingsFile = MakeText(StringsUi.Format("S.Settings.SavePath", _store.FilePath), 11.5, ThemeManager.BrushKeys.SecondaryForeground);
         settingsFile.TextWrapping = TextWrapping.Wrap;
         settingsFile.HorizontalAlignment = HorizontalAlignment.Left;
         AutomationProperties.SetAutomationId(settingsFile, "settings-save-path");
-        _sections.Children.Add(settingsFile);
 
+        _sections.Children.Add(Card(
+            RowCore(dataLeft, openData),
+            FullRow(settingsFile)));
+
+        // 历史保留规则
         _sections.Children.Add(Section(StringsUi.Get("S.Settings.Section.Retention")));
-        _sections.Children.Add(_retentionRule);
+        _sections.Children.Add(Card(FullRow(_retentionRule)));
 
-        // T32：更新渠道显示在设置里（未配置时如实写"尚未配置更新渠道"），并提供手动作检查入口。
+        // 更新：版本 + 渠道 + 检查按钮
         _sections.Children.Add(Section(StringsUi.Get("S.Settings.Section.Update")));
-        var channel = MakeText(DescribeChannel(), 12, ThemeManager.Palette.SecondaryForegroundBrush);
+        var version = MakeText(StringsUi.Format("S.Settings.Version", UpdateChecker.GetCurrentVersion()), 13.5, ThemeManager.BrushKeys.Foreground);
+        version.HorizontalAlignment = HorizontalAlignment.Left;
+        AutomationProperties.SetAutomationId(version, "settings-version");
+
+        var channel = MakeText(DescribeChannel(), 12, ThemeManager.BrushKeys.SecondaryForeground);
         channel.TextWrapping = TextWrapping.Wrap;
         channel.HorizontalAlignment = HorizontalAlignment.Left;
+        channel.Margin = new Thickness(0, 2, 0, 0);
         AutomationProperties.SetAutomationId(channel, "settings-update-channel");
-        _sections.Children.Add(channel);
 
-        var checkRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 6, 0, 4) };
-        checkRow.HorizontalAlignment = HorizontalAlignment.Left;
+        var updateLeft = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        updateLeft.Children.Add(version);
+        updateLeft.Children.Add(channel);
+
         var check = MakeButton(
             StringsUi.Get("S.Settings.Update.Check"),
             "settings-check-update",
             () => CheckUpdates?.Invoke());
-        checkRow.Children.Add(check);
-        _sections.Children.Add(checkRow);
-
-        var version = MakeText(StringsUi.Format("S.Settings.Version", UpdateChecker.GetCurrentVersion()), 11, ThemeManager.Palette.SecondaryForegroundBrush);
-        version.HorizontalAlignment = HorizontalAlignment.Left;
-        version.Margin = new Thickness(0, 10, 0, 4);
-        AutomationProperties.SetAutomationId(version, "settings-version");
-        _sections.Children.Add(version);
+        check.Margin = new Thickness(0);
+        check.VerticalAlignment = VerticalAlignment.Center;
+        check.HorizontalAlignment = HorizontalAlignment.Right;
+        _sections.Children.Add(Card(RowCore(updateLeft, check)));
 
         ApplyLocalizedLabels();
     }
@@ -385,17 +442,13 @@ public sealed class SettingsWindow : Window
     /// <summary>把控件文字按当前语言刷新（语言切换后调用）。</summary>
     private void ApplyLocalizedLabels()
     {
-        ((TextBlock)_startup.Content).Text = StringsUi.Get("S.Settings.Startup.Enable");
+        AutomationProperties.SetName(_startup, StringsUi.Get("S.Settings.Startup.Enable"));
 
-        // 下拉项文字（Simple 外观直接显示字符串，所以重建项文本，保持选中值不变）。
+        // 下拉项文字（重建项文本，保持选中值不变）。
         UpdateComboTexts(_language, new[] { AppLanguage.System, AppLanguage.ZhHans, AppLanguage.English },
             new[] { "S.Settings.Language.System", "S.Settings.Language.ZhHans", "S.Settings.Language.English" });
-        UpdateComboTexts(_theme, new[] { AppTheme.System, AppTheme.Light, AppTheme.Dark },
-            new[] { "S.Settings.Theme.System", "S.Settings.Theme.Light", "S.Settings.Theme.Dark" });
-
-        UpdateComboTexts(_captureMode,
-            new[] { CaptureSelectionMode.Rectangle, CaptureSelectionMode.Window },
-            new[] { "S.Settings.CaptureMode.Rectangle", "S.Settings.CaptureMode.Window" });
+        _theme.RefreshTexts();
+        _captureMode.RefreshTexts();
         _retentionRule.Text = DescribeRetentionRule();
     }
 
@@ -437,45 +490,103 @@ public sealed class SettingsWindow : Window
         }
     }
 
+    // --- 布局小件 ---
+
+    /// <summary>分组小标题（卡片上方）。</summary>
     private static FrameworkElement Section(string text)
     {
-        var block = MakeText(text, 14, ThemeManager.Palette.ForegroundBrush, FontWeights.SemiBold);
+        var block = MakeText(text, 12.5, ThemeManager.BrushKeys.SecondaryForeground, FontWeights.SemiBold);
         block.HorizontalAlignment = HorizontalAlignment.Left;
-        block.Margin = new Thickness(0, 14, 0, 6);
+        block.Margin = new Thickness(6, 22, 0, 8);
         AutomationProperties.SetAutomationId(block, "settings-section-" + text);
         return block;
     }
 
-    private static FrameworkElement Field(string label, FrameworkElement control) =>
-        Field(label, control, out _);
-
-    private static FrameworkElement Field(string label, FrameworkElement control, out TextBlock labelBlock)
+    /// <summary>卡片下方的小提示。</summary>
+    private static FrameworkElement Hint(string text)
     {
-        var grid = new Grid { Margin = new Thickness(0, 0, 0, 6) };
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(190) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        var block = MakeText(text, 11.5, ThemeManager.BrushKeys.SecondaryForeground);
+        block.TextWrapping = TextWrapping.Wrap;
+        block.HorizontalAlignment = HorizontalAlignment.Left;
+        block.Margin = new Thickness(6, 8, 6, 0);
+        return block;
+    }
 
-        var text = MakeText(label, 12.5, ThemeManager.Palette.ForegroundBrush);
-        text.HorizontalAlignment = HorizontalAlignment.Left;
-        text.TextWrapping = TextWrapping.Wrap;
-        labelBlock = text;
-        Grid.SetColumn(text, 0);
+    /// <summary>圆角卡片：行与行之间用细线分隔。</summary>
+    private static Border Card(params UIElement[] rows)
+    {
+        var stack = new StackPanel();
+        for (var i = 0; i < rows.Length; i++)
+        {
+            if (i > 0)
+            {
+                var line = new Border { Height = 1, Margin = new Thickness(18, 0, 0, 0) };
+                line.SetResourceReference(Border.BackgroundProperty, ThemeManager.BrushKeys.Divider);
+                stack.Children.Add(line);
+            }
+
+            stack.Children.Add(rows[i]);
+        }
+
+        var card = new Border
+        {
+            CornerRadius = new CornerRadius(14),
+            BorderThickness = new Thickness(1),
+            Child = stack,
+        };
+        card.SetResourceReference(Border.BackgroundProperty, ThemeManager.BrushKeys.Surface);
+        card.SetResourceReference(Border.BorderBrushProperty, ThemeManager.BrushKeys.Divider);
+        return card;
+    }
+
+    private static FrameworkElement FullRow(FrameworkElement content) =>
+        new Border { Padding = new Thickness(18, 13, 18, 13), Child = content };
+
+    private static FrameworkElement Row(string title, string? description, FrameworkElement control) =>
+        Row(title, description, control, out _);
+
+    /// <summary>设置行：左边标题（+ 说明），右边控件。</summary>
+    private static FrameworkElement Row(string title, string? description, FrameworkElement control, out TextBlock descriptionBlock)
+    {
+        var left = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        var titleBlock = MakeText(title, 13.5, ThemeManager.BrushKeys.Foreground);
+        titleBlock.TextWrapping = TextWrapping.Wrap;
+        titleBlock.HorizontalAlignment = HorizontalAlignment.Left;
+        left.Children.Add(titleBlock);
+
+        descriptionBlock = MakeText(description ?? string.Empty, 12, ThemeManager.BrushKeys.SecondaryForeground);
+        descriptionBlock.TextWrapping = TextWrapping.Wrap;
+        descriptionBlock.HorizontalAlignment = HorizontalAlignment.Left;
+        descriptionBlock.Margin = new Thickness(0, 2, 0, 0);
+        descriptionBlock.Visibility = description is null ? Visibility.Collapsed : Visibility.Visible;
+        left.Children.Add(descriptionBlock);
+
+        return RowCore(left, control);
+    }
+
+    private static FrameworkElement RowCore(FrameworkElement left, FrameworkElement control)
+    {
+        var grid = new Grid { Margin = new Thickness(18, 13, 18, 13) };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        left.Margin = new Thickness(0, 0, 18, 0);
+        Grid.SetColumn(left, 0);
         Grid.SetColumn(control, 1);
-        grid.Children.Add(text);
+        grid.Children.Add(left);
         grid.Children.Add(control);
         return grid;
     }
 
-    private static TextBlock MakeText(string text, double size, Brush brush, FontWeight? weight = null)
+    private static TextBlock MakeText(string text, double size, string brushKey, FontWeight? weight = null)
     {
         var block = new TextBlock
         {
             Text = text,
             FontSize = size,
-            FontFamily = new FontFamily(ThemeManager.FontFamilyName),
-            Foreground = brush,
             VerticalAlignment = VerticalAlignment.Center,
         };
+        block.SetResourceReference(TextBlock.ForegroundProperty, brushKey);
+        block.SetResourceReference(TextBlock.FontFamilyProperty, ThemeManager.FontFamilyKey);
         if (weight is { } value)
         {
             block.FontWeight = value;
@@ -486,106 +597,30 @@ public sealed class SettingsWindow : Window
 
     private static Button MakeButton(string text, string automationId, Action onClick, bool primary = false)
     {
-        var palette = ThemeManager.Palette;
         var button = new Button
         {
-            Content = MakeText(text, 13, primary ? palette.OnAccentBrush : palette.ForegroundBrush),
-            Padding = new Thickness(14, 5, 14, 5),
-            Margin = new Thickness(0, 0, 8, 0),
-            MinWidth = 76,
-            Background = primary ? palette.AccentBrush : palette.SurfaceBrush,
-            BorderBrush = palette.BorderBrush,
-            BorderThickness = new Thickness(1),
-            Cursor = Cursors.Hand,
+            Content = text,
+            Padding = new Thickness(18, 7, 18, 7),
+            MinWidth = 84,
+            FontSize = 13,
             HorizontalAlignment = HorizontalAlignment.Left,
         };
+
+        if (primary)
+        {
+            button.BorderThickness = new Thickness(0);
+            button.SetResourceReference(Control.BackgroundProperty, ThemeManager.BrushKeys.Accent);
+            button.SetResourceReference(Control.ForegroundProperty, ThemeManager.BrushKeys.OnAccent);
+        }
+        else
+        {
+            button.SetResourceReference(Control.BackgroundProperty, ThemeManager.BrushKeys.SurfaceAlt);
+        }
+
         AutomationProperties.SetAutomationId(button, automationId);
         AutomationProperties.SetName(button, text);
         button.Click += (_, _) => onClick();
         return button;
-    }
-
-    private static ComboBox CreateCombo(string automationId)
-    {
-        var palette = ThemeManager.Palette;
-        var combo = new ComboBox
-        {
-            MinWidth = 210,
-            FontSize = 12.5,
-            FontFamily = new FontFamily(ThemeManager.FontFamilyName),
-            Padding = new Thickness(6, 3, 6, 3),
-            Background = palette.SurfaceBrush,
-            Foreground = palette.ForegroundBrush,
-            BorderBrush = palette.BorderBrush,
-            HorizontalAlignment = HorizontalAlignment.Left,
-
-            // 默认的 Aero 模板**不**理会 Background/Foreground（它会画自己的白底与黑字），
-            // 深色主题下"选中项"与"弹出列表项"的文字都看不见（T30 桌面实测撞出来的）。
-            // 这里两处都显式着色：选中项靠 ItemContainerStyle，列表项靠 ItemTemplate。
-            ItemTemplate = BuildComboItemTemplate(),
-            ItemContainerStyle = BuildComboItemContainerStyle(),
-            Template = BuildComboTemplate(),
-        };
-        AutomationProperties.SetAutomationId(combo, automationId);
-        return combo;
-    }
-
-    /// <summary>弹出列表里每一项的显示：一个按主题着色的 TextBlock（绑定到 <see cref="ComboItem{T}"/> 的 Text）。</summary>
-    /// <summary>弹出列表里每一项容器（ListBoxItem）的文字颜色：WPF 用 <c>ItemContainerStyle</c> 管它。</summary>
-    private static Style BuildComboItemContainerStyle()
-    {
-        var palette = ThemeManager.Palette;
-        var style = new Style(typeof(ComboBoxItem));
-        style.Setters.Add(new Setter(Control.ForegroundProperty, palette.ForegroundBrush));
-        style.Setters.Add(new Setter(Control.BackgroundProperty, palette.SurfaceBrush));
-        style.Setters.Add(new Setter(Control.FontFamilyProperty, new FontFamily(ThemeManager.FontFamilyName)));
-        return style;
-    }
-
-    private static ControlTemplate BuildComboTemplate() => (ControlTemplate)System.Windows.Markup.XamlReader.Parse("""
-        <ControlTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                         TargetType="ComboBox">
-          <Grid>
-            <ToggleButton Focusable="False" ClickMode="Press"
-                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
-              <ToggleButton.Template>
-                <ControlTemplate TargetType="ToggleButton">
-                  <Border Background="{Binding Background, RelativeSource={RelativeSource AncestorType=ComboBox}}"
-                          BorderBrush="{Binding BorderBrush, RelativeSource={RelativeSource AncestorType=ComboBox}}"
-                          BorderThickness="1" CornerRadius="4" />
-                </ControlTemplate>
-              </ToggleButton.Template>
-            </ToggleButton>
-            <ContentPresenter Margin="8,5,28,5" IsHitTestVisible="False"
-                              Content="{TemplateBinding SelectionBoxItem}"
-                              ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
-                              TextElement.Foreground="{TemplateBinding Foreground}" />
-            <TextBlock Text="▾" HorizontalAlignment="Right" VerticalAlignment="Center"
-                       Margin="0,0,9,0" Foreground="{TemplateBinding Foreground}" IsHitTestVisible="False" />
-            <Popup x:Name="PART_Popup" Placement="Bottom" AllowsTransparency="True" Focusable="False"
-                   IsOpen="{TemplateBinding IsDropDownOpen}" PopupAnimation="Slide">
-              <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
-                      BorderThickness="1" CornerRadius="4" MinWidth="{TemplateBinding ActualWidth}">
-                <ScrollViewer MaxHeight="280" CanContentScroll="True">
-                  <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained" />
-                </ScrollViewer>
-              </Border>
-            </Popup>
-          </Grid>
-        </ControlTemplate>
-        """);
-
-    private static DataTemplate BuildComboItemTemplate()
-    {
-        var palette = ThemeManager.Palette;
-        var text = new FrameworkElementFactory(typeof(TextBlock));
-        text.SetValue(TextBlock.FontFamilyProperty, new FontFamily(ThemeManager.FontFamilyName));
-        text.SetValue(TextBlock.FontSizeProperty, 12.5);
-        text.SetValue(TextBlock.ForegroundProperty, palette.ForegroundBrush);
-        text.SetValue(TextBlock.MarginProperty, new Thickness(2, 1, 2, 1));
-        text.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding(nameof(ComboItem<AppLanguage>.Text)));
-        return new DataTemplate { VisualTree = text };
     }
 
     private sealed class ComboItem<T>(T value, string key) where T : struct, Enum
@@ -611,8 +646,8 @@ public sealed class SettingsWindow : Window
             _screenshotBox.SetValue(settings.ScreenshotShortcut);
             _pinBox.SetValue(settings.PinShortcut);
             SelectCombo(_language, settings.Language);
-            SelectCombo(_theme, settings.Theme);
-            SelectCombo(_captureMode, settings.CaptureMode);
+            _theme.Select(settings.Theme);
+            _captureMode.Select(settings.CaptureMode);
             _startup.IsChecked = settings.LaunchAtStartup;
         }
         finally
@@ -794,14 +829,14 @@ public sealed class SettingsWindow : Window
         Commit(next, StringsUi.Get("S.Settings.Saved"));
     }
 
-    private void OnThemeChanged()
+    private void OnThemeChosen(AppTheme theme)
     {
-        if (_applying || _theme.SelectedItem is not ComboItem<AppTheme> item)
+        if (_applying)
         {
             return;
         }
 
-        var next = _store.Current.WithTheme(item.Value);
+        var next = _store.Current.WithTheme(theme);
         if (next.Theme == _store.Current.Theme)
         {
             return;
@@ -810,11 +845,14 @@ public sealed class SettingsWindow : Window
         Commit(next, StringsUi.Get("S.Settings.Saved"));
     }
 
-    private void OnCaptureModeChanged()
+    private void OnCaptureModeChosen(CaptureSelectionMode mode)
     {
-        if (_applying || _captureMode.SelectedItem is not ComboItem<CaptureSelectionMode> item) return;
-        if (item.Value == _store.Current.CaptureMode) return;
-        Commit(_store.Current.WithCaptureMode(item.Value), StringsUi.Get("S.Settings.Saved"));
+        if (_applying || mode == _store.Current.CaptureMode)
+        {
+            return;
+        }
+
+        Commit(_store.Current.WithCaptureMode(mode), StringsUi.Get("S.Settings.Saved"));
     }
 
     private void OnStartupToggled()
@@ -866,7 +904,9 @@ public sealed class SettingsWindow : Window
     private void ShowStatus(string message, bool error)
     {
         _status.Text = message;
-        _status.Foreground = error ? ThemeManager.Palette.ErrorBrush : ThemeManager.Palette.SecondaryForegroundBrush;
+        _status.SetResourceReference(
+            TextBlock.ForegroundProperty,
+            error ? ThemeManager.BrushKeys.Error : ThemeManager.BrushKeys.Success);
         AppLog.Info("Settings", $"设置窗口状态：{message}");
     }
 
@@ -874,27 +914,10 @@ public sealed class SettingsWindow : Window
 
     private void OnThemeChanged(AppTheme effective)
     {
-        // 换掉整窗背景与每个控件的颜色。最简单可靠的做法是把配色重新套一遍（界面很小）。
-        var palette = ThemeManager.Palette;
-        Background = palette.WindowBackgroundBrush;
-        ApplyThemeToTree(Content as DependencyObject, palette);
-
-        // 选项模板里的颜色是构造时写进去的，换主题要重建一次。
-        _language.ItemTemplate = BuildComboItemTemplate();
-        _theme.ItemTemplate = BuildComboItemTemplate();
-        _captureMode.ItemTemplate = BuildComboItemTemplate();
-        _language.ItemContainerStyle = BuildComboItemContainerStyle();
-        _theme.ItemContainerStyle = BuildComboItemContainerStyle();
-        _captureMode.ItemContainerStyle = BuildComboItemContainerStyle();
-        _language.Foreground = palette.ForegroundBrush;
-        _theme.Foreground = palette.ForegroundBrush;
-        _captureMode.Foreground = palette.ForegroundBrush;
-
-        _screenshotBox.ApplyPalette();
-        _pinBox.ApplyPalette();
+        // 颜色全部走动态资源，已经随主题自动更新；这里只需要刷新说明文字与系统标题栏。
         RefreshEffectiveLabels();
-        DwmApi.TrySetDarkTitleBar(this, palette.IsDark);
-        AppLog.Info("Settings", $"设置窗口已按新主题刷新：{effective}（{palette}）");
+        DwmApi.TrySetDarkTitleBar(this, ThemeManager.Palette.IsDark);
+        AppLog.Info("Settings", $"设置窗口已按新主题刷新：{effective}（{ThemeManager.Palette}）");
     }
 
     private void OnLanguageChanged(AppLanguage language)
@@ -909,88 +932,6 @@ public sealed class SettingsWindow : Window
         RefreshDataSummary();
         _status.Text = string.Empty;
         AppLog.Info("Settings", $"设置窗口已按新语言重建：{language}");
-    }
-
-    /// <summary>把主题画刷套到一棵控件树上（按钮/输入框/文字各自取对应的语义色）。</summary>
-    internal static void ApplyThemeToTree(DependencyObject? root, ThemePalette palette)
-    {
-        if (root is null)
-        {
-            return;
-        }
-
-        switch (root)
-        {
-            case TextBlock text:
-                // 文字颜色按"当前是否是次要文字"判断不了，只把明显是次要色的换成新的次要色。
-                text.Foreground = IsSecondary(text.Foreground as SolidColorBrush)
-                    ? palette.SecondaryForegroundBrush
-                    : PaletteForeground(text.Foreground as SolidColorBrush, palette);
-                break;
-
-            case Button button:
-                var isPrimary = button.Background is SolidColorBrush primary &&
-                                ThemePalette.Light.Get(nameof(ThemePalette.Accent)).Color == primary.Color ||
-                                button.Background is SolidColorBrush b2 && IsPrimaryLike(b2);
-                button.Background = isPrimary ? palette.AccentBrush : palette.SurfaceBrush;
-                button.BorderBrush = palette.BorderBrush;
-                if (button.Content is TextBlock label)
-                {
-                    label.Foreground = isPrimary ? palette.OnAccentBrush : palette.ForegroundBrush;
-                }
-                else
-                {
-                    button.Foreground = isPrimary ? palette.OnAccentBrush : palette.ForegroundBrush;
-                }
-
-                break;
-
-            case ComboBox combo:
-                combo.Background = palette.SurfaceBrush;
-                combo.Foreground = palette.ForegroundBrush;
-                combo.BorderBrush = palette.BorderBrush;
-                break;
-
-            case TextBox box:
-                box.Background = palette.SurfaceBrush;
-                box.Foreground = palette.ForegroundBrush;
-                box.BorderBrush = palette.BorderBrush;
-                break;
-
-            case CheckBox check:
-                check.Foreground = palette.ForegroundBrush;
-                if (check.Content is TextBlock contentText)
-                {
-                    contentText.Foreground = palette.ForegroundBrush;
-                }
-
-                break;
-        }
-
-        var count = VisualTreeHelper.GetChildrenCount(root);
-        for (var i = 0; i < count; i++)
-        {
-            ApplyThemeToTree(VisualTreeHelper.GetChild(root, i), palette);
-        }
-    }
-
-    private static bool IsSecondary(SolidColorBrush? brush) =>
-        brush is not null &&
-        (Equals(brush.Color, ThemePalette.Light.SecondaryForeground) || Equals(brush.Color, ThemePalette.Dark.SecondaryForeground));
-
-    private static bool IsPrimaryLike(SolidColorBrush brush) =>
-        Equals(brush.Color, ThemePalette.Light.Accent) || Equals(brush.Color, ThemePalette.Dark.Accent);
-
-    private static SolidColorBrush PaletteForeground(SolidColorBrush? brush, ThemePalette palette)
-    {
-        if (brush is null)
-        {
-            return palette.ForegroundBrush;
-        }
-
-        return Equals(brush.Color, ThemePalette.Light.Error) || Equals(brush.Color, ThemePalette.Dark.Error)
-            ? palette.ErrorBrush
-            : palette.ForegroundBrush;
     }
 }
 
@@ -1017,10 +958,15 @@ internal sealed class ShortcutBox : TextBox
     {
         IsReadOnly = true;
         IsReadOnlyCaretVisible = false;
+        // 隐式样式只匹配精确类型，子类要显式引用 TextBox 的样式。
+        SetResourceReference(StyleProperty, typeof(TextBox));
         FontSize = 13;
-        Padding = new Thickness(8, 5, 8, 5);
-        MinWidth = 210;
-        HorizontalAlignment = HorizontalAlignment.Left;
+        FontWeight = FontWeights.SemiBold;
+        Padding = new Thickness(10, 6, 10, 6);
+        MinWidth = 168;
+        TextAlignment = TextAlignment.Center;
+        HorizontalContentAlignment = HorizontalAlignment.Center;
+        HorizontalAlignment = HorizontalAlignment.Right;
         VerticalAlignment = VerticalAlignment.Center;
         Cursor = Cursors.Hand;
         ToolTip = StringsUi.Get("S.Settings.Shortcut.Hint");
@@ -1028,8 +974,6 @@ internal sealed class ShortcutBox : TextBox
         AutomationProperties.SetName(this, StringsUi.Get("S.Settings.Shortcut.Hint"));
 
         ApplyPalette();
-        ThemeManager.Changed += _ => ApplyPalette();
-        Unloaded += (_, _) => ApplyPalette();
 
         PreviewKeyDown += OnPreviewKeyDown;
         PreviewTextInput += (_, e) => e.Handled = true;
@@ -1056,7 +1000,7 @@ internal sealed class ShortcutBox : TextBox
         _value = text;
         _showingError = false;
         Text = text;
-        BorderBrush = ThemeManager.Palette.BorderBrush;
+        ApplyPalette();
     }
 
     /// <summary>
@@ -1087,7 +1031,7 @@ internal sealed class ShortcutBox : TextBox
     {
         _showingError = true;
         Text = _value;
-        BorderBrush = ThemeManager.Palette.ErrorBrush;
+        ApplyPalette();
         ToolTip = message;
     }
 
@@ -1097,17 +1041,18 @@ internal sealed class ShortcutBox : TextBox
         _showingError = false;
         _pendingModifiers = string.Empty;
         Text = _value;
-        BorderBrush = ThemeManager.Palette.BorderBrush;
+        ApplyPalette();
         ToolTip = StringsUi.Get("S.Settings.Shortcut.Hint");
     }
 
+    /// <summary>边框/底色走动态资源：正常、出错两种状态之间切换，换主题时自动跟随。</summary>
     internal void ApplyPalette()
     {
-        var palette = ThemeManager.Palette;
-        Background = palette.SurfaceBrush;
-        Foreground = palette.ForegroundBrush;
-        CaretBrush = palette.ForegroundBrush;
-        BorderBrush = _showingError ? palette.ErrorBrush : palette.BorderBrush;
+        SetResourceReference(BackgroundProperty, ThemeManager.BrushKeys.SurfaceAlt);
+        SetResourceReference(ForegroundProperty, ThemeManager.BrushKeys.Foreground);
+        SetResourceReference(
+            BorderBrushProperty,
+            _showingError ? ThemeManager.BrushKeys.Error : ThemeManager.BrushKeys.Border);
     }
 
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)

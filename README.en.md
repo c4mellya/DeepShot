@@ -4,7 +4,7 @@ A screenshot and desktop pin tool for Windows 10 22H2 / Windows 11 x64, built wi
 
 ## Install
 
-Run `ZeepCut-0.1.3-Setup-x64.exe` for a per-user installation, or extract `ZeepCut-0.1.3-win-x64.zip` and run `ZeepCut.exe`. Both releases include the .NET runtime. Keep all files and the Resources folder together. The installer is unsigned.
+Run `ZeepCut-0.1.4-Setup-x64.exe` for a per-user installation, or extract `ZeepCut-0.1.4-win-x64.zip` and run `ZeepCut.exe`. Both releases include the .NET runtime. Keep all files and the Resources folder together. The installer is unsigned.
 
 Zeep Cut lives in the system tray, possibly inside the hidden icons panel. Closing History or Settings keeps the application running; select Exit from the tray menu to stop it. Startup at sign-in is optional and disabled by default. A short guide appears on first launch.
 

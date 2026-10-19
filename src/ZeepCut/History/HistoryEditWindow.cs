@@ -64,7 +64,7 @@ internal sealed class HistoryEditWindow : Window
     private const double CanvasPadding = 16;
 
     /// <summary>右侧工具栏宽度（DIP）。</summary>
-    private const double SidebarWidth = 208;
+    private const double SidebarWidth = 228;
 
     /// <summary>手柄命中半径与文档命中容差（物理像素，与遮罩一致）。</summary>
     private const int HandleRadius = 8;
@@ -148,7 +148,11 @@ internal sealed class HistoryEditWindow : Window
         MinHeight = 460;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         ShowInTaskbar = false;
-        Background = HistoryUi.WindowBackground;
+        SetResourceReference(BackgroundProperty, HistoryUi.Keys.Window);
+        SourceInitialized += (_, _) => DwmApi.TrySetDarkTitleBar(this, ThemeManager.Palette.IsDark);
+        Action<ZeepCut.Core.Settings.AppTheme> onTheme = _ => DwmApi.TrySetDarkTitleBar(this, ThemeManager.Palette.IsDark);
+        ThemeManager.Changed += onTheme;
+        Closed += (_, _) => ThemeManager.Changed -= onTheme;
         FontFamily = new FontFamily(HistoryUi.FontFamilyName);
         AutomationProperties.SetAutomationId(this, "history-edit-window");
         AutomationProperties.SetName(this, StringsUi.Get("S.History.EditWindowName"));
@@ -209,11 +213,11 @@ internal sealed class HistoryEditWindow : Window
         canvasHost.Children.Add(_picture);
         canvasHost.Children.Add(_layer);
         canvasHost.Children.Add(_editorCanvas);
-        canvasHost.Background = HistoryUi.ThumbnailBackground;
+        canvasHost.SetResourceReference(Panel.BackgroundProperty, HistoryUi.Keys.SurfaceAlt);
 
         _textEditor = new TextBox
         {
-            Foreground = HistoryUi.Foreground,
+            Foreground = Brushes.Black,
             Background = Brushes.White,
             BorderThickness = new Thickness(0),
             FontSize = 14,
@@ -248,12 +252,12 @@ internal sealed class HistoryEditWindow : Window
         _textEditorHost = new Border
         {
             Background = Brushes.White,
-            BorderBrush = HistoryUi.SelectedBorder,
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(2),
             Child = _textEditor,
             Visibility = Visibility.Collapsed,
         };
+        _textEditorHost.SetResourceReference(Border.BorderBrushProperty, HistoryUi.Keys.Accent);
         AutomationProperties.SetName(_textEditorHost, "标注文字输入框");
         AutomationProperties.SetAutomationId(_textEditorHost, "history-edit-textbox");
         canvasHost.Children.Add(_textEditorHost);
@@ -263,21 +267,21 @@ internal sealed class HistoryEditWindow : Window
             Content = canvasHost,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            Background = HistoryUi.ThumbnailBackground,
         };
+        _scroll.SetResourceReference(Control.BackgroundProperty, HistoryUi.Keys.SurfaceAlt);
 
         // --- 头部：记录信息 ---
-        _info = HistoryUi.Text(DescribeRecord(record, image), 12.5, HistoryUi.SecondaryForeground);
-        _info.Margin = new Thickness(16, 10, 16, 8);
+        _info = HistoryUi.Text(DescribeRecord(record, image), 13, weight: FontWeights.SemiBold);
+        _info.HorizontalAlignment = HorizontalAlignment.Left;
         AutomationProperties.SetAutomationId(_info, "history-edit-record-info");
 
         _hint = HistoryUi.Text(
             StringsUi.Get("S.History.EditHint"),
             12,
-            HistoryUi.SecondaryForeground);
+            brushKey: HistoryUi.Keys.Secondary);
         _hint.HorizontalAlignment = HorizontalAlignment.Left;
         _hint.TextWrapping = TextWrapping.Wrap;
-        _hint.Margin = new Thickness(16, 0, 16, 6);
+        _hint.Margin = new Thickness(0, 3, 0, 0);
         AutomationProperties.SetAutomationId(_hint, "history-edit-hint");
 
         // --- 右侧工具栏 ---
@@ -292,9 +296,10 @@ internal sealed class HistoryEditWindow : Window
         body.Children.Add(sidebar);
 
         // --- 底部状态条 ---
-        _status = HistoryUi.Text(StringsUi.Get("S.History.EditStatusHint"), 12, HistoryUi.SecondaryForeground);
-        _status.Margin = new Thickness(16, 6, 16, 10);
+        _status = HistoryUi.Text(StringsUi.Get("S.History.EditStatusHint"), 12.5, brushKey: HistoryUi.Keys.Secondary);
+        _status.HorizontalAlignment = HorizontalAlignment.Left;
         _status.TextWrapping = TextWrapping.Wrap;
+        _status.TextTrimming = TextTrimming.None;
         AutomationProperties.SetAutomationId(_status, "history-edit-status");
         AutomationProperties.SetName(_status, _status.Text);
 
@@ -302,18 +307,34 @@ internal sealed class HistoryEditWindow : Window
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        Grid.SetRow(_info, 0);
-        Grid.SetRow(_hint, 0);
-        Grid.SetRow(body, 1);
-        Grid.SetRow(_status, 2);
 
         var header = new StackPanel();
         header.Children.Add(_info);
         header.Children.Add(_hint);
-        Grid.SetRow(header, 0);
-        root.Children.Add(header);
+        var headerBar = new Border
+        {
+            Padding = new Thickness(20, 12, 20, 12),
+            BorderThickness = new Thickness(0, 0, 0, 1),
+            Child = header,
+        };
+        headerBar.SetResourceReference(Border.BackgroundProperty, HistoryUi.Keys.Surface);
+        headerBar.SetResourceReference(Border.BorderBrushProperty, HistoryUi.Keys.Divider);
+        Grid.SetRow(headerBar, 0);
+        Grid.SetRow(body, 1);
+
+        var statusBar = new Border
+        {
+            Padding = new Thickness(20, 9, 20, 10),
+            BorderThickness = new Thickness(0, 1, 0, 0),
+            Child = _status,
+        };
+        statusBar.SetResourceReference(Border.BackgroundProperty, HistoryUi.Keys.Surface);
+        statusBar.SetResourceReference(Border.BorderBrushProperty, HistoryUi.Keys.Divider);
+        Grid.SetRow(statusBar, 2);
+
+        root.Children.Add(headerBar);
         root.Children.Add(body);
-        root.Children.Add(_status);
+        root.Children.Add(statusBar);
         Content = root;
 
         _scroll.PreviewMouseLeftButtonDown += OnCanvasMouseDown;
@@ -378,7 +399,7 @@ internal sealed class HistoryEditWindow : Window
 
     private Border BuildSidebar(out Button saveButton)
     {
-        var panel = new StackPanel { Width = SidebarWidth - 20 };
+        var panel = new StackPanel { Width = SidebarWidth - 38 };
 
         panel.Children.Add(SectionLabel(StringsUi.Get("S.Annotation.Section.Tools")));
         var toolGrid = new WrapPanel { Margin = new Thickness(0, 0, 0, 8) };
@@ -398,11 +419,10 @@ internal sealed class HistoryEditWindow : Window
         {
             var swatch = new Button
             {
-                Width = 24,
-                Height = 24,
-                Margin = new Thickness(0, 0, 5, 5),
+                Width = 26,
+                Height = 26,
+                Margin = new Thickness(0, 0, 6, 6),
                 Background = HistoryUi.Frozen(Color.FromArgb(color.Alpha, color.Red, color.Green, color.Blue)),
-                BorderBrush = HistoryUi.Border,
                 BorderThickness = new Thickness(1),
                 Cursor = Cursors.Hand,
                 ToolTip = color.ToString(),
@@ -413,6 +433,7 @@ internal sealed class HistoryEditWindow : Window
                 _session.Settings.Color = captured;
                 AppLog.Info("History", $"编辑窗口切换颜色：{captured}");
             };
+            swatch.SetResourceReference(Control.BorderBrushProperty, HistoryUi.Keys.Border);
             AutomationProperties.SetName(swatch, $"颜色{color}");
             AutomationProperties.SetAutomationId(swatch, $"history-edit-color-{color}");
             colors.Children.Add(swatch);
@@ -498,21 +519,28 @@ internal sealed class HistoryEditWindow : Window
         actionRow.Children.Add(cancel);
         panel.Children.Add(actionRow);
 
-        return new Border
+        var sidebar = new Border
         {
             Width = SidebarWidth,
-            Background = HistoryUi.CardBackground,
-            BorderBrush = HistoryUi.Border,
             BorderThickness = new Thickness(1, 0, 0, 0),
-            Padding = new Thickness(10, 10, 10, 10),
-            Child = panel,
+            Padding = new Thickness(12, 12, 12, 12),
+            Child = new ScrollViewer
+            {
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                Content = panel,
+            },
         };
+        sidebar.SetResourceReference(Border.BackgroundProperty, HistoryUi.Keys.Surface);
+        sidebar.SetResourceReference(Border.BorderBrushProperty, HistoryUi.Keys.Divider);
+        return sidebar;
     }
 
     private static TextBlock SectionLabel(string text)
     {
-        var block = HistoryUi.Text(text, 12, HistoryUi.Foreground, FontWeights.SemiBold);
-        block.Margin = new Thickness(2, 4, 0, 4);
+        var block = HistoryUi.Text(text, 12, weight: FontWeights.SemiBold, brushKey: HistoryUi.Keys.Secondary);
+        block.HorizontalAlignment = HorizontalAlignment.Left;
+        block.Margin = new Thickness(2, 6, 0, 6);
         return block;
     }
 
@@ -1011,8 +1039,7 @@ internal sealed class HistoryEditWindow : Window
         foreach (var (candidate, element) in _toolButtons)
         {
             var selected = candidate == tool;
-            element.Background = selected ? HistoryUi.SelectedBorder : HistoryUi.CardBackground;
-            element.Foreground = selected ? HistoryUi.Frozen(Colors.White) : HistoryUi.Foreground;
+            HistoryUi.StyleButton(element, selected);
             element.FontWeight = selected ? FontWeights.SemiBold : FontWeights.Normal;
         }
 
@@ -1418,7 +1445,9 @@ internal sealed class HistoryEditWindow : Window
     private void SetStatus(string message, bool isError = false)
     {
         _status.Text = message;
-        _status.Foreground = isError ? HistoryUi.ErrorForeground : HistoryUi.SecondaryForeground;
+        _status.SetResourceReference(
+            TextBlock.ForegroundProperty,
+            isError ? HistoryUi.Keys.Error : HistoryUi.Keys.Secondary);
         AutomationProperties.SetName(_status, message);
         AppLog.Info("History", $"编辑窗口状态：{message}");
     }

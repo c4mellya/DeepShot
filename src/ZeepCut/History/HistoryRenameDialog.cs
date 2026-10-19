@@ -37,47 +37,50 @@ internal sealed class HistoryRenameDialog : Window
         _currentName = currentName ?? string.Empty;
 
         Title = StringsUi.Get("S.History.RenameTitle");
-        Width = 420;
+        Width = 440;
         SizeToContent = SizeToContent.Height;
         ResizeMode = ResizeMode.NoResize;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         ShowInTaskbar = false;
-        Background = HistoryUi.WindowBackground;
+        SetResourceReference(BackgroundProperty, HistoryUi.Keys.Window);
         FontFamily = new FontFamily(HistoryUi.FontFamilyName);
         AutomationProperties.SetAutomationId(this, "history-rename-dialog");
+        SourceInitialized += (_, _) => DwmApi.TrySetDarkTitleBar(this, ThemeManager.Palette.IsDark);
 
         _input = new TextBox
         {
             Text = _currentName,
             FontSize = 14,
-            Padding = new Thickness(6, 5, 6, 5),
-            Margin = new Thickness(0, 4, 0, 2),
+            Padding = new Thickness(12, 8, 12, 8),
+            Margin = new Thickness(0, 8, 0, 0),
             MaxLength = 120,
         };
         AutomationProperties.SetName(_input, StringsUi.Get("S.History.RenameInputName"));
-        _input.Background = HistoryUi.CardBackground;
-        _input.Foreground = HistoryUi.Foreground;
-        _input.BorderBrush = HistoryUi.Border;
-        _input.CaretBrush = HistoryUi.Foreground;
         AutomationProperties.SetAutomationId(_input, "history-rename-input");
         _input.TextChanged += (_, _) => ClearError();
         _input.PreviewKeyDown += OnInputPreviewKeyDown;
 
-        _error = HistoryUi.Text(string.Empty, 12, HistoryUi.ErrorForeground);
+        _error = HistoryUi.Text(string.Empty, 12, brushKey: HistoryUi.Keys.Error);
         _error.TextWrapping = TextWrapping.Wrap;
+        _error.TextTrimming = TextTrimming.None;
+        _error.HorizontalAlignment = HorizontalAlignment.Left;
+        _error.Margin = new Thickness(2, 8, 0, 0);
         _error.Visibility = Visibility.Collapsed;
         AutomationProperties.SetAutomationId(_error, "history-rename-error");
 
         var hint = HistoryUi.Text(
             StringsUi.Get("S.History.RenameHint"),
             11.5,
-            HistoryUi.SecondaryForeground);
+            brushKey: HistoryUi.Keys.Secondary);
         hint.TextWrapping = TextWrapping.Wrap;
-        hint.Margin = new Thickness(0, 6, 0, 0);
+        hint.TextTrimming = TextTrimming.None;
+        hint.HorizontalAlignment = HorizontalAlignment.Left;
+        hint.Margin = new Thickness(2, 10, 0, 0);
 
         var ok = HistoryUi.Button(StringsUi.Get("S.History.RenameOk"), StringsUi.Get("S.History.RenameOk"), TryAccept, primary: true);
         AutomationProperties.SetAutomationId(ok, "history-rename-ok");
         ok.IsDefault = true;
+        ok.Margin = new Thickness(0);
         var cancel = HistoryUi.Button(StringsUi.Get("S.History.RenameCancel"), StringsUi.Get("S.History.RenameCancel"), () => { DialogResult = false; });
         AutomationProperties.SetAutomationId(cancel, "history-rename-cancel");
         cancel.IsCancel = true;
@@ -86,14 +89,22 @@ internal sealed class HistoryRenameDialog : Window
         {
             Orientation = Orientation.Horizontal,
             HorizontalAlignment = HorizontalAlignment.Right,
-            Margin = new Thickness(0, 12, 0, 0),
+            Margin = new Thickness(0, 20, 0, 0),
         };
-        buttons.Children.Add(ok);
         buttons.Children.Add(cancel);
+        buttons.Children.Add(ok);
 
-        var panel = new StackPanel { Margin = new Thickness(18, 14, 18, 16) };
+        var label = HistoryUi.Text(
+            StringsUi.Get("S.History.RenameLabel"),
+            12.5,
+            weight: FontWeights.SemiBold,
+            brushKey: HistoryUi.Keys.Secondary);
+        label.HorizontalAlignment = HorizontalAlignment.Left;
+        label.Margin = new Thickness(2, 0, 0, 0);
+
+        var panel = new StackPanel { Margin = new Thickness(24, 22, 24, 22) };
         _hint = hint;
-        panel.Children.Add(HistoryUi.Text(StringsUi.Get("S.History.RenameLabel"), 12.5, HistoryUi.SecondaryForeground));
+        panel.Children.Add(label);
         panel.Children.Add(_input);
         panel.Children.Add(_error);
         panel.Children.Add(hint);
