@@ -157,6 +157,10 @@ public sealed class CaptureOverlayWindow : Window
     private bool _pointerDown;
     private bool _cancelRequested;
     private bool _closed;
+    private const int EscapeHotkeyId = 0x5A43;
+    private HwndSource? _escapeSource;
+    private bool _escapeRegistered;
+    private bool _saveDialogOpen;
 
     private PixelRect? _lastHoverLogged;
     private SelectionState _lastLoggedState = SelectionState.None;
@@ -356,6 +360,11 @@ public sealed class CaptureOverlayWindow : Window
         ContentRendered += OnContentRendered;
         SizeChanged += OnSizeChanged;
         PreviewKeyDown += OnPreviewKeyDown;
+        PreviewMouseRightButtonDown += (_, e) =>
+        {
+            e.Handled = true;
+            Cancel("鼠标右键");
+        };
         PreviewMouseLeftButtonDown += OnPreviewMouseLeftButtonDown;
         PreviewMouseLeftButtonUp += OnPreviewMouseLeftButtonUp;
         MouseMove += OnMouseMove;
@@ -424,7 +433,40 @@ public sealed class CaptureOverlayWindow : Window
             NativeMethods.SetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE, updatedStyle);
         }
 
+        _escapeSource = HwndSource.FromHwnd(hwnd);
+        _escapeSource?.AddHook(OnEscapeMessage);
+        RegisterEscape();
+
         AppLog.Info("Overlay", $"遮罩窗口已创建 hwnd=0x{hwnd.ToInt64():X}，已设置 WS_EX_TOOLWINDOW");
+    }
+
+    private void RegisterEscape()
+    {
+        if (_closed || _saveDialogOpen || _escapeRegistered || _escapeSource is null) return;
+        _escapeRegistered = NativeMethods.RegisterHotKey(
+            _escapeSource.Handle, EscapeHotkeyId, NativeMethods.MOD_NOREPEAT, 0x1B);
+        if (!_escapeRegistered)
+            AppLog.Warn("Overlay", $"截图 Esc 注册失败，使用窗口按键处理：{Marshal.GetLastWin32Error()}");
+    }
+
+    private void UnregisterEscape()
+    {
+        if (_escapeRegistered && _escapeSource is not null)
+            NativeMethods.UnregisterHotKey(_escapeSource.Handle, EscapeHotkeyId);
+        _escapeRegistered = false;
+    }
+
+    private IntPtr OnEscapeMessage(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        if (message == NativeMethods.WM_HOTKEY && wParam.ToInt32() == EscapeHotkeyId)
+        {
+            handled = true;
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (!_closed && !_saveDialogOpen && IsEnabled) Cancel("Esc（截图快捷键）");
+            }));
+        }
+        return IntPtr.Zero;
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -445,6 +487,7 @@ public sealed class CaptureOverlayWindow : Window
 
     private void OnContentRendered(object? sender, EventArgs e)
     {
+        NativeMethods.SetForegroundWindow(new WindowInteropHelper(this).Handle);
         Activate();
         Focus();
         Keyboard.Focus(this);
@@ -513,15 +556,20 @@ public sealed class CaptureOverlayWindow : Window
 
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
-        // 文字输入时按键归输入框：Enter 确认文字、Esc 取消文字，绝不能触发复制/关闭遮罩。
+        // Alt+A can leave Alt/IME routing active. Normalize before checking Escape.
+        var key = e.Key == Key.System ? e.SystemKey :
+            e.Key == Key.ImeProcessed ? e.ImeProcessedKey : e.Key;
+        if (key == Key.Escape)
+        {
+            e.Handled = true;
+            Cancel("Esc");
+            return;
+        }
+
+        // Enter confirms text without copying. Escape above cancels the entire capture.
         if (_session.IsTextEditing)
         {
-            if (e.Key == Key.Escape)
-            {
-                e.Handled = true;
-                CancelTextInput("Esc");
-            }
-            else if (e.Key == Key.Enter && (Keyboard.Modifiers & ModifierKeys.Shift) != ModifierKeys.Shift)
+            if (e.Key == Key.Enter && (Keyboard.Modifiers & ModifierKeys.Shift) != ModifierKeys.Shift)
             {
                 // Shift+Enter 插换行，普通 Enter 确认文字（都不触发复制）。
                 e.Handled = true;
@@ -531,15 +579,10 @@ public sealed class CaptureOverlayWindow : Window
             return;
         }
 
-        // T16 重新编辑已有文字时，Enter/Esc 同样只归输入框。
+        // Existing text editing also keeps Enter local to the editor.
         if (_editingText is not null)
         {
-            if (e.Key == Key.Escape)
-            {
-                e.Handled = true;
-                CancelExistingTextEdit("Esc");
-            }
-            else if (e.Key == Key.Enter && (Keyboard.Modifiers & ModifierKeys.Shift) != ModifierKeys.Shift)
+            if (e.Key == Key.Enter && (Keyboard.Modifiers & ModifierKeys.Shift) != ModifierKeys.Shift)
             {
                 e.Handled = true;
                 CommitExistingTextEdit("Enter");
@@ -564,7 +607,7 @@ public sealed class CaptureOverlayWindow : Window
             return;
         }
 
-        switch (e.Key)
+        switch (key)
         {
             case Key.Delete:
             case Key.Back:
@@ -575,36 +618,6 @@ public sealed class CaptureOverlayWindow : Window
                     DeleteSelectedAnnotation(e.Key.ToString());
                 }
 
-                break;
-
-            case Key.Escape:
-                e.Handled = true;
-                if (_session.IsDrafting)
-                {
-                    _session.CancelDraft();
-                    ReleaseAnnotationPointer();
-                    AppLog.Info("Editor", "取消正在拖拽的标注草稿（Esc）");
-                    UpdateVisuals();
-                    return;
-                }
-
-                if (_session.Editing is { IsDragging: true } dragging && dragging.CancelDrag())
-                {
-                    AppLog.Info("Editor", "取消正在拖拽的标注编辑（Esc），几何恢复为拖拽前");
-                    UpdateVisuals();
-                    return;
-                }
-
-                // T16：有选中标注时 Esc 先取消选中，不关闭遮罩（选中态优先）。
-                if (_session.HasSelection)
-                {
-                    _session.ClearSelection();
-                    AppLog.Info("Editor", "Esc：取消标注选中态（遮罩保持打开）");
-                    UpdateVisuals();
-                    return;
-                }
-
-                Cancel("Esc");
                 break;
 
             case Key.Enter:
@@ -1895,6 +1908,9 @@ public sealed class CaptureOverlayWindow : Window
     private void OnClosed(object? sender, EventArgs e)
     {
         _closed = true;
+        UnregisterEscape();
+        _escapeSource?.RemoveHook(OnEscapeMessage);
+        _escapeSource = null;
         _lastHoverLogged = null;
         AppLog.Info(
             "Overlay",
@@ -1960,6 +1976,8 @@ public sealed class CaptureOverlayWindow : Window
             // 遮罩是 Topmost 窗口；用 Topmost 的所有者显示 Win32 文件对话框时，
             // 对话框会被所有者的置顶状态干扰（本机实测会自行返回/关闭）。
             // 显示期间临时取消置顶，关闭后恢复并重新激活遮罩。
+            _saveDialogOpen = true;
+            UnregisterEscape();
             Topmost = false;
             AppLog.Info("Output", $"保存对话框已打开：默认名称={dialog.FileName} 目录={dialog.InitialDirectory}");
             result = dialog.ShowDialog(this);
@@ -1972,7 +1990,9 @@ public sealed class CaptureOverlayWindow : Window
         }
         finally
         {
+            _saveDialogOpen = false;
             Topmost = wasTopmost;
+            RegisterEscape();
         }
 
         if (result != true)

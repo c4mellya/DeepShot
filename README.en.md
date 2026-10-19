@@ -4,7 +4,7 @@ A screenshot and desktop pin tool for Windows 10 22H2 / Windows 11 x64, built wi
 
 ## Install
 
-Run `ZeepCut-0.1.0-Setup-x64.exe` for a per-user installation, or extract `ZeepCut-0.1.0-win-x64.zip` and run `ZeepCut.exe`. Both releases include the .NET runtime. Keep all files and the Resources folder together. The installer is unsigned.
+Run `ZeepCut-0.1.1-Setup-x64.exe` for a per-user installation, or extract `ZeepCut-0.1.1-win-x64.zip` and run `ZeepCut.exe`. Both releases include the .NET runtime. Keep all files and the Resources folder together. The installer is unsigned.
 
 Zeep Cut lives in the system tray, possibly inside the hidden icons panel. Closing History or Settings keeps the application running; select Exit from the tray menu to stop it. Startup at sign-in is optional and disabled by default. A short guide appears on first launch.
 
@@ -13,7 +13,7 @@ Zeep Cut lives in the system tray, possibly inside the hidden icons panel. Closi
 - **Alt+A** freezes the monitor under your pointer. Hover and click to capture a window, or drag to select a region.
 - Resize or move the selection before drawing. Tools include rectangle, ellipse, arrow, line, pen, text, and mosaic.
 - The capture region locks once annotation begins; undoing all annotations unlocks it.
-- **Enter** copies; **Esc** cancels. In a text editor, Enter commits the text and Shift+Enter adds a new line.
+- **Enter** copies; **Esc or right-click** cancels the entire capture. In a text editor, Enter commits the text and Shift+Enter adds a new line.
 - **Ctrl+Z / Ctrl+Y** undo and redo. Select annotations to move or delete them; double-click text to edit.
 - Copy, save as PNG/JPEG, or pin. History is created only after a successful action.
 - Multiple monitors, negative screen coordinates and mixed scaling are supported. Each capture stays within one monitor.
