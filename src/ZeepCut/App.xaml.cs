@@ -8,11 +8,16 @@ using ZeepCut.Core.Capture;
 using ZeepCut.Core.Geometry;
 using ZeepCut.Core.History;
 using ZeepCut.Core.Pins;
+using ZeepCut.Core.Settings;
 using ZeepCut.Core.Shortcuts;
+using ZeepCut.Core.Updates;
 using ZeepCut.History;
 using ZeepCut.Output;
 using ZeepCut.Pins;
 using ZeepCut.Platform;
+using ZeepCut.Settings;
+using ZeepCut.Ui;
+using ZeepCut.Updates;
 
 namespace ZeepCut;
 
@@ -24,12 +29,17 @@ public partial class App : Application
 {
     private const string SingleInstanceMutexName = @"Local\ZeepCut.SingleInstance";
 
-    // 首版默认快捷键；T29 设置窗口接入后改为从设置读取。
-    private const string ScreenshotShortcutText = "Alt+A";
-    private const string PinShortcutText = "Alt+S";
-
     private readonly Dictionary<ShortcutSpec, Action> _hotkeyActions = new();
     private readonly List<string> _hotkeyRegistrationFailures = new();
+
+    /// <summary>
+    /// T29：设置存储器（<c>%LOCALAPPDATA%\ZeepCut\settings.json</c>）。启动最早读它，
+    /// 之后主题/语言/热键/开机启动全部以它为准。读取失败时是默认值（<see cref="AppSettings.Default"/>）。
+    /// </summary>
+    private SettingsStore? _settingsStore;
+
+    /// <summary>当前生效的设置（<see cref="_settingsStore"/>.Current 的便取）。</summary>
+    private AppSettings Settings => _settingsStore?.Current ?? AppSettings.Default;
 
     private Mutex? _singleInstanceMutex;
     private bool _ownsSingleInstanceMutex;
@@ -82,6 +92,12 @@ public partial class App : Application
             AppLog.Initialize();
             AppLog.Info("App", "生命周期：无主窗口，托盘常驻（ShutdownMode=OnExplicitShutdown）");
 
+            // T29/T30/T31：设置 → 主题 → 语言，必须**先于任何窗口**（托盘菜单第一次弹出就用当前语言）。
+            InitializeSettings();
+            PublishShortcutHints();
+            InitializeTheme();
+            InitializeLanguage();
+
             InitializeHistory();
 
             _trayIcon = new TrayIcon();
@@ -92,7 +108,7 @@ public partial class App : Application
             {
                 AppLog.Error("App", "托盘图标加入通知区域失败，程序无法驻留");
                 MessageBox.Show(
-                    "Zeep Cut 无法创建托盘图标，程序将退出。",
+                    StringsUi.Get("S.Message.TrayFailed"),
                     AppInfo.Name,
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
@@ -100,8 +116,12 @@ public partial class App : Application
                 return;
             }
 
+            // T29：开机启动以设置为准同步注册表（用户手工删了启动项也会补回来）。
+            SyncStartupRegistration("启动");
+
             StartGlobalHotkeys();
             StartHistoryRetention();
+            WelcomeGuide.ShowIfNeeded(Settings.ScreenshotShortcut, Settings.PinShortcut);
             AppLog.Info("App", "启动完成：应用在系统托盘中运行，全局热键已处理");
         }
         catch (Exception ex)
@@ -110,7 +130,7 @@ public partial class App : Application
             try
             {
                 MessageBox.Show(
-                    $"Zeep Cut 启动失败，已记录日志：\n{AppLog.CurrentLogPath}\n\n{ex.Message}",
+                    StringsUi.Format("S.Message.StartupFailed", AppLog.CurrentLogPath, ex.Message),
                     AppInfo.Name,
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
@@ -121,6 +141,311 @@ public partial class App : Application
             }
 
             Shutdown(1);
+        }
+    }
+
+    // --- T29/T30/T31 设置 / 主题 / 语言 ---
+
+    /// <summary>
+    /// T29：读取 <c>settings.json</c>（缺失/损坏/非法值都会回退到默认值并写日志，绝不阻塞启动）。
+    /// </summary>
+    private void InitializeSettings()
+    {
+        try
+        {
+            _settingsStore = new SettingsStore();
+            var result = _settingsStore.Load();
+            AppLog.Info(
+                "Settings",
+                $"启动设置就绪：{_settingsStore.Current}（读取={result.Status} " +
+                $"回退={result.Warnings.Count} 项 文件={_settingsStore.FilePath}）");
+        }
+        catch (Exception ex)
+        {
+            // 连默认路径都不可用时（极端的权限问题）仍按默认值运行：设置缺失不阻塞本地功能。
+            _settingsStore = null;
+            AppLog.Error("Settings", "设置初始化失败，本次按默认设置运行（不会写回设置文件）", ex);
+        }
+    }
+
+    /// <summary>
+    /// T30：把主题资源键写进应用资源字典并应用设置里的主题。
+    /// </summary>
+    /// <remarks>
+    /// 必须在创建任何窗口之前调用：窗口构造时会取 <see cref="ThemeManager.Palette"/> 的语义色，
+    /// 晚于窗口就会"先浅色再闪一下变深色"。
+    /// </remarks>
+    private void InitializeTheme()
+    {
+        try
+        {
+            var theme = Settings.Theme;
+            var changed = ThemeManager.Initialize(this, theme);
+            AppLog.Info(
+                "Theme",
+                $"主题就绪：选择={theme} 生效={ThemeManager.EffectiveTheme} 变化={changed} " +
+                $"系统浅色={ThemeManager.IsSystemUsingLightTheme()} 调色板={ThemeManager.Palette}");
+        }
+        catch (Exception ex)
+        {
+            // 主题失败不能阻止程序可用：界面会退回浅色（资源键缺失时 WPF 用默认色）。
+            AppLog.Error("Theme", "主题初始化失败，本次使用默认浅色外观", ex);
+        }
+    }
+
+    /// <summary>
+    /// T31：按设置加载中英文资源字典（首次跟随系统语言），并让历史日期分组跟着语言走。
+    /// </summary>
+    private void InitializeLanguage()
+    {
+        try
+        {
+            StringsUi.Initialize(this, Settings.Language);
+            AppLog.Info(
+                "Lang",
+                $"界面语言就绪：选择={Settings.Language} 生效={StringsUi.Current} 文案={StringsUi.AllKeys.Count} 条");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("Lang", "语言初始化失败，界面显示 [键名]（功能不受影响）", ex);
+        }
+    }
+
+    /// <summary>让注册表启动项与设置一致（启动时与设置里切换时都调）。</summary>
+    private void SyncStartupRegistration(string trigger)
+    {
+        try
+        {
+            var enabled = Settings.LaunchAtStartup;
+            var ok = StartupRegistration.Sync(enabled);
+            AppLog.Info(
+                "Startup",
+                $"开机启动同步（{trigger}）：期望={(enabled ? "开启" : "关闭")} 结果={(ok ? "成功" : "失败")} " +
+                $"注册表当前={(StartupRegistration.Read() ?? "(无)")}");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn("Startup", $"开机启动同步失败（{trigger}，忽略）：{ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// T29：把设置里的快捷键注册成全局热键。返回 null 表示全部成功，否则返回面向用户的原因。
+    /// </summary>
+    /// <remarks>
+    /// 先 <see cref="GlobalHotkey.UnregisterAll"/> 再按新设置注册：修改快捷键时不能出现
+    /// "旧组合还占着"（否则改回原值时注册会失败）。设置窗口在保存后立刻调用它，
+    /// 因此新组合**立即生效**、旧组合**立即失效**，不需要重启。
+    /// </remarks>
+    internal string? ApplyHotkeys()
+    {
+        if (_globalHotkey is null)
+        {
+            return StringsUi.Get("S.Settings.Shortcut.RegistrationFailed");
+        }
+
+        _hotkeyActions.Clear();
+        _hotkeyRegistrationFailures.Clear();
+        _globalHotkey.UnregisterAll();
+
+        var screenshotText = Settings.ScreenshotShortcut;
+        var pinText = Settings.PinShortcut;
+        var errors = new List<string>();
+
+        var screenshotOk = RegisterHotkeyFor(
+            screenshotText,
+            () => StartCapture($"全局热键 {Settings.ScreenshotShortcut}"),
+            errors);
+        var pinOk = RegisterHotkeyFor(
+            pinText,
+            () => PasteFromClipboard($"全局热键 {Settings.PinShortcut}"),
+            errors);
+
+        AppLog.Info(
+            "Hotkey",
+            $"快捷键应用：截图={screenshotText}（{(screenshotOk ? "成功" : "失败")}） " +
+            $"贴图={pinText}（{(pinOk ? "成功" : "失败")}） 已注册={_hotkeyActions.Count} 个");
+
+        PublishShortcutHints();
+
+        return errors.Count == 0
+            ? null
+            : string.Join(Environment.NewLine, errors);
+    }
+
+    /// <summary>注册一个热键并绑定动作，失败时写日志 + 记录原因（不抛异常）。</summary>
+    private bool RegisterHotkeyFor(string text, Action action, List<string> errors)
+    {
+        if (!ShortcutSpec.TryParse(text, out var shortcut, out _) || shortcut is null)
+        {
+            var message = StringsUi.Format("S.Message.HotkeyInvalid", text, string.Empty);
+            AppLog.Warn("Hotkey", message);
+            errors.Add(message);
+            return false;
+        }
+
+        var result = _globalHotkey!.Register(shortcut);
+        if (!result.Success)
+        {
+            var message = DescribeRegistrationFailure(shortcut, result);
+            AppLog.Warn("Hotkey", message);
+            errors.Add(message);
+            return false;
+        }
+
+        _hotkeyActions[shortcut] = action;
+        return true;
+    }
+
+    /// <summary>把当前快捷键告诉图库（空状态提示里写的是"按 X 截个图"）。</summary>
+    private void PublishShortcutHints()
+    {
+        HistoryShortcutProvider.ScreenshotShortcut = Settings.ScreenshotShortcut;
+        HistoryShortcutProvider.PinShortcut = Settings.PinShortcut;
+    }
+
+    /// <summary>注册失败原因（面向用户、随语言变化）；<see cref="HotkeyRegistrationResult"/> 的细节进日志。</summary>
+    private static string DescribeRegistrationFailure(ShortcutSpec shortcut, HotkeyRegistrationResult result) =>
+        result.IsAlreadyRegistered
+            ? StringsUi.Format("S.Message.HotkeyBusy", shortcut.Format())
+            : StringsUi.Format("S.Message.HotkeyRegisterError", shortcut.Format(), result.ErrorCode);
+
+    /// <summary>设置窗口回报的外部状态（"已是最新版"/"尚未配置更新渠道"等写进日志，便于验证脚本 grep）。</summary>
+    internal SettingsStore? SettingsStore => _settingsStore;
+
+    /// <summary>
+    /// 设置窗口提交了一份新设置（已经写盘成功）：按差分逐项应用。
+    /// </summary>
+    /// <remarks>
+    /// 差分而不是"全量重放"：改快捷键不该重载语言字典，改主题不该重注册热键
+    /// （重注册在组合被别的程序抢走时会失败，且会让另一个功能的注册瞬间消失）。
+    /// </remarks>
+    private void OnSettingsChanged(AppSettings previous, AppSettings current)
+    {
+        AppLog.Info("Settings", $"设置已变更：{previous} → {current}");
+        AppLog.Info(
+            "Settings",
+            $"SETTINGS_CHANGED shortcuts={(previous.ScreenshotShortcut != current.ScreenshotShortcut || previous.PinShortcut != current.PinShortcut)} " +
+            $"language={previous.Language != current.Language} theme={previous.Theme != current.Theme} " +
+            $"startup={previous.LaunchAtStartup != current.LaunchAtStartup}");
+
+        if (previous.Language != current.Language)
+        {
+            ApplyLanguage(current.Language);
+        }
+
+        if (previous.Theme != current.Theme)
+        {
+            ApplyTheme(current.Theme);
+        }
+
+        if (previous.LaunchAtStartup != current.LaunchAtStartup)
+        {
+            SyncStartupRegistration("设置窗口");
+        }
+
+        // 快捷键由设置窗口自己调 ApplyHotkeys（它需要拿到失败原因来回滚），这里不再重复注册。
+    }
+
+    /// <summary>T30：切换主题（立即生效，不重启）。</summary>
+    private void ApplyTheme(AppTheme theme)
+    {
+        try
+        {
+            var changed = ThemeManager.Apply(theme);
+            AppLog.Info(
+                "Theme",
+                $"主题已切换：选择={theme} 生效={ThemeManager.EffectiveTheme} 颜色变化={changed}");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("Theme", $"切换主题失败（保持当前外观）：{theme}", ex);
+        }
+    }
+
+    /// <summary>T31：切换界面语言（立即生效；已打开的窗口监听 <see cref="StringsUi.Changed"/> 自行重建文案）。</summary>
+    private void ApplyLanguage(AppLanguage language)
+    {
+        try
+        {
+            var effective = StringsUi.Apply(this, language);
+            AppLog.Info("Lang", $"界面语言已切换：选择={language} 生效={effective}");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("Lang", $"切换语言失败（界面保持原语言）：{language}", ex);
+        }
+    }
+
+    /// <summary>托盘“设置”：打开（或激活）设置窗口（T29）。</summary>
+    private void ShowSettings(string trigger)
+    {
+        AppLog.Info("Settings", $"设置窗口触发：{trigger}");
+
+        var store = _settingsStore;
+        if (store is null)
+        {
+            // 极端情况：设置文件完全不可用。仍让用户能改（只在内存里生效），只是写不进磁盘。
+            AppLog.Warn("Settings", "设置存储器不可用，本次打开的设置窗口不会写盘");
+            store = new SettingsStore();
+        }
+
+        // 历史记录数必须在窗口**构造之前**接好：窗口构造时就会统计并显示"共 N 条历史记录"，
+        // 晚一步接线会让第一眼看到的数字永远是 0（桌面实测撞出来的）。
+        // 历史不可用时显示 0（不阻塞设置窗口）。
+        HistoryWindowCounts.SetProvider(_historyStore is null ? null : () => _historyStore.Count());
+
+        var window = SettingsWindowHost.Show(store);
+        if (window is null)
+        {
+            NotifyUser(AppInfo.Name, StringsUi.Get("S.Message.SettingsOpenFailed"));
+            return;
+        }
+
+        window.ApplyShortcuts = _ => ApplyHotkeys();
+        window.ChangeRequested = OnSettingsChanged;
+        window.CheckUpdates = () => CheckForUpdates("设置窗口");
+    }
+
+    /// <summary>
+    /// 托盘“检查更新”（T32）：手动查询一次更新清单并弹结果。
+    /// </summary>
+    /// <remarks>
+    /// **未配置渠道 / 网络失败都不能显示成"已是最新版"**：这条规则在 Core
+    /// （<see cref="UpdateCheck"/>）里判定并单测，这里只负责把结论如实显示出来。
+    /// 渠道缺失不阻塞本地功能（只弹一个说明框）。
+    /// </remarks>
+    private async void CheckForUpdates(string trigger)
+    {
+        AppLog.Info("Update", $"检查更新触发：{trigger}（渠道={AppInfo.UpdateManifestUrl}）");
+
+        UpdateCheckResult result;
+        try
+        {
+            result = await UpdateChecker.CheckAsync(AppInfo.UpdateManifestUrl).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            // CheckAsync 自己不会抛；这里只是"绝不让未处理的异常打断托盘"的兜底。
+            AppLog.Error("Update", "检查更新时出现未处理的错误", ex);
+            result = UpdateCheck.Failed(
+                UpdateChecker.GetCurrentVersion(),
+                AppInfo.UpdateManifestUrl,
+                ex.Message);
+        }
+
+        UpdateChecker.LogResult(result, trigger);
+
+        var window = UpdateCheckWindow.ShowResult(result);
+        AppLog.Info(
+            "Update",
+            $"检查更新对话框：status={result.Status} 标题={result.DescribeTitle()} " +
+            $"显示下载按钮={result.DownloadUrl is not null} 窗口={window?.Title ?? "(未显示)"}");
+
+        // 未配置渠道时再补一条 Toast：PLAN 要求"明确提示"，托盘通知在本机常被系统抑制。
+        if (result.Status == UpdateStatus.NotConfigured)
+        {
+            ToastWindow.Show(result.DescribeTitle());
         }
     }
 
@@ -177,8 +502,8 @@ public partial class App : Application
 
             AppLog.Error("History", "历史库初始化失败，本次运行不记录历史（截图/贴图不受影响）", ex);
             NotifyUser(
-                "历史功能不可用",
-                $"无法初始化历史数据库，本次运行的截图与贴图不会被记录：\n{ex.Message}");
+                StringsUi.Get("S.Message.HistoryUnavailableTitle"),
+                StringsUi.Format("S.Message.HistoryUnavailable", ex.Message));
         }
     }
 
@@ -235,7 +560,7 @@ public partial class App : Application
         }
 
         AppLog.Warn("History", $"{action}已成功，但历史保存失败：{failure}");
-        ToastWindow.Show($"{action}已成功，但历史保存失败（详见日志）。");
+        ToastWindow.Show(StringsUi.Format("S.Toast.HistoryFailed", action));
     }
 
     /// <summary>
@@ -290,11 +615,11 @@ public partial class App : Application
                 break;
 
             case TrayMenuCommand.Settings:
-                ShowNotImplemented("设置");
+                ShowSettings("托盘菜单");
                 break;
 
             case TrayMenuCommand.CheckUpdates:
-                ShowNotImplemented("检查更新");
+                CheckForUpdates("托盘菜单");
                 break;
 
             case TrayMenuCommand.Exit:
@@ -319,48 +644,26 @@ public partial class App : Application
         catch (Exception ex)
         {
             AppLog.Error("Hotkey", "全局热键消息窗口创建失败，快捷键不可用", ex);
-            NotifyUser("全局热键不可用", $"无法创建热键消息窗口：{ex.Message}");
+            NotifyUser(
+                StringsUi.Get("S.Message.HotkeyUnavailableTitle"),
+                StringsUi.Format("S.Message.HotkeyUnavailable", ex.Message));
             return;
         }
 
-        RegisterHotkey(ScreenshotShortcutText, () => StartCapture("全局热键 " + ScreenshotShortcutText));
-        RegisterHotkey(PinShortcutText, () => PasteFromClipboard("全局热键 " + PinShortcutText));
-
-        if (_hotkeyRegistrationFailures.Count > 0)
+        // T29：快捷键来自设置（默认 Alt+A / Alt+S），改完立即重注册，不需要重启。
+        var failure = ApplyHotkeys();
+        if (string.IsNullOrEmpty(failure))
         {
-            // 托盘气球可能被系统通知设置抑制；再弹一次启动提示，确保用户知道快捷键不可用。
-            var details = string.Join(Environment.NewLine, _hotkeyRegistrationFailures);
-            AppLog.Warn("Hotkey", $"启动时共有 {_hotkeyRegistrationFailures.Count} 个热键注册失败，已提示用户");
-            MessageBox.Show(
-                details,
-                AppInfo.Name,
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
-        }
-    }
-
-    private void RegisterHotkey(string text, Action action)
-    {
-        if (!ShortcutSpec.TryParse(text, out var shortcut, out var parseError) || shortcut is null)
-        {
-            var message = $"快捷键配置“{text}”无效：{parseError}";
-            AppLog.Error("Hotkey", message);
-            NotifyUser("快捷键配置无效", message);
-            _hotkeyRegistrationFailures.Add(message);
             return;
         }
 
-        var result = _globalHotkey!.Register(shortcut);
-        if (!result.Success)
-        {
-            var message = result.DescribeFailure();
-            AppLog.Warn("Hotkey", message);
-            NotifyUser("全局热键注册失败", message);
-            _hotkeyRegistrationFailures.Add(message);
-            return;
-        }
-
-        _hotkeyActions[shortcut] = action;
+        // 托盘气球可能被系统通知设置抑制；再弹一次启动提示，确保用户知道快捷键不可用。
+        AppLog.Warn("Hotkey", $"启动时热键注册失败：{failure}");
+        MessageBox.Show(
+            failure,
+            AppInfo.Name,
+            MessageBoxButton.OK,
+            MessageBoxImage.Warning);
     }
 
     private void OnGlobalHotkeyPressed(ShortcutSpec shortcut)
@@ -430,7 +733,9 @@ public partial class App : Application
         catch (Exception ex)
         {
             AppLog.Error("Capture", "屏幕捕获或冻结遮罩显示失败", ex);
-            NotifyUser("截图失败", $"截图失败：{ex.Message}");
+            NotifyUser(
+                StringsUi.Get("S.Message.CaptureFailedTitle"),
+                StringsUi.Format("S.Message.CaptureFailed", ex.Message));
         }
     }
 
@@ -480,7 +785,7 @@ public partial class App : Application
         catch (Exception ex)
         {
             AppLog.Error("Pins", "读取屏幕布局失败，无法定位剪贴板贴图", ex);
-            NotifyPinFailure("无法定位屏幕位置，贴图失败。");
+            NotifyPinFailure(StringsUi.Get("S.Message.PinLocationFailed"));
             return;
         }
 
@@ -502,7 +807,7 @@ public partial class App : Application
     private void NotifyPinFailure(string message)
     {
         ToastWindow.Show(message);
-        _trayIcon?.ShowNotification("从剪贴板贴图失败", message, warning: true);
+        _trayIcon?.ShowNotification(StringsUi.Get("S.Tray.Notification.FailedTitle"), message, warning: true);
     }
 
     // --- T20 贴图全局显隐 ---
@@ -517,8 +822,8 @@ public partial class App : Application
 
         var state = PinWindows.Snapshot();
         return state.HasVisible
-            ? $"隐藏全部贴图 ({state.VisibleCount})"
-            : $"显示全部贴图 ({state.Count})";
+            ? StringsUi.Format("S.Tray.HideAllPins", state.VisibleCount)
+            : StringsUi.Format("S.Tray.ShowAllPins", state.Count);
     }
 
     /// <summary>
@@ -533,7 +838,10 @@ public partial class App : Application
         if (state.IsEmpty)
         {
             AppLog.Info("Pins", "全局显隐：当前没有贴图，提示用户");
-            ToastWindow.Show("当前没有贴图，先按 Alt+A 截图或 Alt+S 从剪贴板贴图。");
+            ToastWindow.Show(StringsUi.Format(
+                "S.Toast.NoPins",
+                Settings.ScreenshotShortcut,
+                Settings.PinShortcut));
             return;
         }
 
@@ -542,12 +850,12 @@ public partial class App : Application
         {
             case PinBulkAction.HideAll:
                 AppLog.Info("Pins", $"全局显隐结果：已隐藏全部贴图，仍保留 {PinWindows.Count} 张实例");
-                ToastWindow.Show($"已隐藏 {PinWindows.Count} 张贴图（再次点击托盘菜单可显示）");
+                ToastWindow.Show(StringsUi.Format("S.Toast.PinsHidden", PinWindows.Count));
                 break;
 
             case PinBulkAction.ShowAll:
                 AppLog.Info("Pins", $"全局显隐结果：已显示全部贴图，当前可见 {PinWindows.VisibleCount} 张");
-                ToastWindow.Show($"已显示 {PinWindows.VisibleCount} 张贴图");
+                ToastWindow.Show(StringsUi.Format("S.Toast.PinsShown", PinWindows.VisibleCount));
                 break;
 
             default:
@@ -591,8 +899,7 @@ public partial class App : Application
         {
             AppLog.Warn("History", "历史图库不可用：本次启动历史库初始化失败");
             MessageBox.Show(
-                "历史库本次启动初始化失败，图库不可用。\n\n截图与贴图仍可正常使用，" +
-                $"但不会记录历史。详情见日志：\n{AppLog.CurrentLogPath}",
+                StringsUi.Format("S.Message.HistoryGalleryUnavailable", AppLog.CurrentLogPath),
                 AppInfo.Name,
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
@@ -603,7 +910,7 @@ public partial class App : Application
         if (window is null)
         {
             MessageBox.Show(
-                "打开历史图库失败，详情见日志：\n" + AppLog.CurrentLogPath,
+                StringsUi.Format("S.Message.HistoryGalleryOpenFailed", AppLog.CurrentLogPath),
                 AppInfo.Name,
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
@@ -616,22 +923,13 @@ public partial class App : Application
             $"图片目录={_historyStore.Repository.ImagesDirectory}");
     }
 
-    private void ShowNotImplemented(string feature)
-    {
-        AppLog.Info("App", $"菜单命令“{feature}”尚未实现");
-        MessageBox.Show(
-            $"“{feature}”尚未实现，将在后续版本提供。",
-            AppInfo.Name,
-            MessageBoxButton.OK,
-            MessageBoxImage.Information);
-    }
-
     private void ExitFromTray()
     {
         AppLog.Info("App", "退出：用户选择托盘菜单“退出”");
         DisposeCaptureOverlay();
         DisposeHistoryRetention();
         DisposeHistoryGallery();
+        DisposeSettings();
         DisposePins();
         DisposeGlobalHotkey();
         DisposeTrayIcon();
@@ -661,6 +959,9 @@ public partial class App : Application
 
     /// <summary>退出时关闭历史图库窗口（历史数据留在磁盘上，关闭窗口不动数据库）。</summary>
     private void DisposeHistoryGallery() => HistoryGallery.CloseIfOpen();
+
+    /// <summary>退出时关闭设置窗口（设置已经即时写盘，关闭窗口不需要额外保存）。</summary>
+    private void DisposeSettings() => SettingsWindowHost.CloseIfOpen();
 
     /// <summary>退出时关闭全部贴图（PLAN：退出不恢复贴图，也不销毁历史）。</summary>
     private void DisposePins() => PinWindows.CloseAll();
@@ -696,6 +997,7 @@ public partial class App : Application
         DisposeCaptureOverlay();
         DisposeHistoryRetention();
         DisposeHistoryGallery();
+        DisposeSettings();
         DisposePins();
         DisposeGlobalHotkey();
         DisposeTrayIcon();
@@ -726,7 +1028,7 @@ public partial class App : Application
         try
         {
             MessageBox.Show(
-                $"Zeep Cut 遇到未处理的错误，已记录日志：\n{AppLog.CurrentLogPath}\n\n{e.Exception.Message}",
+                StringsUi.Format("S.Message.Unhandled", AppLog.CurrentLogPath, e.Exception.Message),
                 AppInfo.Name,
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);

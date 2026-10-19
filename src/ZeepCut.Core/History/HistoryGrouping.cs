@@ -110,9 +110,21 @@ public static class HistoryGrouping
         _ => "更早",
     };
 
-    /// <summary>分组标题：今天 / 昨天 / <c>2026-10-16 星期五</c>。</summary>
+    /// <summary>
+    /// 语言钩子（T31）：为 null 时是中文（<c>今天</c> / <c>2026-10-16 星期五</c>，默认行为不变）；
+    /// 应用层切到英文时把它设成英文措辞。放在这里而不是把 WPF 资源塞进 Core：
+    /// Core 保持纯逻辑、可单测，默认中文也保证既有 1014 个测试的断言不变。
+    /// </summary>
+    public static Func<DateOnly, DateOnly, string>? Localize { get; set; }
+
+    /// <summary>分组标题：今天 / 昨天 / <c>2026-10-16 星期五</c>（英文界面下是 Today / Yesterday / 2026-10-16 Friday）。</summary>
     public static string CreateTitle(DateOnly date, DateOnly today)
     {
+        if (Localize is { } localize)
+        {
+            return localize(date, today);
+        }
+
         var bucket = BucketOf(date, today);
         if (bucket != HistoryDateBucket.Earlier)
         {
@@ -122,7 +134,7 @@ public static class HistoryGrouping
         return date.ToString(DayTitleFormat, CultureInfo.InvariantCulture) + " " + WeekdayName(date);
     }
 
-    /// <summary>星期几的中文名。</summary>
+    /// <summary>星期几的中文名（英文界面由 <see cref="Localize"/> 提供，不走这里）。</summary>
     public static string WeekdayName(DateOnly date)
     {
         var index = (int)date.DayOfWeek;

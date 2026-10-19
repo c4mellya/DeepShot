@@ -1,0 +1,48 @@
+# Zeep Cut
+
+A screenshot and desktop pin tool for Windows 10 22H2 / Windows 11 x64, built with C#, .NET 10 and WPF. Includes Simplified Chinese and English, light/dark/system themes.
+
+## Install
+
+Run `ZeepCut-0.1.0-Setup-x64.exe` for a per-user installation, or extract `ZeepCut-0.1.0-win-x64.zip` and run `ZeepCut.exe`. Both releases include the .NET runtime. Keep all files and the Resources folder together. The installer is unsigned.
+
+Zeep Cut lives in the system tray, possibly inside the hidden icons panel. Closing History or Settings keeps the application running; select Exit from the tray menu to stop it. Startup at sign-in is optional and disabled by default. A short guide appears on first launch.
+
+## Capture and annotate
+
+- **Alt+A** freezes the monitor under your pointer. Hover and click to capture a window, or drag to select a region.
+- Resize or move the selection before drawing. Tools include rectangle, ellipse, arrow, line, pen, text, and mosaic.
+- The capture region locks once annotation begins; undoing all annotations unlocks it.
+- **Enter** copies; **Esc** cancels. In a text editor, Enter commits the text and Shift+Enter adds a new line.
+- **Ctrl+Z / Ctrl+Y** undo and redo. Select annotations to move or delete them; double-click text to edit.
+- Copy, save as PNG/JPEG, or pin. History is created only after a successful action.
+- Multiple monitors, negative screen coordinates and mixed scaling are supported. Each capture stays within one monitor.
+
+## Desktop pins
+
+**Alt+S** pins an image from the clipboard. You can also pin captures and history images.
+
+Drag to move, scroll to zoom, Ctrl+scroll for opacity (minimum 20%). The context menu offers original size, copy, save, lock/unlock, and close. Locking prevents movement while keeping the context menu accessible. Hide/show all pins through the tray menu. Pins are not restored after exit.
+
+## History and settings
+
+History provides date groups, name search, favorites, rename, preview, copy, export, pin, delete, and additional annotations. Regular records expire 30 days after creation; favorites are retained. Renaming and editing do not extend retention.
+
+“Save and overwrite” replaces the same history image without keeping older versions. Existing annotations are flattened pixels. Canceling leaves the image unchanged. Already-open pins keep their original snapshot.
+
+Settings provides configurable shortcuts, language, theme, and startup at sign-in. Images stay in `%LOCALAPPDATA%\ZeepCut`. Automatic cleanup does not delete manually exported files. Uninstall keeps data by default, with an explicit optional deletion prompt. The update channel has not been configured; update checks report that state.
+
+## Build
+
+Requires Windows and .NET 10 SDK.
+
+```powershell
+dotnet build ZeepCut.slnx -c Release
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/publish.ps1
+# Optional explicit installer compiler:
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/publish.ps1 -InnoCompiler 'C:\Path\To\ISCC.exe'
+```
+
+The final implementation pass intentionally runs no tests or desktop acceptance checks, as requested. Existing tests remain in the repository. The publish script does not invoke tests. See `ACCEPTANCE.md` for validation limits.
+
+Scrolling capture, OCR, recording, cloud sync and cross-monitor selections are outside this release.

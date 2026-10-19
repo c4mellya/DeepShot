@@ -1,5 +1,23 @@
 # Zeep Cut — 当前状态
 
+## 最新交付（2026-10-19，本节优先于下方历史记录）
+
+- 首版实现与分发已交付；无需继续派发任务。当前使用用户要求的单 Agent 收尾方式。
+- T29–T32：接手全部设置、主题、资源字典与更新代码，修复深色 ComboBox 的完整模板与切换时选项容器配色。既有快捷键/开机启动/图库/工具栏/提示接线保留。
+- T33：WelcomeGuide 首次引导，中英文按当前语言显示；介绍快捷键、标注、贴图、托盘与 30 天规则，关闭后写一次性标记。
+- T34：Inno Setup 6.7.3 编译当前用户 x64 安装包；包含快捷方式、卸载、默认保留数据与显式清理选项。自包含 ZIP 同时交付。
+- T35：README.md / README.en.md / RELEASE_NOTES.md 完成。
+- T36：依用户最新指令取消最终测试、桌面验收与安装验证；ACCEPTANCE.md 如实记录历史证据与最终未验证项。未把编译通过当成验收通过。
+- 构建：scripts/publish.ps1 → dotnet publish Release / win-x64 / self-contained 成功；Inno Setup 输出 Successful compile。该脚本不调用测试项目、不启动应用。
+- 产物：artifacts/release/ZeepCut-0.1.0-Setup-x64.exe（46,264,261 bytes）、ZeepCut-0.1.0-win-x64.zip（61,003,353 bytes），均附 SHA-256 文件。
+- 发布目录：artifacts/publish/win-x64，包含 ZeepCut.exe、运行时、原生依赖及 Resources/Lang。
+- 本轮没有测试结果。此前最新完整测试为 1124 项通过，仅属历史记录，不能代表最终修改已验证。
+- 仍需发布者信息：真实更新渠道与签名证书。未配置渠道时据实提示；当前安装包未签名。
+
+---
+
+以下内容为早期轮次记录，不代表当前待办：
+
 > 每轮工作结束时更新本文件。下一位接手者先读这里。
 
 

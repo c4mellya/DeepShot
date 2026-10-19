@@ -6,7 +6,9 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using ZeepCut.Core.History;
+using ZeepCut.Core.Settings;
 using ZeepCut.Platform;
+using ZeepCut.Ui;
 
 namespace ZeepCut.History;
 
@@ -35,6 +37,8 @@ internal sealed class HistoryPreviewWindow : Window
     private readonly Image _picture;
     private readonly ScrollViewer _scroll;
     private readonly TextBlock _status;
+    private readonly Dictionary<string, Button> _buttons = new();
+    private ThemePalette _lastPalette = ThemeManager.Palette;
     private double _zoom = 1.0;
 
     /// <param name="owner">父窗口（图库窗口；非模态展示，方便同时操作图库）。</param>
@@ -52,7 +56,7 @@ internal sealed class HistoryPreviewWindow : Window
         _record = record ?? throw new ArgumentNullException(nameof(record));
         _image = image ?? throw new ArgumentNullException(nameof(image));
 
-        Title = $"预览 · {record.Name}";
+        Title = StringsUi.Format("S.History.PreviewTitle", record.Name);
         Width = 900;
         Height = 680;
         MinWidth = 420;
@@ -90,14 +94,14 @@ internal sealed class HistoryPreviewWindow : Window
         _status.Margin = new Thickness(14, 8, 14, 0);
         AutomationProperties.SetAutomationId(_status, "history-preview-meta");
 
-        var copy = HistoryUi.Button("复制", "预览复制", () => onCopy(_record));
-        var pin = HistoryUi.Button("贴图", "预览贴图", () => onPin(_record));
-        var fit = HistoryUi.Button("适应窗口", "预览适应窗口", FitToWindow);
-        var actual = HistoryUi.Button("实际大小", "预览实际大小", () => SetZoom(1.0));
+        var copy = Track("copy", HistoryUi.Button(StringsUi.Get("S.Common.Copy"), "预览复制", () => onCopy(_record)));
+        var pin = Track("pin", HistoryUi.Button(StringsUi.Get("S.Common.Pin"), "预览贴图", () => onPin(_record)));
+        var fit = Track("fit", HistoryUi.Button(StringsUi.Get("S.History.PreviewFit"), "预览适应窗口", FitToWindow));
+        var actual = Track("actual", HistoryUi.Button(StringsUi.Get("S.History.PreviewActualSize"), "预览实际大小", () => SetZoom(1.0)));
 
-        var zoomOut = HistoryUi.Button("－", "预览缩小", () => SetZoom(_zoom / 1.2));
+        var zoomOut = Track("zoom-out", HistoryUi.Button("－", "预览缩小", () => SetZoom(_zoom / 1.2)));
         zoomOut.MinWidth = 40;
-        var zoomIn = HistoryUi.Button("＋", "预览放大", () => SetZoom(_zoom * 1.2));
+        var zoomIn = Track("zoom-in", HistoryUi.Button("＋", "预览放大", () => SetZoom(_zoom * 1.2)));
         zoomIn.MinWidth = 40;
 
         var bar = new StackPanel
@@ -138,6 +142,14 @@ internal sealed class HistoryPreviewWindow : Window
             }
         };
 
+        ThemeManager.Changed += OnThemeChanged;
+        StringsUi.Changed += OnLanguageChanged;
+        Closed += (_, _) =>
+        {
+            ThemeManager.Changed -= OnThemeChanged;
+            StringsUi.Changed -= OnLanguageChanged;
+        };
+
         AppLog.Info(
             "History",
             $"历史预览已打开：名称={record.Name} Id={record.Id} 图像={_image.PixelWidth}x{_image.PixelHeight} " +
@@ -150,11 +162,44 @@ internal sealed class HistoryPreviewWindow : Window
     /// <summary>当前缩放（1.0 = 1 物理像素 : 1 屏幕像素）。</summary>
     internal double Zoom => _zoom;
 
-    private string DescribeRecord() =>
-        $"{_record.Name} · {_record.Width}×{_record.Height} px · " +
-        $"{_record.CreatedAtLocal.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)} · " +
-        $"{HistorySourceText.Describe(_record.Source)} · " +
-        $"缩放 {Math.Round(_zoom * 100, 0).ToString(CultureInfo.InvariantCulture)}%";
+    private string DescribeRecord() => StringsUi.Format(
+        "S.History.PreviewMeta",
+        _record.Name,
+        _record.Width,
+        _record.Height,
+        _record.CreatedAtLocal.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
+        HistoryCard.DescribeSource(_record.Source),
+        Math.Round(_zoom * 100, 0).ToString(CultureInfo.InvariantCulture));
+
+    private Button Track(string key, Button button)
+    {
+        _buttons[key] = button;
+        return button;
+    }
+
+    /// <summary>主题切换：换窗口底色、滚动区底色与按钮配色。</summary>
+    private void OnThemeChanged(AppTheme effective)
+    {
+        var palette = ThemeManager.Palette;
+        Background = palette.WindowBackgroundBrush;
+        _scroll.Background = palette.SurfaceAltBrush;
+        HistoryUi.ApplyThemeTo(Content as DependencyObject, _lastPalette);
+        DwmApi.TrySetDarkTitleBar(this, palette.IsDark);
+        _lastPalette = palette;
+        AppLog.Info("History", $"历史预览已按新主题刷新：{effective}");
+    }
+
+    /// <summary>语言切换：换标题、按钮与元数据行（缩放比例保持）。</summary>
+    private void OnLanguageChanged(AppLanguage language)
+    {
+        Title = StringsUi.Format("S.History.PreviewTitle", _record.Name);
+        HistoryUi.SetButtonText(_buttons["copy"], StringsUi.Get("S.Common.Copy"));
+        HistoryUi.SetButtonText(_buttons["pin"], StringsUi.Get("S.Common.Pin"));
+        HistoryUi.SetButtonText(_buttons["fit"], StringsUi.Get("S.History.PreviewFit"));
+        HistoryUi.SetButtonText(_buttons["actual"], StringsUi.Get("S.History.PreviewActualSize"));
+        _status.Text = DescribeRecord();
+        AppLog.Info("History", $"历史预览已按新语言刷新：{language}");
+    }
 
     private void OnPreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {

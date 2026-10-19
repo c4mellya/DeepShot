@@ -10,6 +10,7 @@ using ZeepCut.Core.Pins;
 using ZeepCut.Output;
 using ZeepCut.Pins;
 using ZeepCut.Platform;
+using ZeepCut.Ui;
 
 namespace ZeepCut.History;
 
@@ -66,17 +67,17 @@ internal static class HistoryActions
                 "History",
                 $"历史复制成功：名称={record.Name} 尺寸={image.PixelWidth}x{image.PixelHeight} " +
                 $"Id={record.Id}");
-            return $"已复制“{record.Name}”（{image.PixelWidth}×{image.PixelHeight}）。";
+            return StringsUi.Format("S.History.Copied", record.Name, image.PixelWidth, image.PixelHeight);
         }
         catch (COMException ex)
         {
             AppLog.Warn("History", $"历史复制失败（剪贴板被占用）：{ex.Message}");
-            return "复制失败：剪贴板被其他程序占用，请稍后重试。";
+            return StringsUi.Format("S.History.CopyFailed", StringsUi.Get("S.Message.ClipboardBusy"));
         }
         catch (Exception ex)
         {
             AppLog.Error("History", $"历史复制失败：{record.Name}", ex);
-            return $"复制失败：{ex.Message}";
+            return StringsUi.Format("S.History.CopyFailed", ex.Message);
         }
     }
 
@@ -94,13 +95,13 @@ internal static class HistoryActions
 
         var dialog = new Microsoft.Win32.SaveFileDialog
         {
-            Title = "历史图片另存为",
+            Title = StringsUi.Get("S.Dialog.SaveTitle"),
             FileName = record.Name + CaptureFileName.GetExtension(CaptureImageFormat.Png),
             DefaultExt = ".png",
             AddExtension = true,
             OverwritePrompt = true,
             CheckPathExists = true,
-            Filter = "PNG 图片 (*.png)|*.png|JPEG 图片 (*.jpg;*.jpeg)|*.jpg;*.jpeg",
+            Filter = StringsUi.Get("S.Dialog.SaveFilter"),
             FilterIndex = 1,
             RestoreDirectory = true,
         };
@@ -127,7 +128,7 @@ internal static class HistoryActions
         catch (Exception ex)
         {
             AppLog.Error("History", $"历史另存为失败（对话框）：{record.Name}", ex);
-            return $"另存为失败：{ex.Message}";
+            return StringsUi.Format("S.History.SaveFailed", ex.Message);
         }
         finally
         {
@@ -165,7 +166,7 @@ internal static class HistoryActions
         catch (Exception ex)
         {
             AppLog.Error("History", $"历史图片保存失败：{path}", ex);
-            return $"保存失败：{ex.Message}";
+            return StringsUi.Format("S.History.SaveFailed", ex.Message);
         }
     }
 
@@ -177,7 +178,7 @@ internal static class HistoryActions
         var image = LoadImage(store, record);
         if (image is null)
         {
-            return "图片文件已丢失，无法贴图。";
+            return StringsUi.Get("S.History.ImageMissingPreview");
         }
 
         var before = store.Count();
@@ -211,12 +212,12 @@ internal static class HistoryActions
                 $"摆放={bounds} 屏幕={monitor.DeviceName} DPI={monitor.Dpi} " +
                 $"贴图总数={PinWindows.Count} 历史记录数 {before} → {after}（不新增历史）");
 
-            return $"已贴图“{record.Name}”（{pin.Bounds.Width}×{pin.Bounds.Height}，历史记录数仍为 {after}）。";
+            return StringsUi.Format("S.History.Pinned", record.Name, pin.Bounds.Width, pin.Bounds.Height, after);
         }
         catch (Exception ex)
         {
             AppLog.Error("History", $"从历史贴图失败：{record.Name}", ex);
-            return $"贴图失败：{ex.Message}";
+            return StringsUi.Format("S.History.PinFailed", ex.Message);
         }
     }
 
@@ -239,13 +240,13 @@ internal static class HistoryActions
                 $"剩余记录数={store.Count()}");
 
             return removed
-                ? $"已删除“{record.Name}”（图片与缩略图文件已一并删除）。"
-                : "删除失败：记录已不存在。";
+                ? StringsUi.Format("S.History.Deleted", record.Name)
+                : StringsUi.Format("S.History.DeleteFailed", "?");
         }
         catch (Exception ex)
         {
             AppLog.Error("History", $"历史删除失败：{record.Name}", ex);
-            return $"删除失败：{ex.Message}";
+            return StringsUi.Format("S.History.DeleteFailed", ex.Message);
         }
     }
 

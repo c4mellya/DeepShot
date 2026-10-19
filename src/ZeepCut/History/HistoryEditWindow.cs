@@ -8,6 +8,7 @@ using System.Windows.Shapes;
 using ZeepCut.Core.Annotations;
 using ZeepCut.Core.Geometry;
 using ZeepCut.Core.History;
+using ZeepCut.Ui;
 using ZeepCut.Editor;
 using ZeepCut.Platform;
 
@@ -51,8 +52,10 @@ namespace ZeepCut.History;
 /// </remarks>
 internal sealed class HistoryEditWindow : Window
 {
-    /// <summary>保存按钮的文案（PLAN 要求明确为“保存并覆盖”）。</summary>
-    internal const string SaveButtonText = "保存并覆盖";
+    /// <summary>
+    /// 保存按钮的文案（PLAN 要求明确为“保存并覆盖”，T31 起来自语言资源）。
+    /// </summary>
+    internal static string SaveButtonText => StringsUi.Get("S.History.EditSave");
 
     /// <summary>保存按钮的 AutomationId（验证脚本按它点击）。</summary>
     internal const string SaveButtonId = "history-edit-save";
@@ -102,6 +105,9 @@ internal sealed class HistoryEditWindow : Window
     private readonly TextBox _textEditor;
     private readonly TextBlock _status;
     private readonly TextBlock _info;
+    private TextBlock _hint = null!;
+
+    /// <summary>只读字段的占位写法在 C# 里不成立，这里不做声明；侧栏标题随语言重建即可。</summary>
     private readonly List<(AnnotationTool? Tool, Button Element)> _toolButtons = new();
     private readonly Dictionary<AnnotationTool, string> _toolLabels = new();
     private readonly Button _saveButton;
@@ -135,7 +141,7 @@ internal sealed class HistoryEditWindow : Window
         _session = new AnnotationSession(new PixelRect(0, 0, image.PixelWidth, image.PixelHeight));
         _textureSize = Math.Max(1, Math.Min(image.PixelWidth, image.PixelHeight));
 
-        Title = $"Zeep Cut 编辑历史 · {record.Name}";
+        Title = StringsUi.Format("S.History.EditTitle", record.Name);
         Width = Math.Min(1180, Math.Max(760, image.PixelWidth / 1.25 + SidebarWidth + 90));
         Height = Math.Min(860, Math.Max(560, image.PixelHeight / 1.25 + 190));
         MinWidth = 640;
@@ -145,7 +151,7 @@ internal sealed class HistoryEditWindow : Window
         Background = HistoryUi.WindowBackground;
         FontFamily = new FontFamily(HistoryUi.FontFamilyName);
         AutomationProperties.SetAutomationId(this, "history-edit-window");
-        AutomationProperties.SetName(this, "Zeep Cut 编辑历史");
+        AutomationProperties.SetName(this, StringsUi.Get("S.History.EditWindowName"));
 
         // --- 图像显示：ScrollViewer + Image（Stretch.None = 1 图像像素显示成 1 个设备无关像素） ---
         _picture = new Image
@@ -265,13 +271,14 @@ internal sealed class HistoryEditWindow : Window
         _info.Margin = new Thickness(16, 10, 16, 8);
         AutomationProperties.SetAutomationId(_info, "history-edit-record-info");
 
-        var hint = HistoryUi.Text(
-            "旧标注已合并进图片像素，只能继续追加（不可拆分修改）。",
+        _hint = HistoryUi.Text(
+            StringsUi.Get("S.History.EditHint"),
             12,
             HistoryUi.SecondaryForeground);
-        hint.Margin = new Thickness(16, 0, 16, 6);
-        hint.TextWrapping = TextWrapping.Wrap;
-        AutomationProperties.SetAutomationId(hint, "history-edit-hint");
+        _hint.HorizontalAlignment = HorizontalAlignment.Left;
+        _hint.TextWrapping = TextWrapping.Wrap;
+        _hint.Margin = new Thickness(16, 0, 16, 6);
+        AutomationProperties.SetAutomationId(_hint, "history-edit-hint");
 
         // --- 右侧工具栏 ---
         var sidebar = BuildSidebar(out _saveButton);
@@ -285,24 +292,24 @@ internal sealed class HistoryEditWindow : Window
         body.Children.Add(sidebar);
 
         // --- 底部状态条 ---
-        _status = HistoryUi.Text("追加标注后点“保存并覆盖”。", 12, HistoryUi.SecondaryForeground);
+        _status = HistoryUi.Text(StringsUi.Get("S.History.EditStatusHint"), 12, HistoryUi.SecondaryForeground);
         _status.Margin = new Thickness(16, 6, 16, 10);
         _status.TextWrapping = TextWrapping.Wrap;
         AutomationProperties.SetAutomationId(_status, "history-edit-status");
-        AutomationProperties.SetName(_status, "追加标注后点“保存并覆盖”。");
+        AutomationProperties.SetName(_status, _status.Text);
 
         var root = new Grid();
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         Grid.SetRow(_info, 0);
-        Grid.SetRow(hint, 0);
+        Grid.SetRow(_hint, 0);
         Grid.SetRow(body, 1);
         Grid.SetRow(_status, 2);
 
         var header = new StackPanel();
         header.Children.Add(_info);
-        header.Children.Add(hint);
+        header.Children.Add(_hint);
         Grid.SetRow(header, 0);
         root.Children.Add(header);
         root.Children.Add(body);
@@ -373,19 +380,19 @@ internal sealed class HistoryEditWindow : Window
     {
         var panel = new StackPanel { Width = SidebarWidth - 20 };
 
-        panel.Children.Add(SectionLabel("标注工具"));
+        panel.Children.Add(SectionLabel(StringsUi.Get("S.Annotation.Section.Tools")));
         var toolGrid = new WrapPanel { Margin = new Thickness(0, 0, 0, 8) };
-        AddToolButton(toolGrid, "选择", null);
-        AddToolButton(toolGrid, "矩形", AnnotationTool.Rectangle);
-        AddToolButton(toolGrid, "椭圆", AnnotationTool.Ellipse);
-        AddToolButton(toolGrid, "箭头", AnnotationTool.Arrow);
-        AddToolButton(toolGrid, "直线", AnnotationTool.Line);
-        AddToolButton(toolGrid, "画笔", AnnotationTool.Freehand);
-        AddToolButton(toolGrid, "文字", AnnotationTool.Text);
-        AddToolButton(toolGrid, "马赛克", AnnotationTool.Mosaic);
+        AddToolButton(toolGrid, StringsUi.Get("S.Annotation.Tool.Select"), null, "select");
+        AddToolButton(toolGrid, StringsUi.Get("S.Annotation.Tool.Rectangle"), AnnotationTool.Rectangle, "rectangle");
+        AddToolButton(toolGrid, StringsUi.Get("S.Annotation.Tool.Ellipse"), AnnotationTool.Ellipse, "ellipse");
+        AddToolButton(toolGrid, StringsUi.Get("S.Annotation.Tool.Arrow"), AnnotationTool.Arrow, "arrow");
+        AddToolButton(toolGrid, StringsUi.Get("S.Annotation.Tool.Line"), AnnotationTool.Line, "line");
+        AddToolButton(toolGrid, StringsUi.Get("S.Annotation.Tool.Freehand"), AnnotationTool.Freehand, "freehand");
+        AddToolButton(toolGrid, StringsUi.Get("S.Annotation.Tool.Text"), AnnotationTool.Text, "text");
+        AddToolButton(toolGrid, StringsUi.Get("S.Annotation.Tool.Mosaic"), AnnotationTool.Mosaic, "mosaic");
         panel.Children.Add(toolGrid);
 
-        panel.Children.Add(SectionLabel("颜色"));
+        panel.Children.Add(SectionLabel(StringsUi.Get("S.Annotation.Section.Color")));
         var colors = new WrapPanel { Margin = new Thickness(0, 0, 0, 8) };
         foreach (var color in AnnotationPalette.Colors)
         {
@@ -413,7 +420,7 @@ internal sealed class HistoryEditWindow : Window
 
         panel.Children.Add(colors);
 
-        panel.Children.Add(SectionLabel("粗细"));
+        panel.Children.Add(SectionLabel(StringsUi.Get("S.Annotation.Section.Thickness")));
         var thicknesses = new WrapPanel { Margin = new Thickness(0, 0, 0, 8) };
         foreach (var thickness in AnnotationPalette.Thicknesses)
         {
@@ -434,10 +441,13 @@ internal sealed class HistoryEditWindow : Window
 
         panel.Children.Add(thicknesses);
 
-        panel.Children.Add(SectionLabel("编辑"));
-        var undo = HistoryUi.Button("撤销", "编辑撤销", () => Undo("侧栏"));
-        var redo = HistoryUi.Button("重做", "编辑重做", () => Redo("侧栏"));
-        var remove = HistoryUi.Button("删除选中", "编辑删除选中", () => DeleteSelected("侧栏"));
+        panel.Children.Add(SectionLabel(StringsUi.Get("S.Annotation.Section.Edit")));
+        var undo = HistoryUi.Button(StringsUi.Get("S.Common.Undo"), StringsUi.Get("S.Common.Undo"), () => Undo("侧栏"));
+        var redo = HistoryUi.Button(StringsUi.Get("S.Common.Redo"), StringsUi.Get("S.Common.Redo"), () => Redo("侧栏"));
+        var remove = HistoryUi.Button(
+            StringsUi.Get("S.History.EditDeleteSelected"),
+            StringsUi.Get("S.History.EditDeleteSelected"),
+            () => DeleteSelected("侧栏"));
         AutomationProperties.SetAutomationId(undo, "history-edit-undo");
         AutomationProperties.SetAutomationId(redo, "history-edit-redo");
         AutomationProperties.SetAutomationId(remove, "history-edit-delete");
@@ -447,12 +457,12 @@ internal sealed class HistoryEditWindow : Window
         editRow.Children.Add(remove);
         panel.Children.Add(editRow);
 
-        panel.Children.Add(SectionLabel("缩放"));
+        panel.Children.Add(SectionLabel(StringsUi.Get("S.Annotation.Section.Zoom")));
         var zoomRow = new WrapPanel { Margin = new Thickness(0, 0, 0, 10) };
         var zoomOut = HistoryUi.Button("－", "编辑缩小", () => SetZoom(_zoom / 1.25));
         var zoomIn = HistoryUi.Button("＋", "编辑放大", () => SetZoom(_zoom * 1.25));
         var zoomReset = HistoryUi.Button("1:1", "编辑实际大小", () => SetZoom(1.0));
-        var zoomFit = HistoryUi.Button("适应窗口", "编辑适应窗口", FitToWindow);
+        var zoomFit = HistoryUi.Button(StringsUi.Get("S.History.EditFit"), StringsUi.Get("S.History.EditFit"), FitToWindow);
         foreach (var button in new[] { zoomOut, zoomIn, zoomReset, zoomFit })
         {
             button.MinWidth = 40;
@@ -469,10 +479,14 @@ internal sealed class HistoryEditWindow : Window
 
         saveButton = HistoryUi.Button(SaveButtonText, SaveButtonText, () => Save("侧栏按钮"), primary: true);
         AutomationProperties.SetAutomationId(saveButton, SaveButtonId);
-        saveButton.ToolTip = "用追加标注后的新图替换这条记录原来的图片（不保留旧版本，不新增记录）";
+        saveButton.MinWidth = 0;
+        saveButton.ToolTip = StringsUi.Get("S.History.EditSaveHint");
         AutomationProperties.SetHelpText(saveButton, saveButton.ToolTip?.ToString() ?? string.Empty);
 
-        var cancel = HistoryUi.Button("取消", "取消编辑", () => Cancel(confirm: true));
+        var cancel = HistoryUi.Button(
+            StringsUi.Get("S.History.EditCancel"),
+            StringsUi.Get("S.History.EditCancelName"),
+            () => Cancel(confirm: true));
         AutomationProperties.SetAutomationId(cancel, "history-edit-cancel");
 
         var actionRow = new StackPanel { Orientation = Orientation.Vertical };
@@ -502,13 +516,15 @@ internal sealed class HistoryEditWindow : Window
         return block;
     }
 
-    private void AddToolButton(Panel host, string label, AnnotationTool? tool)
+    private void AddToolButton(Panel host, string label, AnnotationTool? tool, string slug)
     {
-        var button = HistoryUi.Button(label, $"工具{label}", () => SelectTool(tool));
+        var button = HistoryUi.Button(label, label, () => SelectTool(tool));
         button.MinWidth = 52;
         button.Padding = new Thickness(6, 3, 6, 3);
         button.Margin = new Thickness(0, 0, 5, 5);
-        AutomationProperties.SetAutomationId(button, $"history-edit-tool-{label}");
+
+        // AutomationId 用语言无关的 slug（T31）：切到英文后脚本仍按同一个 id 找得到。
+        AutomationProperties.SetAutomationId(button, $"history-edit-tool-{slug}");
         _toolButtons.Add((tool, button));
         _toolLabels[tool ?? AnnotationTool.Rectangle] = label;
         host.Children.Add(button);
@@ -717,7 +733,7 @@ internal sealed class HistoryEditWindow : Window
         }
         catch (InvalidOperationException ex)
         {
-            SetStatus($"当前状态不能绘制：{ex.Message}", isError: true);
+            SetStatus(StringsUi.Format("S.History.EditCannotDraw", ex.Message), isError: true);
             return;
         }
 
@@ -860,7 +876,7 @@ internal sealed class HistoryEditWindow : Window
         }
         catch (InvalidOperationException ex)
         {
-            SetStatus($"无法输入文字：{ex.Message}", isError: true);
+            SetStatus(StringsUi.Format("S.History.EditCannotType", ex.Message), isError: true);
         }
     }
 
@@ -987,7 +1003,7 @@ internal sealed class HistoryEditWindow : Window
         }
         catch (InvalidOperationException ex)
         {
-            SetStatus($"切换工具失败：{ex.Message}", isError: true);
+            SetStatus(StringsUi.Format("S.History.EditToolSwitchFailed", ex.Message), isError: true);
             return;
         }
 
@@ -1011,7 +1027,7 @@ internal sealed class HistoryEditWindow : Window
         AppLog.Info("History", $"编辑窗口撤销（{source}）：{description} 成功={done} 文档标注数={_session.Count}");
         if (!done)
         {
-            SetStatus("没有可撤销的标注。");
+            SetStatus(StringsUi.Get("S.History.EditNothingToUndo"));
             return;
         }
 
@@ -1027,7 +1043,7 @@ internal sealed class HistoryEditWindow : Window
         AppLog.Info("History", $"编辑窗口重做（{source}）：{description} 成功={done} 文档标注数={_session.Count}");
         if (!done)
         {
-            SetStatus("没有可重做的标注。");
+            SetStatus(StringsUi.Get("S.History.EditNothingToRedo"));
             return;
         }
 
@@ -1042,7 +1058,7 @@ internal sealed class HistoryEditWindow : Window
         AppLog.Info("History", $"编辑窗口删除标注（{source}）：记录={description ?? "无"} 文档标注数={_session.Count}");
         if (description is null)
         {
-            SetStatus("先点“选择”工具，再点中一个标注才能删除。");
+            SetStatus(StringsUi.Get("S.History.EditSelectFirst"));
             return;
         }
 
@@ -1186,7 +1202,7 @@ internal sealed class HistoryEditWindow : Window
         }
 
         _dirty = true;
-        SetStatus($"已追加 {_session.Count} 个标注，点“保存并覆盖”才会写入这条记录。");
+        SetStatus(StringsUi.Format("S.History.EditMarkedDirty", _session.Count));
     }
 
     // --- 保存并覆盖（T28 核心） ---
@@ -1223,7 +1239,7 @@ internal sealed class HistoryEditWindow : Window
         catch (Exception ex)
         {
             AppLog.Error("History", $"编辑窗口保存前读取记录失败：Id={_record.Id}", ex);
-            SetStatus($"无法确认记录是否还在：{ex.Message}", isError: true);
+            SetStatus(StringsUi.Format("S.History.EditRecordMissing", ex.Message), isError: true);
             return;
         }
 
@@ -1232,7 +1248,7 @@ internal sealed class HistoryEditWindow : Window
             var message = HistoryOverwritePlan.DescribeDeleted(_record);
             AppLog.Warn("History", $"编辑窗口保存失败（{source}）：记录已被删除 Id={_record.Id} 名称={_record.Name}，不写任何文件");
             SetStatus(message, isError: true);
-            MessageBox.Show(this, message, "保存并覆盖", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(this, message, SaveButtonText, MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
@@ -1243,7 +1259,7 @@ internal sealed class HistoryEditWindow : Window
             var answer = MessageBox.Show(
                 this,
                 HistoryOverwritePlan.DescribeOverwriteExplanation(latest.Name),
-                "保存并覆盖",
+                SaveButtonText,
                 MessageBoxButton.OKCancel,
                 MessageBoxImage.Information,
                 MessageBoxResult.OK);
@@ -1251,7 +1267,7 @@ internal sealed class HistoryEditWindow : Window
             if (answer != MessageBoxResult.OK)
             {
                 AppLog.Info("History", "覆盖语义说明被取消，本次不保存（留在编辑窗口）");
-                SetStatus("已取消保存，编辑内容还在。");
+                SetStatus(StringsUi.Get("S.History.EditSaveCancelled"));
                 return;
             }
 
@@ -1272,7 +1288,7 @@ internal sealed class HistoryEditWindow : Window
         catch (Exception ex)
         {
             AppLog.Error("History", "编辑窗口合成新图失败（原图未改动）", ex);
-            SetStatus($"合成图片失败：{ex.Message}", isError: true);
+            SetStatus(StringsUi.Format("S.History.EditComposeFailed", ex.Message), isError: true);
             return;
         }
 
@@ -1293,7 +1309,7 @@ internal sealed class HistoryEditWindow : Window
                 var message = HistoryOverwritePlan.DescribeDeleted(_record);
                 AppLog.Warn("History", $"编辑窗口保存失败：覆盖时记录已不存在 Id={_record.Id}");
                 SetStatus(message, isError: true);
-                MessageBox.Show(this, message, "保存并覆盖", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(this, message, SaveButtonText, MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
@@ -1318,11 +1334,11 @@ internal sealed class HistoryEditWindow : Window
         {
             // 覆盖先写 tmp 再替换，失败时原图还在（PLAN：保存失败不先销毁原图）。
             AppLog.Error("History", $"编辑窗口保存并覆盖失败（原图未改动）：Id={_record.Id}", ex);
-            SetStatus($"保存失败（原图未改动）：{ex.Message}", isError: true);
+            SetStatus(StringsUi.Format("S.History.EditSaveFailed", ex.Message), isError: true);
             MessageBox.Show(
                 this,
-                $"保存失败，原图没有被修改：\n{ex.Message}",
-                "保存并覆盖",
+                StringsUi.Format("S.History.EditSaveFailedBody", ex.Message),
+                SaveButtonText,
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
         }
@@ -1379,15 +1395,15 @@ internal sealed class HistoryEditWindow : Window
         {
             var answer = MessageBox.Show(
                 this,
-                "放弃这次追加的标注吗？\n\n原图不会被修改（取消编辑不改变这条历史记录）。",
-                "取消编辑",
+                StringsUi.Format("S.History.EditCancelConfirm", _session.Count),
+                StringsUi.Get("S.History.EditCancelDialogTitle"),
                 MessageBoxButton.OKCancel,
                 MessageBoxImage.Question,
                 MessageBoxResult.Cancel);
 
             if (answer != MessageBoxResult.OK)
             {
-                SetStatus("已留在编辑窗口。");
+                SetStatus(StringsUi.Get("S.History.EditStayed"));
                 return;
             }
         }
@@ -1408,9 +1424,14 @@ internal sealed class HistoryEditWindow : Window
     }
 
     private static string DescribeRecord(HistoryRecord record, BitmapSource image) =>
-        $"{record.Name} · {image.PixelWidth}×{image.PixelHeight} · " +
-        $"{record.CreatedAtLocal:yyyy-MM-dd HH:mm:ss} · {HistorySourceText.Describe(record.Source)}" +
-        (record.IsFavorite ? " · ★ 已收藏" : string.Empty);
+        StringsUi.Format(
+            "S.History.EditRecordInfo",
+            record.Name,
+            image.PixelWidth,
+            image.PixelHeight,
+            record.CreatedAtLocal.ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture),
+            HistoryCard.DescribeSource(record.Source)) +
+        (record.IsFavorite ? StringsUi.Get("S.History.EditFavoritedBadge") : string.Empty);
 
     private static string Preview(string text)
     {

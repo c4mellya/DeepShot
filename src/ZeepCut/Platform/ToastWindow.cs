@@ -5,6 +5,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
 using ZeepCut.Core.Geometry;
+using ZeepCut.Ui;
 
 namespace ZeepCut.Platform;
 
@@ -31,15 +32,11 @@ public sealed class ToastWindow : Window
     /// <summary>提示框与光标的间距（DIP）。</summary>
     private const double CursorGap = 18;
 
-    private static readonly Color BackgroundColor = Color.FromArgb(0xF2, 0x20, 0x20, 0x20);
-    private static readonly Color BorderColor = Color.FromArgb(0x99, 0xFF, 0xFF, 0xFF);
-    private static readonly Color ForegroundColor = Color.FromRgb(0xFF, 0xFF, 0xFF);
-
     private readonly DispatcherTimer _timer;
 
     private ToastWindow(string message)
     {
-        Title = $"Zeep Cut 提示 {Environment.ProcessId}";
+        Title = StringsUi.Format("S.Toast.WindowTitle", Environment.ProcessId);
         WindowStyle = WindowStyle.None;
         ResizeMode = ResizeMode.NoResize;
         AllowsTransparency = true;
@@ -52,11 +49,13 @@ public sealed class ToastWindow : Window
         WindowStartupLocation = WindowStartupLocation.Manual;
         SizeToContent = SizeToContent.WidthAndHeight;
 
+        // T30：取主题里的提示色（深色底/浅色边框都是半透明，压在冻结画面上仍然清晰）。
+        var palette = ThemeManager.Palette;
         var text = new TextBlock
         {
             Text = message,
-            Foreground = CreateFrozenBrush(ForegroundColor),
-            FontFamily = new FontFamily("Segoe UI"),
+            Foreground = palette.ToastForegroundBrush,
+            FontFamily = new FontFamily(ThemeManager.FontFamilyName),
             FontSize = 13,
             TextWrapping = TextWrapping.Wrap,
             MaxWidth = 420,
@@ -64,10 +63,10 @@ public sealed class ToastWindow : Window
 
         Content = new Border
         {
-            Background = CreateFrozenBrush(BackgroundColor),
-            BorderBrush = CreateFrozenBrush(BorderColor),
+            Background = palette.ToastBackgroundBrush,
+            BorderBrush = palette.ToastBorderBrush,
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(6),
+            CornerRadius = new CornerRadius(palette.RadiusMedium),
             Padding = new Thickness(14, 9, 14, 9),
             Child = text,
         };
@@ -195,10 +194,4 @@ public sealed class ToastWindow : Window
         Top = Math.Clamp(top, workDipTop, Math.Max(workDipTop, workDipBottom - height));
     }
 
-    private static SolidColorBrush CreateFrozenBrush(Color color)
-    {
-        var brush = new SolidColorBrush(color);
-        brush.Freeze();
-        return brush;
-    }
 }

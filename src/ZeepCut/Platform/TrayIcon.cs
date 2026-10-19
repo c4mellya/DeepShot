@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Windows.Threading;
+using ZeepCut.Ui;
 
 namespace ZeepCut.Platform;
 
@@ -26,8 +27,14 @@ public sealed class TrayIcon : IDisposable
     private const string Tooltip = "Zeep Cut";
     private const uint TrayIconId = 1;
 
-    /// <summary>托盘菜单“显示/隐藏全部贴图”的默认文案（没有贴图时用它）。</summary>
-    public const string ToggleAllPinsDefaultText = "显示/隐藏全部贴图";
+    /// <summary>
+    /// 托盘菜单“显示/隐藏全部贴图”没有贴图时的默认文案（T31：走语言资源）。
+    /// </summary>
+    /// <remarks>
+    /// 保留这个常量名是因为 T20 的验证脚本与 <c>App</c> 都引用它；它现在是**属性**而不是
+    /// <c>const</c>，这样切换语言后取到的就是当前语言的文案。
+    /// </remarks>
+    public static string ToggleAllPinsDefaultText => Ui.StringsUi.Get("S.Tray.TogglePinsDefault");
 
     private readonly NativeMethods.WndProc _wndProc;
     private readonly uint _taskbarCreatedMessage;
@@ -113,6 +120,11 @@ public sealed class TrayIcon : IDisposable
             AppLog.Warn("Tray", $"无法显示通知（图标未添加）：{title} - {message}");
             return false;
         }
+
+        // NOTIFYICONDATA 的 szInfoTitle/szInfo 是定长缓冲区：过长会抛 ArgumentException，
+        // 而通知是"出错时的兜底提示"，它自己不能成为新的崩溃点。
+        title = Clip(title, 63);
+        message = Clip(message, 255);
 
         var data = CreateData();
         data.uFlags = NativeMethods.NIF_INFO;
@@ -385,8 +397,9 @@ public sealed class TrayIcon : IDisposable
             return IntPtr.Zero;
         }
 
-        AppendCommand(menu, TrayMenuCommand.Screenshot, "截图");
-        AppendCommand(menu, TrayMenuCommand.PasteFromClipboard, "从剪贴板贴图");
+        // T31：全部文案走 Resources\Lang 的语言资源（切换语言后下次弹菜单就是新语言）。
+        AppendCommand(menu, TrayMenuCommand.Screenshot, StringsUi.Get("S.Tray.Screenshot"));
+        AppendCommand(menu, TrayMenuCommand.PasteFromClipboard, StringsUi.Get("S.Tray.PasteFromClipboard"));
         NativeMethods.AppendMenu(menu, NativeMethods.MF_SEPARATOR, UIntPtr.Zero, null);
 
         // T20：文案随贴图状态变化（“隐藏全部贴图 (2)”/“显示全部贴图 (2)”），
@@ -404,14 +417,31 @@ public sealed class TrayIcon : IDisposable
             "Tray",
             $"托盘菜单“{pinsText}”：禁用={pinsDisabled}");
 
-        AppendCommand(menu, TrayMenuCommand.History, "历史");
-        AppendCommand(menu, TrayMenuCommand.Settings, "设置");
-        AppendCommand(menu, TrayMenuCommand.CheckUpdates, "检查更新");
+        AppendCommand(menu, TrayMenuCommand.History, StringsUi.Get("S.Tray.History"));
+        AppendCommand(menu, TrayMenuCommand.Settings, StringsUi.Get("S.Tray.Settings"));
+        AppendCommand(menu, TrayMenuCommand.CheckUpdates, StringsUi.Get("S.Tray.CheckUpdates"));
         NativeMethods.AppendMenu(menu, NativeMethods.MF_SEPARATOR, UIntPtr.Zero, null);
-        AppendCommand(menu, TrayMenuCommand.Exit, "退出");
+        AppendCommand(menu, TrayMenuCommand.Exit, StringsUi.Get("S.Tray.Exit"));
+
+        AppLog.Info(
+            "Tray",
+            $"托盘菜单文案：语言={StringsUi.Current} 截图={StringsUi.Get("S.Tray.Screenshot")} " +
+            $"设置={StringsUi.Get("S.Tray.Settings")} 检查更新={StringsUi.Get("S.Tray.CheckUpdates")} " +
+            $"退出={StringsUi.Get("S.Tray.Exit")}");
         return menu;
     }
 
     private static void AppendCommand(IntPtr menu, TrayMenuCommand command, string text) =>
         NativeMethods.AppendMenu(menu, NativeMethods.MF_STRING, new UIntPtr((uint)command), text);
+
+    /// <summary>把字符串截到定长缓冲区放得下的长度（按字符而不是字节：中文一个字也是一个字符）。</summary>
+    private static string Clip(string? text, int maxLength)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return string.Empty;
+        }
+
+        return text.Length <= maxLength ? text : text[..maxLength];
+    }
 }

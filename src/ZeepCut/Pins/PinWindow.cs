@@ -12,6 +12,7 @@ using ZeepCut.Core.Output;
 using ZeepCut.Core.Pins;
 using ZeepCut.Output;
 using ZeepCut.Platform;
+using ZeepCut.Ui;
 
 namespace ZeepCut.Pins;
 
@@ -100,7 +101,7 @@ public sealed class PinWindow : Window
         _state = PinState.Create(image.PixelWidth, image.PixelHeight, new PixelPoint(selection.Left, selection.Top));
         _lastDpiRefreshTicks = Environment.TickCount64;
 
-        Title = $"Zeep Cut 贴图 {Environment.ProcessId}";
+        Title = StringsUi.Format("S.Pin.WindowTitle", Environment.ProcessId);
         WindowStyle = WindowStyle.None;
         ResizeMode = ResizeMode.NoResize;
         ShowInTaskbar = false;
@@ -127,10 +128,10 @@ public sealed class PinWindow : Window
 
         _lockText = new TextBlock
         {
-            Text = "已锁定位置",
+            Text = StringsUi.Get("S.Pin.LockedBadge"),
             Foreground = CreateFrozenBrush(LockBadgeForegroundColor),
             FontSize = 11,
-            FontFamily = new FontFamily("Segoe UI"),
+            FontFamily = new FontFamily(ThemeManager.FontFamilyName),
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(6, 2, 6, 2),
         };
@@ -422,7 +423,7 @@ public sealed class PinWindow : Window
 
         if (_state.IsLocked)
         {
-            _lockText.Text = $"已锁定 {_state.DisplayWidth}×{_state.DisplayHeight}";
+            _lockText.Text = StringsUi.Format("S.Pin.LockedBadgeWithSize", _state.DisplayWidth, _state.DisplayHeight);
         }
     }
 
@@ -663,27 +664,31 @@ public sealed class PinWindow : Window
             Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint,
         };
 
-        menu.Items.Add(CreateMenuItem("原始大小", "将贴图恢复为原始像素大小", () => ResetToOriginal()));
+        // T31：菜单文案走语言资源（每次弹菜单按当前语言生成）。
+        menu.Items.Add(CreateMenuItem(
+            StringsUi.Get("S.Pin.Menu.OriginalSize"),
+            StringsUi.Get("S.Pin.Menu.OriginalSizeHint"),
+            () => ResetToOriginal()));
 
         var lockItem = CreateMenuItem(
-            _state.IsLocked ? "解锁位置" : "锁定位置",
-            _state.IsLocked ? "解锁后可以拖动贴图" : "锁定后禁止拖动贴图（右键仍可用）",
+            _state.IsLocked ? StringsUi.Get("S.Pin.Menu.Unlock") : StringsUi.Get("S.Pin.Menu.Lock"),
+            _state.IsLocked ? StringsUi.Get("S.Pin.Menu.UnlockHint") : StringsUi.Get("S.Pin.Menu.LockHint"),
             () => ToggleLock());
         lockItem.IsChecked = _state.IsLocked;
         menu.Items.Add(lockItem);
 
         menu.Items.Add(new Separator());
-        menu.Items.Add(CreateMenuItem("复制", "把贴图图片复制到剪贴板", CopyToClipboard));
-        menu.Items.Add(CreateMenuItem("另存为…", "把贴图图片另存为 PNG/JPEG", SaveAs));
+        menu.Items.Add(CreateMenuItem(StringsUi.Get("S.Pin.Menu.Copy"), StringsUi.Get("S.Pin.Menu.CopyHint"), CopyToClipboard));
+        menu.Items.Add(CreateMenuItem(StringsUi.Get("S.Pin.Menu.SaveAs"), StringsUi.Get("S.Pin.Menu.SaveAsHint"), SaveAs));
         menu.Items.Add(new Separator());
-        menu.Items.Add(CreateMenuItem("关闭", "关闭这张贴图", () => Close()));
+        menu.Items.Add(CreateMenuItem(StringsUi.Get("S.Pin.Menu.Close"), StringsUi.Get("S.Pin.Menu.CloseHint"), () => Close()));
 
         // 菜单要能被点，必须先激活窗口（Topmost 窗口右键也要成为前台）。
         Activate();
         menu.IsOpen = true;
         AppLog.Info(
             "Pins",
-            $"右键菜单已打开：锁定项={( _state.IsLocked ? "解锁位置" : "锁定位置")} 状态={_state}");
+            $"右键菜单已打开：锁定项={( _state.IsLocked ? StringsUi.Get("S.Pin.Menu.Unlock") : StringsUi.Get("S.Pin.Menu.Lock"))} 状态={_state}");
     }
 
     private static MenuItem CreateMenuItem(string header, string toolTip, Action action)
@@ -747,13 +752,13 @@ public sealed class PinWindow : Window
     {
         var dialog = new Microsoft.Win32.SaveFileDialog
         {
-            Title = "贴图另存为",
+            Title = StringsUi.Get("S.Dialog.SaveTitle"),
             FileName = CaptureFileName.CreateDefault(DateTime.Now, CaptureImageFormat.Png),
             DefaultExt = ".png",
             AddExtension = true,
             OverwritePrompt = true,
             CheckPathExists = true,
-            Filter = "PNG 图片 (*.png)|*.png|JPEG 图片 (*.jpg;*.jpeg)|*.jpg;*.jpeg",
+            Filter = StringsUi.Get("S.Dialog.SaveFilter"),
             FilterIndex = 1,
             RestoreDirectory = true,
         };

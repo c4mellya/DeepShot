@@ -1,0 +1,321 @@
+<!--
+  Zeep Cut UI strings (English) — T31.
+  Keys must match Strings.zh-Hans.xaml exactly. Keep English labels short so buttons never clip
+  (the Settings and Update dialogs use the same layout in both languages).
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+
+    <!-- ===== Common ===== -->
+    <sys:String x:Key="S.App.Name">Zeep Cut</sys:String>
+    <sys:String x:Key="S.Common.Ok">OK</sys:String>
+    <sys:String x:Key="S.Common.Cancel">Cancel</sys:String>
+    <sys:String x:Key="S.Common.Close">Close</sys:String>
+    <sys:String x:Key="S.Common.Copy">Copy</sys:String>
+    <sys:String x:Key="S.Common.SaveAs">Save as</sys:String>
+    <sys:String x:Key="S.Common.Pin">Pin</sys:String>
+    <sys:String x:Key="S.Common.Delete">Delete</sys:String>
+    <sys:String x:Key="S.Common.Rename">Rename</sys:String>
+    <sys:String x:Key="S.Common.Annotation">Annotate</sys:String>
+    <sys:String x:Key="S.Common.Preview">Preview</sys:String>
+    <sys:String x:Key="S.Common.Refresh">Refresh</sys:String>
+    <sys:String x:Key="S.Common.Settings">Settings</sys:String>
+    <sys:String x:Key="S.Common.History">History</sys:String>
+    <sys:String x:Key="S.Common.Undo">Undo</sys:String>
+    <sys:String x:Key="S.Common.Redo">Redo</sys:String>
+    <sys:String x:Key="S.Common.Save">Save</sys:String>
+
+    <!-- ===== Annotation tools ===== -->
+    <sys:String x:Key="S.Annotation.Tool.Select">Select</sys:String>
+    <sys:String x:Key="S.Annotation.Tool.Rectangle">Rectangle</sys:String>
+    <sys:String x:Key="S.Annotation.Tool.Ellipse">Ellipse</sys:String>
+    <sys:String x:Key="S.Annotation.Tool.Arrow">Arrow</sys:String>
+    <sys:String x:Key="S.Annotation.Tool.Line">Line</sys:String>
+    <sys:String x:Key="S.Annotation.Tool.Freehand">Pen</sys:String>
+    <sys:String x:Key="S.Annotation.Tool.Text">Text</sys:String>
+    <sys:String x:Key="S.Annotation.Tool.Mosaic">Mosaic</sys:String>
+    <sys:String x:Key="S.Annotation.Section.Color">Color</sys:String>
+    <sys:String x:Key="S.Annotation.Section.Thickness">Width</sys:String>
+    <sys:String x:Key="S.Annotation.Section.Zoom">Zoom</sys:String>
+    <sys:String x:Key="S.Annotation.Section.Edit">Edit</sys:String>
+    <sys:String x:Key="S.Annotation.Section.Tools">Tools</sys:String>
+    <sys:String x:Key="S.Annotation.Color">Color {0}</sys:String>
+    <sys:String x:Key="S.Annotation.Thickness">Width {0}</sys:String>
+    <sys:String x:Key="S.Annotation.ThicknessTooltip">Width {0} px</sys:String>
+
+    <!-- ===== Tray ===== -->
+    <sys:String x:Key="S.Tray.Screenshot">Capture screen</sys:String>
+    <sys:String x:Key="S.Tray.PasteFromClipboard">Pin from clipboard</sys:String>
+    <sys:String x:Key="S.Tray.TogglePinsDefault">Show/Hide all pins</sys:String>
+    <sys:String x:Key="S.Tray.HideAllPins">Hide all pins ({0})</sys:String>
+    <sys:String x:Key="S.Tray.ShowAllPins">Show all pins ({0})</sys:String>
+    <sys:String x:Key="S.Tray.History">History</sys:String>
+    <sys:String x:Key="S.Tray.Settings">Settings</sys:String>
+    <sys:String x:Key="S.Tray.CheckUpdates">Check for updates</sys:String>
+    <sys:String x:Key="S.Tray.Exit">Exit</sys:String>
+    <sys:String x:Key="S.Tray.Notification.FailedTitle">Pin from clipboard failed</sys:String>
+
+    <!-- ===== Capture overlay ===== -->
+    <sys:String x:Key="S.Overlay.WindowTitle">Zeep Cut capture overlay</sys:String>
+    <sys:String x:Key="S.Overlay.Copy">Copy</sys:String>
+    <sys:String x:Key="S.Overlay.SaveAs">Save as</sys:String>
+    <sys:String x:Key="S.Overlay.Pin">Pin</sys:String>
+    <sys:String x:Key="S.Overlay.Cancel">Cancel</sys:String>
+    <sys:String x:Key="S.Overlay.Undo">Undo</sys:String>
+    <sys:String x:Key="S.Overlay.Redo">Redo</sys:String>
+    <sys:String x:Key="S.Overlay.SizeBadge">{0} × {1}</sys:String>
+    <sys:String x:Key="S.Overlay.SelectionLocked">Selection locked ({0} annotations)</sys:String>
+
+    <!-- ===== Pins ===== -->
+    <sys:String x:Key="S.Pin.WindowTitle">Zeep Cut pin {0}</sys:String>
+    <sys:String x:Key="S.Pin.LockedBadge">Locked</sys:String>
+    <sys:String x:Key="S.Pin.LockedBadgeWithSize">Locked {0}×{1}</sys:String>
+    <sys:String x:Key="S.Pin.Close">Close pin (Esc)</sys:String>
+    <sys:String x:Key="S.Pin.Menu.OriginalSize">Original size</sys:String>
+    <sys:String x:Key="S.Pin.Menu.OriginalSizeHint">Restore the pin to its original pixel size</sys:String>
+    <sys:String x:Key="S.Pin.Menu.Lock">Lock position</sys:String>
+    <sys:String x:Key="S.Pin.Menu.Unlock">Unlock position</sys:String>
+    <sys:String x:Key="S.Pin.Menu.LockHint">Dragging is disabled while locked (right-click still works)</sys:String>
+    <sys:String x:Key="S.Pin.Menu.UnlockHint">Dragging is enabled again after unlocking</sys:String>
+    <sys:String x:Key="S.Pin.Menu.Copy">Copy</sys:String>
+    <sys:String x:Key="S.Pin.Menu.CopyHint">Copy the pin image to the clipboard</sys:String>
+    <sys:String x:Key="S.Pin.Menu.SaveAs">Save as…</sys:String>
+    <sys:String x:Key="S.Pin.Menu.SaveAsHint">Save the pin image as PNG/JPEG</sys:String>
+    <sys:String x:Key="S.Pin.Menu.Close">Close</sys:String>
+    <sys:String x:Key="S.Pin.Menu.CloseHint">Close this pin</sys:String>
+
+    <!-- ===== History gallery ===== -->
+    <sys:String x:Key="S.History.WindowTitle">Zeep Cut History</sys:String>
+    <sys:String x:Key="S.History.WindowName">Zeep Cut history gallery</sys:String>
+    <sys:String x:Key="S.History.Title">History</sys:String>
+    <sys:String x:Key="S.History.SearchPlaceholder">Search by name (case-insensitive; Enter to search, Esc to clear)</sys:String>
+    <sys:String x:Key="S.History.SearchName">Search history</sys:String>
+    <sys:String x:Key="S.History.FilterAll">All</sys:String>
+    <sys:String x:Key="S.History.FilterFavorites">Favorites</sys:String>
+    <sys:String x:Key="S.History.Refresh">Refresh</sys:String>
+    <sys:String x:Key="S.History.Loading">Loading…</sys:String>
+    <sys:String x:Key="S.History.Count">{0} records</sys:String>
+    <sys:String x:Key="S.History.CountFiltered">{0} matches ({1} in total)</sys:String>
+    <sys:String x:Key="S.History.EmptyTitle">No history yet</sys:String>
+    <sys:String x:Key="S.History.NoMatchTitle">No matching records</sys:String>
+    <sys:String x:Key="S.History.NothingToShowTitle">Nothing to show</sys:String>
+    <sys:String x:Key="S.History.ClearFilters">Clear filters</sys:String>
+    <sys:String x:Key="S.History.ReadFailedTitle">Cannot read history</sys:String>
+    <sys:String x:Key="S.History.ReadFailedBody">Database read failed: {0}</sys:String>
+    <sys:String x:Key="S.History.ReadFailedStatus">Read failed (see log)</sys:String>
+    <sys:String x:Key="S.History.Footer">Tip: double-click a thumbnail for a larger view; click the star to favorite (favorites are never cleaned up after 30 days); use “Annotate” to add annotations on top of the image and overwrite the record; “Pin” does not create a new record.</sys:String>
+    <sys:String x:Key="S.History.GroupTitle">Date group {0}</sys:String>
+    <sys:String x:Key="S.History.CardName">History record {0}</sys:String>
+    <sys:String x:Key="S.History.Today">Today</sys:String>
+    <sys:String x:Key="S.History.Yesterday">Yesterday</sys:String>
+    <sys:String x:Key="S.History.TimeToday">Today {0}</sys:String>
+    <sys:String x:Key="S.History.SourceScreenshot">Screenshot</sys:String>
+    <sys:String x:Key="S.History.SourceClipboard">Clipboard pin</sys:String>
+    <sys:String x:Key="S.History.SourceHistory">History</sys:String>
+    <sys:String x:Key="S.History.ThumbnailMissing">No thumbnail</sys:String>
+    <sys:String x:Key="S.History.StarOn">Remove favorite</sys:String>
+    <sys:String x:Key="S.History.StarOff">Favorite</sys:String>
+    <sys:String x:Key="S.History.StarOnHint">Remove from favorites</sys:String>
+    <sys:String x:Key="S.History.StarOffHint">Add to favorites (favorites are never cleaned up)</sys:String>
+    <sys:String x:Key="S.History.ActionRename">Rename</sys:String>
+    <sys:String x:Key="S.History.ActionDeleteHint">Delete this record</sys:String>
+    <sys:String x:Key="S.History.ActionAnnotateHint">Add annotations and overwrite this record</sys:String>
+    <sys:String x:Key="S.History.ActionPreviewHint">Preview large image</sys:String>
+    <sys:String x:Key="S.History.SelectedStatus">{0} · {1}×{2} · selected</sys:String>
+    <sys:String x:Key="S.History.ActionFailed">{0} failed: {1}</sys:String>
+    <sys:String x:Key="S.History.LoadMoreFailed">Loading more failed (see log).</sys:String>
+
+    <!-- ===== History: empty states ===== -->
+    <sys:String x:Key="S.History.EmptyNoRecords">No history yet. Press {0} to capture, or pin from the clipboard from the tray menu — successful results show up here.</sys:String>
+    <sys:String x:Key="S.History.EmptySearchAndFavorites">No favorite record matches “{0}”. Turn off “Favorites” or clear the search.</sys:String>
+    <sys:String x:Key="S.History.EmptyFavorites">No favorites yet. Click the star in the top-left corner of a thumbnail to add one.</sys:String>
+    <sys:String x:Key="S.History.EmptySearch">No record has “{0}” in its name. Try another keyword or clear the search.</sys:String>
+    <sys:String x:Key="S.History.EmptyOther">Nothing to show.</sys:String>
+
+    <!-- ===== History: favorites / retention ===== -->
+    <sys:String x:Key="S.History.RetentionRule">Regular records are kept for {0} days (counted from creation; editing and renaming do not extend it); favorites are never cleaned up automatically.</sys:String>
+    <sys:String x:Key="S.History.UnfavoriteDialogTitle">Remove favorite</sys:String>
+    <sys:String x:Key="S.History.KeptFavorite">“{0}” stays a favorite (favorites are never cleaned up automatically).</sys:String>
+    <sys:String x:Key="S.History.FavoriteFailed">Changing the favorite failed (the record may be gone). Click “Refresh”.</sys:String>
+    <sys:String x:Key="S.History.Favorited">“{0}” added to favorites (never cleaned up after 30 days).</sys:String>
+    <sys:String x:Key="S.History.UnfavoritedExpired">“{0}” removed from favorites: it is older than 30 days and will be deleted at the next cleanup.</sys:String>
+    <sys:String x:Key="S.History.Unfavorited">“{0}” removed from favorites.</sys:String>
+
+    <!-- ===== History: delete ===== -->
+    <sys:String x:Key="S.History.DeleteConfirmFavorite">Delete “{0}”?\n\nThis is a favorite record; the image, thumbnail and record are removed permanently.</sys:String>
+    <sys:String x:Key="S.History.DeleteConfirm">Delete “{0}”?\n\nThe image, thumbnail and record are removed permanently (cannot be undone).</sys:String>
+    <sys:String x:Key="S.History.DeleteDialogTitle">Delete history record</sys:String>
+    <sys:String x:Key="S.History.DeleteCancelled">Delete cancelled.</sys:String>
+
+    <!-- ===== History: rename ===== -->
+    <sys:String x:Key="S.History.RenameTitle">Rename history record</sys:String>
+    <sys:String x:Key="S.History.RenameLabel">Name</sys:String>
+    <sys:String x:Key="S.History.RenameInputName">History record name</sys:String>
+    <sys:String x:Key="S.History.RenameHint">The name is shown in the gallery and used for search; these characters are not allowed: \ / : * ? " &lt; &gt; | (they are replaced with _).</sys:String>
+    <sys:String x:Key="S.History.RenameOk">OK</sys:String>
+    <sys:String x:Key="S.History.RenameCancel">Cancel</sys:String>
+    <sys:String x:Key="S.History.RenameCancelled">Rename cancelled.</sys:String>
+    <sys:String x:Key="S.History.RenameFailed">Rename failed: {0}</sys:String>
+    <sys:String x:Key="S.History.RenameUnchanged">Name unchanged.</sys:String>
+    <sys:String x:Key="S.History.Renamed">Renamed to “{0}”.</sys:String>
+
+    <!-- ===== History: action results ===== -->
+    <sys:String x:Key="S.History.Copied">Copied “{0}” ({1}×{2}).</sys:String>
+    <sys:String x:Key="S.History.CopyFailed">Copy failed: {0}</sys:String>
+    <sys:String x:Key="S.History.SaveFailed">Save as failed: {0}</sys:String>
+    <sys:String x:Key="S.History.DeleteFailed">Delete failed: {0}</sys:String>
+    <sys:String x:Key="S.History.Deleted">Deleted “{0}” (image and thumbnail files removed too).</sys:String>
+    <sys:String x:Key="S.History.PinFailed">Pin failed: {0}</sys:String>
+    <sys:String x:Key="S.History.Pinned">Pinned “{0}” ({1}×{2}; history still has {3} records).</sys:String>
+
+    <!-- ===== History: preview ===== -->
+    <sys:String x:Key="S.History.PreviewTitle">Preview · {0}</sys:String>
+    <sys:String x:Key="S.History.PreviewActualSize">Actual size</sys:String>
+    <sys:String x:Key="S.History.PreviewFit">Fit to window</sys:String>
+    <sys:String x:Key="S.History.PreviewMeta">{0} · {1}×{2} px · {3} · {4} · zoom {5}%</sys:String>
+    <sys:String x:Key="S.History.ImageMissingPreview">The image file is missing; cannot preview.</sys:String>
+    <sys:String x:Key="S.History.ImageMissingEdit">The image file is missing; cannot add annotations.</sys:String>
+    <sys:String x:Key="S.History.PreviewOpenFailed">Opening the preview failed: {0}</sys:String>
+
+    <!-- ===== History: append-annotation editor ===== -->
+    <sys:String x:Key="S.History.EditTitle">Zeep Cut edit history · {0}</sys:String>
+    <sys:String x:Key="S.History.EditWindowName">Zeep Cut edit history</sys:String>
+    <sys:String x:Key="S.History.EditHint">Old annotations are already part of the image pixels; you can only add more (they cannot be edited separately).</sys:String>
+    <sys:String x:Key="S.History.EditStatusHint">Add annotations, then click “Save and overwrite”.</sys:String>
+    <sys:String x:Key="S.History.EditSave">Save and overwrite</sys:String>
+    <sys:String x:Key="S.History.EditSaveHint">Replace the original image of this record with the newly annotated image (the old version is not kept, no new record is created)</sys:String>
+    <sys:String x:Key="S.History.EditCancel">Cancel</sys:String>
+    <sys:String x:Key="S.History.EditCancelName">Cancel editing</sys:String>
+    <sys:String x:Key="S.History.EditDeleteSelected">Delete selected</sys:String>
+    <sys:String x:Key="S.History.EditFit">Fit to window</sys:String>
+    <sys:String x:Key="S.History.EditNothingToUndo">Nothing to undo.</sys:String>
+    <sys:String x:Key="S.History.EditNothingToRedo">Nothing to redo.</sys:String>
+    <sys:String x:Key="S.History.EditSelectFirst">Pick the “Select” tool and click an annotation first.</sys:String>
+    <sys:String x:Key="S.History.EditMarkedDirty">{0} annotation(s) added; click “Save and overwrite” to write them to this record.</sys:String>
+    <sys:String x:Key="S.History.EditCannotDraw">Cannot draw in this state: {0}</sys:String>
+    <sys:String x:Key="S.History.EditCannotType">Cannot type text: {0}</sys:String>
+    <sys:String x:Key="S.History.EditToolSwitchFailed">Switching tools failed: {0}</sys:String>
+    <sys:String x:Key="S.History.EditRecordMissing">Cannot check whether the record still exists: {0}</sys:String>
+    <sys:String x:Key="S.History.EditComposeFailed">Compositing the image failed: {0}</sys:String>
+    <sys:String x:Key="S.History.EditSaveFailed">Save failed (the original image is unchanged): {0}</sys:String>
+    <sys:String x:Key="S.History.EditSaveCancelled">Save cancelled; your edits are still here.</sys:String>
+    <sys:String x:Key="S.History.EditStayed">Staying in the editor.</sys:String>
+    <sys:String x:Key="S.History.EditCancelDialogTitle">Cancel editing</sys:String>
+    <sys:String x:Key="S.History.EditCancelConfirm">The {0} annotation(s) added in this session will not be saved; the original image stays unchanged.\n\nCancel editing?</sys:String>
+    <sys:String x:Key="S.History.EditOpened">Editing “{0}”: add annotations, then click “Save and overwrite”.</sys:String>
+    <sys:String x:Key="S.History.EditAlreadyOpen">This record is already open in the editor.</sys:String>
+    <sys:String x:Key="S.History.EditSaveOverwritten">Saved and overwrote “{0}” ({1}×{2}); history still has {3} records.</sys:String>
+    <sys:String x:Key="S.History.EditOpenFailed">Opening the editor failed: {0}</sys:String>
+    <sys:String x:Key="S.History.EditSaveFailedBody">Saving failed, the original image was not modified:\n{0}</sys:String>
+    <sys:String x:Key="S.History.EditRecordInfo">{0} · {1}×{2} · {3} · {4}</sys:String>
+    <sys:String x:Key="S.History.EditFavoritedBadge"> · ★ Favorite</sys:String>
+
+    <!-- ===== History: overwrite semantics ===== -->
+    <sys:String x:Key="S.History.OverwriteSaved">Saved and overwrote “{0}” ({1} annotation(s) added; the old version was replaced, the record count is unchanged).</sys:String>
+    <sys:String x:Key="S.History.OverwriteDeleted">“{0}” has been deleted; this change was not saved (the record no longer exists and no new one is created).</sys:String>
+    <sys:String x:Key="S.History.OverwriteExplain">About to save and overwrite history record “{0}”.\n\n· The old image and its old annotations are NOT kept; the new image replaces the original file.\n· No new history record is created; the ID, name, creation time and favorite state stay the same.\n· The 30-day retention is still counted from the creation time; overwriting does not extend it.\n\nSave and overwrite? Choose “Cancel” to stay in the editor without writing anything.</sys:String>
+
+    <!-- ===== Settings ===== -->
+    <sys:String x:Key="S.Settings.WindowTitle">Zeep Cut Settings</sys:String>
+    <sys:String x:Key="S.Settings.WindowName">Zeep Cut settings</sys:String>
+    <sys:String x:Key="S.Settings.Heading">Settings</sys:String>
+    <sys:String x:Key="S.Settings.Subtitle">Changes apply immediately and are saved to settings.json; closing the window finishes.</sys:String>
+    <sys:String x:Key="S.Settings.Section.Shortcuts">Shortcuts</sys:String>
+    <sys:String x:Key="S.Settings.Shortcut.Screenshot">Capture shortcut</sys:String>
+    <sys:String x:Key="S.Settings.Shortcut.Pin">Pin shortcut</sys:String>
+    <sys:String x:Key="S.Settings.Shortcut.Hint">Click a box and press the combination (needs one of Ctrl / Alt / Shift / Win; main keys are A–Z, 0–9, F1–F12).</sys:String>
+    <sys:String x:Key="S.Settings.Shortcut.Waiting">Press the combination…</sys:String>
+    <sys:String x:Key="S.Settings.Shortcut.NeedModifier">Needs at least one modifier (Ctrl / Alt / Shift / Win); main keys are A–Z, 0–9, F1–F12.</sys:String>
+    <sys:String x:Key="S.Settings.Shortcut.SecondKey">Only one main key is allowed.</sys:String>
+    <sys:String x:Key="S.Settings.Shortcut.ConflictLocal">Conflicts with {0} ({1}); choose another combination.</sys:String>
+    <sys:String x:Key="S.Settings.Shortcut.ConflictOther">Shortcut {0} is already taken by another program; choose another combination.</sys:String>
+    <sys:String x:Key="S.Settings.Shortcut.RegisteredHint">Active now: {0}</sys:String>
+    <sys:String x:Key="S.Settings.Shortcut.RegistrationFailed">Registration failed: {0}</sys:String>
+    <sys:String x:Key="S.Settings.Shortcut.Reset">Reset defaults</sys:String>
+    <sys:String x:Key="S.Settings.Section.Language">Language</sys:String>
+    <sys:String x:Key="S.Settings.Language.System">Follow system</sys:String>
+    <sys:String x:Key="S.Settings.Language.ZhHans">简体中文</sys:String>
+    <sys:String x:Key="S.Settings.Language.English">English</sys:String>
+    <sys:String x:Key="S.Settings.Language.Effective">In use: {0}</sys:String>
+    <sys:String x:Key="S.Settings.Section.Theme">Theme</sys:String>
+    <sys:String x:Key="S.Settings.Theme.System">Follow system</sys:String>
+    <sys:String x:Key="S.Settings.Theme.Light">Light</sys:String>
+    <sys:String x:Key="S.Settings.Theme.Dark">Dark</sys:String>
+    <sys:String x:Key="S.Settings.Theme.Effective">Current look: {0} (system: {1})</sys:String>
+    <sys:String x:Key="S.Settings.Section.Startup">Startup</sys:String>
+    <sys:String x:Key="S.Settings.Startup.Enable">Start Zeep Cut when signing in (current user, HKCU\Software\Microsoft\Windows\CurrentVersion\Run)</sys:String>
+    <sys:String x:Key="S.Settings.Startup.On">Registry startup entry written.</sys:String>
+    <sys:String x:Key="S.Settings.Startup.Off">Registry startup entry removed.</sys:String>
+    <sys:String x:Key="S.Settings.Startup.Failed">Updating the startup entry failed (the registry write was refused, see the log).</sys:String>
+    <sys:String x:Key="S.Settings.Startup.BusyHint">The startup toggle is waiting for the registry, please wait.</sys:String>
+    <sys:String x:Key="S.Settings.Update.ManifestUrl">Update channel (AppInfo.UpdateManifestUrl)</sys:String>
+    <sys:String x:Key="S.Settings.Update.Check">Check for updates</sys:String>
+    <sys:String x:Key="S.Settings.Section.Data">Data folder</sys:String>
+    <sys:String x:Key="S.Settings.Data.Open">Open folder</sys:String>
+    <sys:String x:Key="S.Settings.Data.Opened">Opened data folder: {0}</sys:String>
+    <sys:String x:Key="S.Settings.Data.OpenFailed">Opening the data folder failed: {0}</sys:String>
+    <sys:String x:Key="S.Settings.Data.History">History DB: {0}</sys:String>
+    <sys:String x:Key="S.Settings.Data.Counts">{0} history records · {1} image files · {2} thumbnail files</sys:String>
+    <sys:String x:Key="S.Settings.Section.Retention">History retention</sys:String>
+    <sys:String x:Key="S.Settings.Section.Update">Check for updates</sys:String>
+    <sys:String x:Key="S.Settings.Saved">Settings saved.</sys:String>
+    <sys:String x:Key="S.Settings.SaveFailed">Saving settings failed: {0}</sys:String>
+    <sys:String x:Key="S.Settings.SavePath">Settings file: {0}</sys:String>
+    <sys:String x:Key="S.Settings.Close">Close</sys:String>
+    <sys:String x:Key="S.Settings.Version">Version {0}</sys:String>
+
+    <!-- ===== Check for updates ===== -->
+    <sys:String x:Key="S.Update.Title">Check for updates</sys:String>
+    <sys:String x:Key="S.Update.Checking">Checking for updates…</sys:String>
+    <sys:String x:Key="S.Update.NotConfiguredTitle">Update channel not configured</sys:String>
+    <sys:String x:Key="S.Update.NotConfigured">Current version {0}.\n\nThis build has no update channel configured (AppInfo.UpdateManifestUrl is empty), so it cannot check for a newer version.\nThis does not affect any local feature; check the place you got Zeep Cut from for updates (the app never downloads or installs by itself).</sys:String>
+    <sys:String x:Key="S.Update.FailedTitle">Update check failed</sys:String>
+    <sys:String x:Key="S.Update.Failed">Current version {0}.\n\nCannot tell whether a newer version exists: {1}\nCheck your network or the update channel address and try again.</sys:String>
+    <sys:String x:Key="S.Update.UpToDateTitle">You are up to date</sys:String>
+    <sys:String x:Key="S.Update.UpToDate">You are up to date: current version {0}, the channel's newest version is {1}.</sys:String>
+    <sys:String x:Key="S.Update.AvailableTitle">Version {0} is available</sys:String>
+    <sys:String x:Key="S.Update.Available">Version {0} is available (current version {1}).</sys:String>
+    <sys:String x:Key="S.Update.AvailableWithNotes">Version {0} is available (current version {1}).\n\nRelease notes: {2}</sys:String>
+    <sys:String x:Key="S.Update.CurrentVersion">Current version {0}</sys:String>
+    <sys:String x:Key="S.Update.Channel">Update channel: {0}</sys:String>
+    <sys:String x:Key="S.Update.Download">Open release page</sys:String>
+    <sys:String x:Key="S.Update.Ok">OK</sys:String>
+    <sys:String x:Key="S.Update.FailedToast">Update check failed: {0} (the version is unknown — this is not “up to date”)</sys:String>
+    <sys:String x:Key="S.Update.NoUrl">The new version does not provide a release page (url is missing from the manifest).</sys:String>
+
+    <!-- ===== Toasts / dialogs ===== -->
+    <sys:String x:Key="S.Toast.WindowTitle">Zeep Cut notice {0}</sys:String>
+    <sys:String x:Key="S.Toast.NoPins">There are no pins right now; press {0} to capture or {1} to pin from the clipboard.</sys:String>
+    <sys:String x:Key="S.Toast.PinsHidden">Hid {0} pin(s) (use the tray menu again to show them)</sys:String>
+    <sys:String x:Key="S.Toast.PinsShown">Showed {0} pin(s)</sys:String>
+    <sys:String x:Key="S.Toast.HistoryFailed">{0} succeeded, but saving the history record failed (see log).</sys:String>
+    <sys:String x:Key="S.Message.AlreadyRunning">Zeep Cut is already running.\n\nUse the tray icon in the notification area (click “Show hidden icons” if needed).</sys:String>
+    <sys:String x:Key="S.Message.TrayFailed">Zeep Cut could not create its tray icon and will exit.</sys:String>
+    <sys:String x:Key="S.Message.StartupFailed">Zeep Cut failed to start. Log written to:\n{0}\n\n{1}</sys:String>
+    <sys:String x:Key="S.Message.HistoryUnavailableTitle">History unavailable</sys:String>
+    <sys:String x:Key="S.Message.HistoryUnavailable">The history database could not be initialized; screenshots and pins from this run will not be recorded:\n{0}</sys:String>
+    <sys:String x:Key="S.Message.HistoryGalleryUnavailable">The history database failed to initialize at startup, so the gallery is unavailable.\n\nCapture and pins still work, but history will not be recorded. See the log:\n{0}</sys:String>
+    <sys:String x:Key="S.Message.HistoryGalleryOpenFailed">Opening the history gallery failed. See the log:\n{0}</sys:String>
+    <sys:String x:Key="S.Message.SettingsOpenFailed">Opening the settings window failed, see the log.</sys:String>
+    <sys:String x:Key="S.Message.HotkeyUnavailableTitle">Global hotkeys unavailable</sys:String>
+    <sys:String x:Key="S.Message.HotkeyUnavailable">Could not create the hotkey message window: {0}</sys:String>
+    <sys:String x:Key="S.Message.HotkeyInvalidTitle">Invalid shortcut setting</sys:String>
+    <sys:String x:Key="S.Message.HotkeyInvalid">Shortcut setting “{0}” is invalid: {1}</sys:String>
+    <sys:String x:Key="S.Message.HotkeyRegisterFailedTitle">Global hotkey registration failed</sys:String>
+    <sys:String x:Key="S.Message.HotkeyBusy">Shortcut {0} is already taken; please change it.</sys:String>
+    <sys:String x:Key="S.Message.HotkeyRegisterError">Registering shortcut {0} failed (Win32 error {1}); please change it.</sys:String>
+    <sys:String x:Key="S.Message.CaptureFailedTitle">Capture failed</sys:String>
+    <sys:String x:Key="S.Message.CaptureFailed">Capture failed: {0}</sys:String>
+    <sys:String x:Key="S.Message.PinLocationFailed">Could not locate the screen position; pinning failed.</sys:String>
+    <sys:String x:Key="S.Message.Unhandled">Zeep Cut hit an unhandled error and wrote a log:\n{0}\n\n{1}</sys:String>
+    <sys:String x:Key="S.Message.ClipboardEmpty">The clipboard contains no image.</sys:String>
+    <sys:String x:Key="S.Message.ClipboardNotImage">The clipboard content is not an image.</sys:String>
+    <sys:String x:Key="S.Message.ClipboardBusy">The clipboard is in use by another program; try again shortly.</sys:String>
+    <sys:String x:Key="S.Message.ClipboardFailed">Reading an image from the clipboard failed: {0}</sys:String>
+
+    <!-- ===== Save-as dialog ===== -->
+    <sys:String x:Key="S.Dialog.SaveTitle">Save image as</sys:String>
+    <sys:String x:Key="S.Dialog.SaveFilter">PNG image (*.png)|*.png|JPEG image (*.jpg;*.jpeg)|*.jpg;*.jpeg</sys:String>
+
+</ResourceDictionary>

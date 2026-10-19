@@ -7,7 +7,9 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using ZeepCut.Core.History;
+using ZeepCut.Core.Settings;
 using ZeepCut.Platform;
+using ZeepCut.Ui;
 
 namespace ZeepCut.History;
 
@@ -56,6 +58,9 @@ public sealed class HistoryGalleryWindow : Window
     private readonly Button _clearFilters;
     private readonly TextBlock _status;
     private readonly DispatcherTimer _searchTimer;
+    private readonly TextBlock _title;
+    private readonly Button _refreshButton;
+    private readonly TextBlock _footer;
 
     /// <summary>当前页的卡片（顺序 = 查询顺序 = 日期分组顺序）。</summary>
     private readonly List<HistoryCard> _loaded = new();
@@ -82,7 +87,7 @@ public sealed class HistoryGalleryWindow : Window
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
 
-        Title = "Zeep Cut 历史";
+        Title = StringsUi.Get("S.History.WindowTitle");
         Width = 1180;
         Height = 820;
         MinWidth = 640;
@@ -91,7 +96,7 @@ public sealed class HistoryGalleryWindow : Window
         Background = HistoryUi.WindowBackground;
         FontFamily = new FontFamily(HistoryUi.FontFamilyName);
         AutomationProperties.SetAutomationId(this, "history-gallery-window");
-        AutomationProperties.SetName(this, "Zeep Cut 历史图库");
+        AutomationProperties.SetName(this, StringsUi.Get("S.History.WindowName"));
 
         var content = new Grid { Margin = new Thickness(16, 12, 16, 10) };
         content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -106,10 +111,11 @@ public sealed class HistoryGalleryWindow : Window
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-        var title = HistoryUi.Text("历史记录", 15, HistoryUi.Foreground, FontWeights.SemiBold);
-        title.Margin = new Thickness(2, 0, 16, 0);
-        Grid.SetColumn(title, 0);
-        header.Children.Add(title);
+        _title = HistoryUi.Text(StringsUi.Get("S.History.Title"), 15, HistoryUi.Foreground, FontWeights.SemiBold);
+        _title.HorizontalAlignment = HorizontalAlignment.Left;
+        _title.Margin = new Thickness(2, 0, 16, 0);
+        Grid.SetColumn(_title, 0);
+        header.Children.Add(_title);
 
         _search = new TextBox
         {
@@ -117,9 +123,12 @@ public sealed class HistoryGalleryWindow : Window
             Padding = new Thickness(8, 5, 8, 5),
             Margin = new Thickness(0, 0, 12, 0),
             VerticalAlignment = VerticalAlignment.Center,
-            ToolTip = "按名称搜索（不区分大小写；Enter 立即搜索，Esc 清空）",
+            ToolTip = StringsUi.Get("S.History.SearchPlaceholder"),
+            Background = HistoryUi.CardBackground,
+            Foreground = HistoryUi.Foreground,
+            BorderBrush = HistoryUi.Border,
         };
-        AutomationProperties.SetName(_search, "搜索历史");
+        AutomationProperties.SetName(_search, StringsUi.Get("S.History.SearchName"));
         AutomationProperties.SetAutomationId(_search, "history-search");
         _search.TextChanged += (_, _) => OnSearchTextChanged();
         _search.PreviewKeyDown += OnSearchKeyDown;
@@ -128,21 +137,27 @@ public sealed class HistoryGalleryWindow : Window
 
         _filter = new HistoryTabStrip(
             showAll: () => SetFavoritesOnly(false),
-            showFavorites: () => SetFavoritesOnly(true));
+            showFavorites: () => SetFavoritesOnly(true),
+            StringsUi.Get("S.History.FilterAll"),
+            StringsUi.Get("S.History.FilterFavorites"));
         _filter.Margin = new Thickness(0, 0, 12, 0);
         Grid.SetColumn(_filter, 2);
         header.Children.Add(_filter);
 
-        var refresh = HistoryUi.Button("刷新", "刷新历史", Reload);
-        refresh.Margin = new Thickness(0);
-        Grid.SetColumn(refresh, 3);
-        header.Children.Add(refresh);
+        _refreshButton = HistoryUi.Button(
+            StringsUi.Get("S.History.Refresh"),
+            StringsUi.Get("S.History.Refresh"),
+            Reload);
+        _refreshButton.Margin = new Thickness(0);
+        AutomationProperties.SetAutomationId(_refreshButton, "history-refresh");
+        Grid.SetColumn(_refreshButton, 3);
+        header.Children.Add(_refreshButton);
 
         Grid.SetRow(header, 0);
         content.Children.Add(header);
 
         // --- 第二行：状态条（计数 / 上次操作结果） ---
-        _status = HistoryUi.Text("正在加载…", 12, HistoryUi.SecondaryForeground);
+        _status = HistoryUi.Text(StringsUi.Get("S.History.Loading"), 12, HistoryUi.SecondaryForeground);
         _status.Margin = new Thickness(2, 8, 0, 6);
         AutomationProperties.SetAutomationId(_status, "history-status");
         Grid.SetRow(_status, 1);
@@ -159,7 +174,7 @@ public sealed class HistoryGalleryWindow : Window
         };
         _scroll.ScrollChanged += OnScrollChanged;
 
-        _emptyTitle = HistoryUi.Text("还没有历史记录", 15, HistoryUi.Foreground, FontWeights.SemiBold);
+        _emptyTitle = HistoryUi.Text(StringsUi.Get("S.History.EmptyTitle"), 15, HistoryUi.Foreground, FontWeights.SemiBold);
         _emptyTitle.HorizontalAlignment = HorizontalAlignment.Center;
         AutomationProperties.SetAutomationId(_emptyTitle, "history-empty-title");
 
@@ -171,7 +186,10 @@ public sealed class HistoryGalleryWindow : Window
         _emptyBody.Margin = new Thickness(0, 8, 0, 12);
         AutomationProperties.SetAutomationId(_emptyBody, "history-empty-text");
 
-        _clearFilters = HistoryUi.Button("清除筛选", "清除筛选", ClearFilters);
+        _clearFilters = HistoryUi.Button(
+            StringsUi.Get("S.History.ClearFilters"),
+            StringsUi.Get("S.History.ClearFilters"),
+            ClearFilters);
         _clearFilters.HorizontalAlignment = HorizontalAlignment.Center;
         AutomationProperties.SetAutomationId(_clearFilters, "history-clear-filters");
 
@@ -193,15 +211,15 @@ public sealed class HistoryGalleryWindow : Window
         content.Children.Add(body);
 
         // --- 第四行：底部提示 ---
-        var footer = HistoryUi.Text(
-            "提示：双击缩略图看大图；点击星标收藏（收藏项不会被 30 天清理）；" +
-            "选中后用“标注”在现有图片上追加标注并覆盖这条记录；" +
-            "“贴图”不会新增历史记录。",
+        _footer = HistoryUi.Text(
+            StringsUi.Get("S.History.Footer"),
             11.5,
             HistoryUi.SecondaryForeground);
-        footer.Margin = new Thickness(2, 8, 0, 0);
-        Grid.SetRow(footer, 3);
-        content.Children.Add(footer);
+        _footer.HorizontalAlignment = HorizontalAlignment.Left;
+        _footer.TextWrapping = TextWrapping.Wrap;
+        _footer.Margin = new Thickness(2, 8, 0, 0);
+        Grid.SetRow(_footer, 3);
+        content.Children.Add(_footer);
 
         Content = content;
 
@@ -222,7 +240,14 @@ public sealed class HistoryGalleryWindow : Window
         Closed += OnClosedInternal;
         PreviewKeyDown += OnWindowPreviewKeyDown;
 
-        AppLog.Info("History", "历史图库窗口已创建（T25 图库 + T26 收藏/重命名/搜索）");
+        // T30/T31：主题或语言变化时就地刷新（不重建窗口，用户的搜索/滚动位置都还在）。
+        ThemeManager.Changed += OnThemeChanged;
+        StringsUi.Changed += OnLanguageChanged;
+
+        AppLog.Info(
+            "History",
+            $"历史图库窗口已创建（T25 图库 + T26 收藏/重命名/搜索）：语言={StringsUi.Current} " +
+            $"主题={ThemeManager.EffectiveTheme} 标题={Title}");
     }
 
     // --- 供验证/诊断读取的只读状态 ---
@@ -278,8 +303,8 @@ public sealed class HistoryGalleryWindow : Window
             UpdateEmptyState();
 
             UpdateStatus(_view.HasFilter
-                ? $"共 {page.TotalCount} 条匹配（库内总计 {_totalCount} 条）"
-                : $"共 {page.TotalCount} 条历史记录");
+                ? StringsUi.Format("S.History.CountFiltered", page.TotalCount, _totalCount)
+                : StringsUi.Format("S.History.Count", page.TotalCount));
 
             AppLog.Info(
                 "History",
@@ -294,8 +319,11 @@ public sealed class HistoryGalleryWindow : Window
             _filteredCount = 0;
             _loaded.Clear();
             _cards.Children.Clear();
-            ShowEmpty("无法读取历史记录", $"数据库读取失败：{ex.Message}", showClearFilters: false);
-            UpdateStatus("读取失败（详见日志）");
+            ShowEmpty(
+                StringsUi.Get("S.History.ReadFailedTitle"),
+                StringsUi.Format("S.History.ReadFailedBody", ex.Message),
+                showClearFilters: false);
+            UpdateStatus(StringsUi.Get("S.History.ReadFailedStatus"));
         }
         finally
         {
@@ -349,7 +377,7 @@ public sealed class HistoryGalleryWindow : Window
         AutomationProperties.SetAutomationId(
             text,
             $"history-group-{group.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}");
-        AutomationProperties.SetName(text, $"日期分组 {group.Title}");
+        AutomationProperties.SetName(text, StringsUi.Format("S.History.GroupTitle", group.Title));
 
         var stack = new StackPanel
         {
@@ -373,9 +401,9 @@ public sealed class HistoryGalleryWindow : Window
 
     private HistoryCardCallbacks BuildCallbacks() => new()
     {
-        Copy = record => RunAction(record, "复制", () => HistoryActions.Copy(_store, record)),
-        SaveAs = record => RunAction(record, "另存为", () => HistoryActions.SaveAs(this, _store, record)),
-        Pin = record => RunAction(record, "贴图", () => HistoryActions.Pin(_store, record)),
+        Copy = record => RunAction(record, StringsUi.Get("S.Common.Copy"), () => HistoryActions.Copy(_store, record)),
+        SaveAs = record => RunAction(record, StringsUi.Get("S.Common.SaveAs"), () => HistoryActions.SaveAs(this, _store, record)),
+        Pin = record => RunAction(record, StringsUi.Get("S.Common.Pin"), () => HistoryActions.Pin(_store, record)),
         Delete = DeleteRecord,
         Rename = RenameRecord,
         Preview = OpenPreview,
@@ -394,7 +422,7 @@ public sealed class HistoryGalleryWindow : Window
         catch (Exception ex)
         {
             AppLog.Error("History", $"历史“{action}”失败：{record.Name}", ex);
-            message = $"{action}失败：{ex.Message}";
+            message = StringsUi.Format("S.History.ActionFailed", action, ex.Message);
         }
 
         UpdateStatus(message);
@@ -423,7 +451,7 @@ public sealed class HistoryGalleryWindow : Window
                 var answer = MessageBox.Show(
                     this,
                     warning,
-                    "取消收藏",
+                    StringsUi.Get("S.History.UnfavoriteDialogTitle"),
                     MessageBoxButton.OKCancel,
                     MessageBoxImage.Warning,
                     MessageBoxResult.Cancel);
@@ -431,7 +459,7 @@ public sealed class HistoryGalleryWindow : Window
                 if (answer != MessageBoxResult.OK)
                 {
                     AppLog.Info("History", $"取消过期收藏已放弃：用户选择保留收藏 名称={record.Name}");
-                    UpdateStatus($"已保持收藏“{record.Name}”（收藏不会被自动清理）。");
+                    UpdateStatus(StringsUi.Format("S.History.KeptFavorite", record.Name));
                     return;
                 }
 
@@ -442,7 +470,7 @@ public sealed class HistoryGalleryWindow : Window
         var updated = HistoryActions.ToggleFavorite(_store, record);
         if (updated is null)
         {
-            UpdateStatus("切换收藏失败（记录可能已不存在），请点“刷新”。");
+            UpdateStatus(StringsUi.Get("S.History.FavoriteFailed"));
             return;
         }
 
@@ -454,15 +482,15 @@ public sealed class HistoryGalleryWindow : Window
 
         if (updated.IsFavorite)
         {
-            UpdateStatus($"已收藏“{updated.Name}”（不会被 30 天清理）。");
+            UpdateStatus(StringsUi.Format("S.History.Favorited", updated.Name));
         }
         else if (HistoryRetentionPolicy.IsExpired(updated, DateTime.UtcNow))
         {
-            UpdateStatus($"已取消收藏“{updated.Name}”：它已超过 30 天，会在下次清理时被删除。");
+            UpdateStatus(StringsUi.Format("S.History.UnfavoritedExpired", updated.Name));
         }
         else
         {
-            UpdateStatus($"已取消收藏“{updated.Name}”。");
+            UpdateStatus(StringsUi.Format("S.History.Unfavorited", updated.Name));
         }
     }
 
@@ -548,26 +576,26 @@ public sealed class HistoryGalleryWindow : Window
         if (dialog.ShowDialog() != true)
         {
             AppLog.Info("History", $"历史重命名已取消：Id={record.Id} 名称={record.Name}");
-            UpdateStatus("已取消重命名。");
+            UpdateStatus(StringsUi.Get("S.History.RenameCancelled"));
             return;
         }
 
         var updated = HistoryActions.Rename(_store, record, dialog.Result, out var error);
         if (updated is null)
         {
-            UpdateStatus($"重命名失败：{error ?? "未知原因"}");
+            UpdateStatus(StringsUi.Format("S.History.RenameFailed", error ?? "?"));
             return;
         }
 
         if (ReferenceEquals(updated, record))
         {
-            UpdateStatus("名称没有变化。");
+            UpdateStatus(StringsUi.Get("S.History.RenameUnchanged"));
             return;
         }
 
         Reload();
         _loaded.FirstOrDefault(card => card.Record.Id == updated.Id)?.ApplyName(updated.Name);
-        UpdateStatus($"已重命名为“{updated.Name}”。");
+        UpdateStatus(StringsUi.Format("S.History.Renamed", updated.Name));
     }
 
     // --- T25 删除 ---
@@ -575,8 +603,8 @@ public sealed class HistoryGalleryWindow : Window
     private void DeleteRecord(HistoryRecord record)
     {
         var message = record.IsFavorite
-            ? $"确定删除“{record.Name}”吗？\n\n这是一条收藏记录，删除后图片、缩略图与记录都会永久移除。"
-            : $"确定删除“{record.Name}”吗？\n\n图片、缩略图与记录都会永久移除（不可撤销）。";
+            ? StringsUi.Format("S.History.DeleteConfirmFavorite", record.Name)
+            : StringsUi.Format("S.History.DeleteConfirm", record.Name);
 
         AppLog.Info(
             "History",
@@ -585,7 +613,7 @@ public sealed class HistoryGalleryWindow : Window
         var answer = MessageBox.Show(
             this,
             message,
-            "删除历史记录",
+            StringsUi.Get("S.History.DeleteDialogTitle"),
             MessageBoxButton.OKCancel,
             MessageBoxImage.Warning,
             MessageBoxResult.Cancel);
@@ -593,7 +621,7 @@ public sealed class HistoryGalleryWindow : Window
         if (answer != MessageBoxResult.OK)
         {
             AppLog.Info("History", $"历史删除已取消：名称={record.Name} Id={record.Id}");
-            UpdateStatus("已取消删除。");
+            UpdateStatus(StringsUi.Get("S.History.DeleteCancelled"));
             return;
         }
 
@@ -622,7 +650,7 @@ public sealed class HistoryGalleryWindow : Window
             {
                 AppLog.Info("History", $"编辑窗口已打开，本次只激活：名称={record.Name} Id={record.Id}");
                 existing.Activate();
-                UpdateStatus("这条记录已经在编辑窗口中打开。");
+                UpdateStatus(StringsUi.Get("S.History.EditAlreadyOpen"));
                 return;
             }
 
@@ -635,7 +663,7 @@ public sealed class HistoryGalleryWindow : Window
         var image = HistoryActions.LoadImage(_store, record);
         if (image is null)
         {
-            UpdateStatus("图片文件已丢失，无法追加标注。");
+            UpdateStatus(StringsUi.Get("S.History.ImageMissingEdit"));
             return;
         }
 
@@ -651,12 +679,12 @@ public sealed class HistoryGalleryWindow : Window
                 "History",
                 $"历史编辑窗口已打开：名称={record.Name} Id={record.Id} 图片={image.PixelWidth}x{image.PixelHeight} " +
                 $"历史条数={before} 收藏={record.IsFavorite}");
-            UpdateStatus($"正在编辑“{record.Name}”：追加标注后点“保存并覆盖”。");
+            UpdateStatus(StringsUi.Format("S.History.EditOpened", record.Name));
         }
         catch (Exception ex)
         {
             AppLog.Error("History", $"打开历史编辑窗口失败：{record.Name}", ex);
-            UpdateStatus($"打开编辑窗口失败：{ex.Message}");
+            UpdateStatus(StringsUi.Format("S.History.EditOpenFailed", ex.Message));
         }
     }
 
@@ -685,8 +713,12 @@ public sealed class HistoryGalleryWindow : Window
             $"修改时间={HistoryRecord.FormatUtc(saved.UpdatedAtUtc)}");
 
         Reload();
-        UpdateStatus(
-            $"已保存并覆盖“{saved.Name}”（{saved.Width}×{saved.Height}），历史记录数仍为 {countAfter}。");
+        UpdateStatus(StringsUi.Format(
+            "S.History.EditSaveOverwritten",
+            saved.Name,
+            saved.Width,
+            saved.Height,
+            countAfter));
     }
 
     // --- T25 预览 ---
@@ -696,7 +728,7 @@ public sealed class HistoryGalleryWindow : Window
         var image = HistoryActions.LoadImage(_store, record);
         if (image is null)
         {
-            UpdateStatus("图片文件已丢失，无法预览。");
+            UpdateStatus(StringsUi.Get("S.History.ImageMissingPreview"));
             return;
         }
 
@@ -712,8 +744,8 @@ public sealed class HistoryGalleryWindow : Window
                 this,
                 record,
                 image,
-                r => RunAction(r, "复制", () => HistoryActions.Copy(_store, r)),
-                r => RunAction(r, "贴图", () => HistoryActions.Pin(_store, r)));
+                r => RunAction(r, StringsUi.Get("S.Common.Copy"), () => HistoryActions.Copy(_store, r)),
+                r => RunAction(r, StringsUi.Get("S.Common.Pin"), () => HistoryActions.Pin(_store, r)));
             window.ClampToWorkArea();
             window.Closed += (_, _) =>
             {
@@ -730,7 +762,7 @@ public sealed class HistoryGalleryWindow : Window
         catch (Exception ex)
         {
             AppLog.Error("History", $"打开历史预览失败：{record.Name}", ex);
-            UpdateStatus($"打开预览失败：{ex.Message}");
+            UpdateStatus(StringsUi.Format("S.History.PreviewOpenFailed", ex.Message));
         }
     }
 
@@ -782,7 +814,7 @@ public sealed class HistoryGalleryWindow : Window
         catch (Exception ex)
         {
             AppLog.Error("History", "历史图库加载更多失败", ex);
-            UpdateStatus("加载更多失败（详见日志）。");
+            UpdateStatus(StringsUi.Get("S.History.LoadMoreFailed"));
         }
     }
 
@@ -798,12 +830,12 @@ public sealed class HistoryGalleryWindow : Window
         }
 
         // 文案全部来自 Core（区分"一条都没有"与"被筛掉了"），窗口不自己拼。
-        var body = _view.DescribeEmptyState(_totalCount);
+        var body = DescribeEmptyState(_view, _totalCount);
         var title = _totalCount <= 0
-            ? "还没有历史记录"
+            ? StringsUi.Get("S.History.EmptyTitle")
             : _view.HasFilter
-                ? "没有匹配的记录"
-                : "没有可显示的记录";
+                ? StringsUi.Get("S.History.NoMatchTitle")
+                : StringsUi.Get("S.History.NothingToShowTitle");
 
         ShowEmpty(title, body, showClearFilters: _view.HasFilter);
     }
@@ -855,7 +887,11 @@ public sealed class HistoryGalleryWindow : Window
 
         _selected = card;
         card.IsSelected = true;
-        UpdateStatus($"{card.Record.Name} · {card.Record.Width}×{card.Record.Height} · 已选中");
+        UpdateStatus(StringsUi.Format(
+            "S.History.SelectedStatus",
+            card.Record.Name,
+            card.Record.Width,
+            card.Record.Height));
     }
 
     // --- 生命周期 ---
@@ -875,9 +911,85 @@ public sealed class HistoryGalleryWindow : Window
         }
     }
 
+    // --- T30 主题 / T31 语言 ---
+
+    /// <summary>主题切换后把新配色套到整棵树（已创建的卡片也会换色）。</summary>
+    private void OnThemeChanged(AppTheme effective)
+    {
+        var palette = ThemeManager.Palette;
+        Background = palette.WindowBackgroundBrush;
+        HistoryUi.ApplyThemeTo(Content as DependencyObject, _lastPalette);
+        _filter?.ApplyPalette();
+        DwmApi.TrySetDarkTitleBar(this, palette.IsDark);
+        _lastPalette = palette;
+        AppLog.Info("History", $"历史图库已按新主题刷新：{effective}（{palette}）");
+    }
+
+    /// <summary>语言切换后就地换文案（重建卡片与空状态，保留当前筛选）。</summary>
+    private void OnLanguageChanged(AppLanguage language)
+    {
+        Title = StringsUi.Get("S.History.WindowTitle");
+        AutomationProperties.SetName(this, StringsUi.Get("S.History.WindowName"));
+        _title.Text = StringsUi.Get("S.History.Title");
+        _search.ToolTip = StringsUi.Get("S.History.SearchPlaceholder");
+        AutomationProperties.SetName(_search, StringsUi.Get("S.History.SearchName"));
+        HistoryUi.SetButtonText(_refreshButton, StringsUi.Get("S.History.Refresh"));
+        HistoryUi.SetButtonText(_clearFilters, StringsUi.Get("S.History.ClearFilters"));
+        _footer.Text = StringsUi.Get("S.History.Footer");
+        _filter.Recreate(
+            StringsUi.Get("S.History.FilterAll"),
+            StringsUi.Get("S.History.FilterFavorites"),
+            _view.FavoritesOnly);
+
+        // 卡片里的名称/时间/来源/按钮全部重新生成一遍（重建卡片比逐个改文字更不容易漏）。
+        Reload();
+        AppLog.Info("History", $"历史图库已按新语言刷新：{language}");
+    }
+
+    /// <summary>切换前的那套调色板（主题换色时用来识别"哪个颜色是语义色"）。</summary>
+    private ThemePalette _lastPalette = ThemeManager.Palette;
+
+    /// <summary>
+    /// 空状态说明（T31）：与 Core <see cref="HistoryView.DescribeEmptyState"/> 同一套分支，
+    /// 但文案走语言资源，并且把快捷键换成当前设置里的组合。
+    /// </summary>
+    private static string DescribeEmptyState(HistoryView view, int totalCount)
+    {
+        if (totalCount <= 0)
+        {
+            return StringsUi.Format("S.History.EmptyNoRecords", ShortcutText());
+        }
+
+        if (view.FavoritesOnly && view.NormalizedSearchText is not null)
+        {
+            return StringsUi.Format("S.History.EmptySearchAndFavorites", view.NormalizedSearchText);
+        }
+
+        if (view.FavoritesOnly)
+        {
+            return StringsUi.Get("S.History.EmptyFavorites");
+        }
+
+        if (view.NormalizedSearchText is not null)
+        {
+            return StringsUi.Format("S.History.EmptySearch", view.NormalizedSearchText);
+        }
+
+        return StringsUi.Get("S.History.EmptyOther");
+    }
+
+    /// <summary>当前截图快捷键（空状态里提示"按 X 截个图"）。</summary>
+    private static string ShortcutText()
+    {
+        var shortcut = HistoryShortcutProvider.ScreenshotShortcut;
+        return string.IsNullOrWhiteSpace(shortcut) ? AppSettings.DefaultScreenshotShortcut : shortcut;
+    }
+
     private void OnClosedInternal(object? sender, EventArgs e)
     {
         _searchTimer.Stop();
+        ThemeManager.Changed -= OnThemeChanged;
+        StringsUi.Changed -= OnLanguageChanged;
 
         // T28：图库关闭时一并关闭编辑窗口（未保存就等于取消，原图不动）。
         if (Edit is { } edit)

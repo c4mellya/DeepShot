@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using ZeepCut.Core.History;
+using ZeepCut.Ui;
 
 namespace ZeepCut.History;
 
@@ -26,6 +27,7 @@ internal sealed class HistoryRenameDialog : Window
 {
     private readonly TextBox _input;
     private readonly TextBlock _error;
+    private TextBlock _hint = null!;
     private readonly string _currentName;
 
     /// <param name="owner">父窗口（图库）。</param>
@@ -34,7 +36,7 @@ internal sealed class HistoryRenameDialog : Window
     {
         _currentName = currentName ?? string.Empty;
 
-        Title = "重命名历史记录";
+        Title = StringsUi.Get("S.History.RenameTitle");
         Width = 420;
         SizeToContent = SizeToContent.Height;
         ResizeMode = ResizeMode.NoResize;
@@ -52,7 +54,11 @@ internal sealed class HistoryRenameDialog : Window
             Margin = new Thickness(0, 4, 0, 2),
             MaxLength = 120,
         };
-        AutomationProperties.SetName(_input, "历史记录名称");
+        AutomationProperties.SetName(_input, StringsUi.Get("S.History.RenameInputName"));
+        _input.Background = HistoryUi.CardBackground;
+        _input.Foreground = HistoryUi.Foreground;
+        _input.BorderBrush = HistoryUi.Border;
+        _input.CaretBrush = HistoryUi.Foreground;
         AutomationProperties.SetAutomationId(_input, "history-rename-input");
         _input.TextChanged += (_, _) => ClearError();
         _input.PreviewKeyDown += OnInputPreviewKeyDown;
@@ -63,16 +69,16 @@ internal sealed class HistoryRenameDialog : Window
         AutomationProperties.SetAutomationId(_error, "history-rename-error");
 
         var hint = HistoryUi.Text(
-            "名称用于图库显示与搜索；不能包含 \\ / : * ? \" < > | 这些字符（会被替换为 _）。",
+            StringsUi.Get("S.History.RenameHint"),
             11.5,
             HistoryUi.SecondaryForeground);
         hint.TextWrapping = TextWrapping.Wrap;
         hint.Margin = new Thickness(0, 6, 0, 0);
 
-        var ok = HistoryUi.Button("确定", "确定重命名", TryAccept, primary: true);
+        var ok = HistoryUi.Button(StringsUi.Get("S.History.RenameOk"), StringsUi.Get("S.History.RenameOk"), TryAccept, primary: true);
         AutomationProperties.SetAutomationId(ok, "history-rename-ok");
         ok.IsDefault = true;
-        var cancel = HistoryUi.Button("取消", "取消重命名", () => { DialogResult = false; });
+        var cancel = HistoryUi.Button(StringsUi.Get("S.History.RenameCancel"), StringsUi.Get("S.History.RenameCancel"), () => { DialogResult = false; });
         AutomationProperties.SetAutomationId(cancel, "history-rename-cancel");
         cancel.IsCancel = true;
 
@@ -86,7 +92,8 @@ internal sealed class HistoryRenameDialog : Window
         buttons.Children.Add(cancel);
 
         var panel = new StackPanel { Margin = new Thickness(18, 14, 18, 16) };
-        panel.Children.Add(HistoryUi.Text("名称", 12.5, HistoryUi.SecondaryForeground));
+        _hint = hint;
+        panel.Children.Add(HistoryUi.Text(StringsUi.Get("S.History.RenameLabel"), 12.5, HistoryUi.SecondaryForeground));
         panel.Children.Add(_input);
         panel.Children.Add(_error);
         panel.Children.Add(hint);

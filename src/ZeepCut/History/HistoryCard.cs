@@ -6,6 +6,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using ZeepCut.Core.History;
+using ZeepCut.Ui;
 
 namespace ZeepCut.History;
 
@@ -62,9 +63,9 @@ internal sealed class HistoryCard : Border
         Padding = new Thickness(8);
         Cursor = Cursors.Hand;
         ToolTip = $"{record.Name}\n{FormatTime(record)}\n{record.Width}×{record.Height} · " +
-                  $"{HistorySourceText.Describe(record.Source)}";
+                  $"{DescribeSource(record.Source)}";
 
-        AutomationProperties.SetName(this, $"历史记录 {record.Name}");
+        AutomationProperties.SetName(this, StringsUi.Format("S.History.CardName", record.Name));
         AutomationProperties.SetAutomationId(this, $"history-card-{index}");
 
         _picture = new Image
@@ -92,7 +93,7 @@ internal sealed class HistoryCard : Border
             {
                 Children =
                 {
-                    HistoryUi.Text("缩略图缺失", 12, HistoryUi.SecondaryForeground),
+                    HistoryUi.Text(StringsUi.Get("S.History.ThumbnailMissing"), 12, HistoryUi.SecondaryForeground),
                 },
             };
             ((Grid)_thumbnailFrame.Child).Children[0].SetValue(
@@ -119,9 +120,9 @@ internal sealed class HistoryCard : Border
             HorizontalAlignment = HorizontalAlignment.Left,
             VerticalAlignment = VerticalAlignment.Top,
             Margin = new Thickness(4),
-            ToolTip = record.IsFavorite ? "取消收藏" : "收藏（收藏项不会被 30 天清理）",
+            ToolTip = record.IsFavorite ? StarOnHint : StarOffHint,
         };
-        AutomationProperties.SetName(_starButton, record.IsFavorite ? "取消收藏" : "收藏");
+        AutomationProperties.SetName(_starButton, record.IsFavorite ? StarOn : StarOff);
         AutomationProperties.SetAutomationId(_starButton, $"history-star-{index}");
         _starButton.Click += (_, e) =>
         {
@@ -143,7 +144,7 @@ internal sealed class HistoryCard : Border
 
         var meta = HistoryUi.Text(
             $"{FormatTime(record)} · {record.Width}×{record.Height} · " +
-            $"{HistorySourceText.Describe(record.Source)}",
+            $"{DescribeSource(record.Source)}",
             11,
             HistoryUi.SecondaryForeground);
         meta.Margin = new Thickness(2, 1, 2, 0);
@@ -187,7 +188,8 @@ internal sealed class HistoryCard : Border
     {
         _starButton.Content = favorite ? "★" : "☆";
         _starButton.Foreground = favorite ? HistoryUi.StarBrush : HistoryUi.StarInactiveBrush;
-        AutomationProperties.SetName(_starButton, favorite ? "取消收藏" : "收藏");
+        _starButton.ToolTip = favorite ? StarOnHint : StarOffHint;
+        AutomationProperties.SetName(_starButton, favorite ? StarOn : StarOff);
     }
 
     /// <summary>重命名后更新名称（不重建控件）。</summary>
@@ -195,19 +197,36 @@ internal sealed class HistoryCard : Border
     {
         _nameBlock.Text = name;
         ToolTip = $"{name}\n{FormatTime(_record)}\n{_record.Width}×{_record.Height} · " +
-                  $"{HistorySourceText.Describe(_record.Source)}";
-        AutomationProperties.SetName(this, $"历史记录 {name}");
+                  $"{DescribeSource(_record.Source)}";
+        AutomationProperties.SetName(this, StringsUi.Format("S.History.CardName", name));
     }
 
-    /// <summary>格式化时间：今天只显示时分秒，其它日期带上日期。</summary>
+    /// <summary>格式化时间：今天只显示时分秒，其它日期带上日期（"今天"随语言）。</summary>
     internal static string FormatTime(HistoryRecord record)
     {
         var local = record.CreatedAtLocal;
         var today = DateTime.Now.Date;
         return local.Date == today
-            ? "今天 " + local.ToString("HH:mm:ss", CultureInfo.InvariantCulture)
+            ? StringsUi.Format("S.History.TimeToday", local.ToString("HH:mm:ss", CultureInfo.InvariantCulture))
             : local.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
     }
+
+    /// <summary>来源描述（截图 / 剪贴板贴图 / 历史记录，随语言变化）。</summary>
+    internal static string DescribeSource(HistorySource source) => source switch
+    {
+        HistorySource.Screenshot => StringsUi.Get("S.History.SourceScreenshot"),
+        HistorySource.Clipboard => StringsUi.Get("S.History.SourceClipboard"),
+        HistorySource.History => StringsUi.Get("S.History.SourceHistory"),
+        _ => source.ToString(),
+    };
+
+    private static string StarOn => StringsUi.Get("S.History.StarOn");
+
+    private static string StarOff => StringsUi.Get("S.History.StarOff");
+
+    private static string StarOnHint => StringsUi.Get("S.History.StarOnHint");
+
+    private static string StarOffHint => StringsUi.Get("S.History.StarOffHint");
 
     private Grid BuildActionBar(HistoryCardCallbacks callbacks)
     {
@@ -216,24 +235,32 @@ internal sealed class HistoryCard : Border
         grid.ColumnDefinitions.Add(new ColumnDefinition());
 
         var firstRow = new StackPanel { Orientation = Orientation.Horizontal };
-        firstRow.Children.Add(Small("复制", "复制", () => callbacks.Copy?.Invoke(_record)));
-        firstRow.Children.Add(Small("贴图", "贴图", () => callbacks.Pin?.Invoke(_record)));
+        firstRow.Children.Add(Small(StringsUi.Get("S.Common.Copy"), Slugs.Copy, () => callbacks.Copy?.Invoke(_record)));
+        firstRow.Children.Add(Small(StringsUi.Get("S.Common.Pin"), Slugs.Pin, () => callbacks.Pin?.Invoke(_record)));
 
         var secondRow = new StackPanel { Orientation = Orientation.Horizontal };
-        secondRow.Children.Add(Small("改名", "重命名", () => callbacks.Rename?.Invoke(_record)));
-        secondRow.Children.Add(Small("删除", "删除这条历史", () => callbacks.Delete?.Invoke(_record)));
+        secondRow.Children.Add(Small(StringsUi.Get("S.Common.Rename"), Slugs.Rename, () => callbacks.Rename?.Invoke(_record)));
+        secondRow.Children.Add(Small(
+            StringsUi.Get("S.Common.Delete"),
+            Slugs.Delete,
+            () => callbacks.Delete?.Invoke(_record)));
 
         // T28：追加标注并覆盖（在现有图片上继续标注，保存回同一条记录）。
-        var secondRowExtra = Small("标注", "追加标注并覆盖这条记录", () => callbacks.Edit?.Invoke(_record));
-        secondRow.Children.Add(secondRowExtra);
+        secondRow.Children.Add(Small(
+            StringsUi.Get("S.Common.Annotation"),
+            Slugs.Annotation,
+            () => callbacks.Edit?.Invoke(_record)));
 
         var thirdRow = new StackPanel
         {
             Orientation = Orientation.Horizontal,
             Margin = new Thickness(0, 4, 0, 0),
         };
-        thirdRow.Children.Add(Small("另存为", "另存为", () => callbacks.SaveAs?.Invoke(_record)));
-        thirdRow.Children.Add(Small("预览", "预览大图", () => callbacks.Preview?.Invoke(_record)));
+        thirdRow.Children.Add(Small(StringsUi.Get("S.Common.SaveAs"), Slugs.SaveAs, () => callbacks.SaveAs?.Invoke(_record)));
+        thirdRow.Children.Add(Small(
+            StringsUi.Get("S.Common.Preview"),
+            Slugs.Preview,
+            () => callbacks.Preview?.Invoke(_record)));
 
         var stack = new StackPanel();
         stack.Children.Add(firstRow);
@@ -245,9 +272,34 @@ internal sealed class HistoryCard : Border
         return grid;
     }
 
-    private Button Small(string text, string automationName, Action onClick)
+    /// <summary>
+    /// 操作按钮的 AutomationId 后缀（语言无关，验证脚本按它定位）。
+    /// </summary>
+    /// <remarks>
+    /// T31 起这些 id 不再拼中文：T25/T26 的验证脚本用的是 <c>history-action-复制-N</c>，
+    /// 切到英文后那种 id 会变，脚本就找不到了；固定 slug 让脚本与语言无关。
+    /// T25/T26 脚本已同步改成 slug（见 <c>scripts/verify-t25t26.ps1</c> 的 <c>Report-Actions</c>）。
+    /// </remarks>
+    private static class Slugs
     {
-        var button = HistoryUi.Button(text, automationName, onClick);
+        internal const string Copy = "copy";
+
+        internal const string Pin = "pin";
+
+        internal const string Rename = "rename";
+
+        internal const string SaveAs = "save-as";
+
+        internal const string Delete = "delete";
+
+        internal const string Annotation = "annotation";
+
+        internal const string Preview = "preview";
+    }
+
+    private Button Small(string text, string automationSlug, Action onClick)
+    {
+        var button = HistoryUi.Button(text, text, onClick);
         button.MinWidth = 0;
         button.Padding = new Thickness(7, 2, 7, 2);
         button.Margin = new Thickness(0, 0, 4, 4);
@@ -257,12 +309,12 @@ internal sealed class HistoryCard : Border
         // 会出现“标注”被画成一个方块/缺字（本轮真实桌面实测到过一次）。
         button.Content = HistoryUi.Text(text, 11.5, HistoryUi.Foreground, measureNaturalWidth: true);
         button.FontFamily = new FontFamily(HistoryUi.FontFamilyName);
-        AutomationProperties.SetAutomationId(button, $"history-action-{text}-{Index}");
+        AutomationProperties.SetAutomationId(button, $"history-action-{automationSlug}-{Index}");
+        AutomationProperties.SetName(button, text);
 
         // 宽度按文字实测：HistoryUi.Text 默认带 CharacterEllipsis 与 NoWrap，放进 Grid 的
         // 自动列时会被量成很小的宽度（实测“标注”按钮只有 49px、字被裁成一条）。
-        button.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        button.MinWidth = Math.Max(0, button.DesiredSize.Width);
+        HistoryUi.FitButtonWidth(button);
         return button;
     }
 
@@ -309,6 +361,18 @@ internal sealed class HistoryCard : Border
     /// 之类会改变滚动位置的行为来实现；这里只把垂直方向的像素增量交给外层
     /// <see cref="ScrollViewer"/>，横向与其它命中一律不处理。
     /// </remarks>
+    /// <summary>主题切换后按新配色刷新（切换后才知道旧色，所以由窗口在 Changed 里调）。</summary>
+    internal void ApplyTheme(ThemePalette previous)
+    {
+        var palette = ThemeManager.Palette;
+        Background = palette.SurfaceBrush;
+        BorderBrush = IsSelected ? palette.AccentBrush : palette.BorderBrush;
+        _thumbnailFrame.Background = palette.SurfaceAltBrush;
+        _starButton.Foreground = _record.IsFavorite ? palette.StarBrush : palette.StarInactiveBrush;
+        _starButton.BorderBrush = palette.BorderBrush;
+        HistoryUi.ApplyThemeTo(Child as DependencyObject, previous);
+    }
+
     internal void SetDragScroll(ScrollViewer? scroll)
     {
         Point? origin = null;

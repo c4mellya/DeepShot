@@ -31,4 +31,10 @@
     <Resource Include="Assets\app.ico" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- T31：中英文资源字典。复制到输出目录，运行时由 LanguageManager 按设置选择加载（不走内嵌 BAML）。 -->
+    <Content Include="Resources\Lang\Strings.zh-Hans.xaml" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Resources\Lang\Strings.en.xaml" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

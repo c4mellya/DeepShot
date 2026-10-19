@@ -19,6 +19,7 @@ using ZeepCut.Editor;
 using ZeepCut.Output;
 using ZeepCut.Pins;
 using ZeepCut.Platform;
+using ZeepCut.Ui;
 
 
 namespace ZeepCut.Capture;
@@ -186,7 +187,7 @@ public sealed class CaptureOverlayWindow : Window
             SelectionHandleTolerance);
         _selection.SetWindowCandidates(candidates.Select(candidate => candidate.Bounds));
 
-        Title = "Zeep Cut 截图遮罩";
+        Title = StringsUi.Get("S.Overlay.WindowTitle");
         WindowStyle = WindowStyle.None;
         ResizeMode = ResizeMode.NoResize;
         ShowInTaskbar = false;
@@ -1537,7 +1538,9 @@ public sealed class CaptureOverlayWindow : Window
         if (_lockText is not null)
         {
             var locked = _session.IsSelectionLocked;
-            _lockText.Text = locked ? $"选区已锁定（{_session.Count} 个标注）" : string.Empty;
+            _lockText.Text = locked
+                ? StringsUi.Format("S.Overlay.SelectionLocked", _session.Count)
+                : string.Empty;
             _lockText.Visibility = locked ? Visibility.Visible : Visibility.Collapsed;
         }
     }
@@ -2187,13 +2190,13 @@ public sealed class CaptureOverlayWindow : Window
     {
         var dialog = new SaveFileDialog
         {
-            Title = "另存为",
+            Title = StringsUi.Get("S.Dialog.SaveTitle"),
             FileName = CaptureFileName.CreateDefault(DateTime.Now, CaptureImageFormat.Png),
             DefaultExt = ".png",
             AddExtension = true,
             OverwritePrompt = true,
             CheckPathExists = true,
-            Filter = "PNG 图片 (*.png)|*.png|JPEG 图片 (*.jpg;*.jpeg)|*.jpg;*.jpeg",
+            Filter = StringsUi.Get("S.Dialog.SaveFilter"),
             FilterIndex = 1,
             RestoreDirectory = true,
         };
@@ -2236,14 +2239,14 @@ public sealed class CaptureOverlayWindow : Window
             Margin = new Thickness(0, 0, 0, 5),
         };
 
-        toolRow.Children.Add(CreateToolButton("选择", null));
-        toolRow.Children.Add(CreateToolButton("矩形", AnnotationTool.Rectangle));
-        toolRow.Children.Add(CreateToolButton("椭圆", AnnotationTool.Ellipse));
-        toolRow.Children.Add(CreateToolButton("箭头", AnnotationTool.Arrow));
-        toolRow.Children.Add(CreateToolButton("直线", AnnotationTool.Line));
-        toolRow.Children.Add(CreateToolButton("画笔", AnnotationTool.Freehand));
-        toolRow.Children.Add(CreateToolButton("文字", AnnotationTool.Text));
-        toolRow.Children.Add(CreateToolButton("马赛克", AnnotationTool.Mosaic));
+        toolRow.Children.Add(CreateToolButton("S.Annotation.Tool.Select", null, "select"));
+        toolRow.Children.Add(CreateToolButton("S.Annotation.Tool.Rectangle", AnnotationTool.Rectangle, "rectangle"));
+        toolRow.Children.Add(CreateToolButton("S.Annotation.Tool.Ellipse", AnnotationTool.Ellipse, "ellipse"));
+        toolRow.Children.Add(CreateToolButton("S.Annotation.Tool.Arrow", AnnotationTool.Arrow, "arrow"));
+        toolRow.Children.Add(CreateToolButton("S.Annotation.Tool.Line", AnnotationTool.Line, "line"));
+        toolRow.Children.Add(CreateToolButton("S.Annotation.Tool.Freehand", AnnotationTool.Freehand, "freehand"));
+        toolRow.Children.Add(CreateToolButton("S.Annotation.Tool.Text", AnnotationTool.Text, "text"));
+        toolRow.Children.Add(CreateToolButton("S.Annotation.Tool.Mosaic", AnnotationTool.Mosaic, "mosaic"));
 
         var actionRow = new StackPanel
         {
@@ -2268,12 +2271,12 @@ public sealed class CaptureOverlayWindow : Window
         }
 
         actionRow.Children.Add(CreateToolbarSeparator());
-        actionRow.Children.Add(CreateToolbarButton("撤销", () => UndoAnnotation("工具栏按钮“撤销”")));
-        actionRow.Children.Add(CreateToolbarButton("重做", () => RedoAnnotation("工具栏按钮“重做”")));
-        actionRow.Children.Add(CreateToolbarButton("复制", () => TriggerCopy("工具栏按钮“复制”")));
-        actionRow.Children.Add(CreateToolbarButton("另存为", () => TriggerSaveAs("工具栏按钮“另存为”")));
-        actionRow.Children.Add(CreateToolbarButton("贴图", () => TriggerPin("工具栏按钮“贴图”")));
-        actionRow.Children.Add(CreateToolbarButton("取消", () => Cancel("工具栏取消按钮"), emphasize: true));
+        actionRow.Children.Add(CreateToolbarButton("S.Overlay.Undo", "undo", () => UndoAnnotation("工具栏按钮“撤销”")));
+        actionRow.Children.Add(CreateToolbarButton("S.Overlay.Redo", "redo", () => RedoAnnotation("工具栏按钮“重做”")));
+        actionRow.Children.Add(CreateToolbarButton("S.Overlay.Copy", "copy", () => TriggerCopy("工具栏按钮“复制”")));
+        actionRow.Children.Add(CreateToolbarButton("S.Overlay.SaveAs", "save-as", () => TriggerSaveAs("工具栏按钮“另存为”")));
+        actionRow.Children.Add(CreateToolbarButton("S.Overlay.Pin", "pin", () => TriggerPin("工具栏按钮“贴图”")));
+        actionRow.Children.Add(CreateToolbarButton("S.Overlay.Cancel", "cancel", () => Cancel("工具栏取消按钮"), emphasize: true));
 
         rows.Children.Add(toolRow);
         rows.Children.Add(actionRow);
@@ -2291,8 +2294,12 @@ public sealed class CaptureOverlayWindow : Window
     }
 
     /// <summary>上行标注工具按钮：“选择”传 <c>null</c> 表示回到不绘制模式。</summary>
-    private Button CreateToolButton(string label, AnnotationTool? tool)
+    /// <param name="textKey">语言资源键（T31）。</param>
+    /// <param name="tool">工具（null = 选择模式）。</param>
+    /// <param name="slug">AutomationId 后缀（语言无关，验证脚本按它定位）。</param>
+    private Button CreateToolButton(string textKey, AnnotationTool? tool, string slug)
     {
+        var label = StringsUi.Get(textKey);
         var button = new Button
         {
             Content = label,
@@ -2310,9 +2317,10 @@ public sealed class CaptureOverlayWindow : Window
         };
 
         button.Click += (_, _) => SelectTool(tool);
-        AutomationProperties.SetName(button, $"工具{label}");
+        AutomationProperties.SetName(button, label);
+        AutomationProperties.SetAutomationId(button, $"overlay-tool-{slug}");
         _toolButtons.Add((tool, button));
-        _toolbarButtons.Add(($"工具{label}", button));
+        _toolbarButtons.Add((label, button));
         return button;
     }
 
@@ -2334,7 +2342,7 @@ public sealed class CaptureOverlayWindow : Window
         };
 
         button.Click += (_, _) => SelectColor(color);
-        var label = $"颜色{color}";
+        var label = StringsUi.Format("S.Annotation.Color", color);
         AutomationProperties.SetName(button, label);
         _colorSwatches.Add((color, button));
         _toolbarButtons.Add((label, button));
@@ -2358,12 +2366,13 @@ public sealed class CaptureOverlayWindow : Window
             Focusable = false,
             IsTabStop = false,
             Cursor = Cursors.Hand,
-            ToolTip = $"粗细 {thickness} 像素",
+            ToolTip = StringsUi.Format("S.Annotation.ThicknessTooltip", thickness),
         };
 
         button.Click += (_, _) => SelectThickness(thickness);
-        var label = $"粗细{thickness}";
+        var label = StringsUi.Format("S.Annotation.Thickness", thickness);
         AutomationProperties.SetName(button, label);
+        AutomationProperties.SetAutomationId(button, $"overlay-thickness-{thickness}");
         _thicknessButtons.Add((thickness, button));
         _toolbarButtons.Add((label, button));
         return button;
@@ -2537,8 +2546,9 @@ public sealed class CaptureOverlayWindow : Window
         Canvas.SetTop(_lockBadge, top);
     }
 
-    private Button CreateToolbarButton(string text, Action onClick, bool emphasize = false)
+    private Button CreateToolbarButton(string textKey, string slug, Action onClick, bool emphasize = false)
     {
+        var text = StringsUi.Get(textKey);
         var button = new Button
         {
             Content = text,
@@ -2559,6 +2569,8 @@ public sealed class CaptureOverlayWindow : Window
 
         // 按钮不抢键盘焦点，保证 Enter/Esc 始终作用于遮罩。
         button.Click += (_, _) => onClick();
+        AutomationProperties.SetName(button, text);
+        AutomationProperties.SetAutomationId(button, $"overlay-action-{slug}");
         _toolbarButtons.Add((text, button));
         return button;
     }
