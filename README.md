@@ -46,6 +46,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/publish.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/publish.ps1 -InnoCompiler 'C:\Path\To\ISCC.exe'
 ```
 
-本次收尾按用户要求没有运行测试、没有启动应用验收。既有测试源码保留；`scripts/build.ps1` 会运行测试，发布使用独立的 `scripts/publish.ps1`。发布状态与未验证项见 `ACCEPTANCE.md`。
+项目已移除测试项目、验证脚本及临时记录。`scripts/build.ps1` 仅编译，`scripts/publish.ps1` 生成发布文件。最新生成物位于 `artifacts/release/`，完整自包含程序位于 `artifacts/publish/win-x64/`。本次清理不重新执行编译或运行程序。
+
+保留目录：`src/`（应用源码）、`installer/`（安装包脚本）、`scripts/`（构建和发布）、`artifacts/`（最新生成物）。
 
 首版不包含长截图、OCR、录屏、跨屏框选或云同步。

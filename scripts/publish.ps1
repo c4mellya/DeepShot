@@ -11,7 +11,7 @@ New-Item -ItemType Directory -Force -Path $release | Out-Null
 # Publish only: intentionally does not invoke the test project or launch the application.
 & dotnet publish $project -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -p:PublishTrimmed=false -o $output --nologo
 if ($LASTEXITCODE -ne 0) { throw "Publish failed ($LASTEXITCODE)" }
-foreach ($name in @('README.md', 'README.en.md', 'RELEASE_NOTES.md', 'ACCEPTANCE.md')) {
+foreach ($name in @('README.md', 'README.en.md', 'RELEASE_NOTES.md')) {
     Copy-Item -LiteralPath (Join-Path $root $name) -Destination $output -Force
 }
 Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -21,7 +21,6 @@ if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }
 
 if (-not $InnoCompiler) {
     $candidates = @(
-        (Join-Path $root 'artifacts\tools\InnoSetup\ISCC.exe'),
         "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
         "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"
     )

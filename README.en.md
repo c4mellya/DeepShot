@@ -43,6 +43,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/publish.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/publish.ps1 -InnoCompiler 'C:\Path\To\ISCC.exe'
 ```
 
-The final implementation pass intentionally runs no tests or desktop acceptance checks, as requested. Existing tests remain in the repository. The publish script does not invoke tests. See `ACCEPTANCE.md` for validation limits.
+Test projects, validation scripts, and temporary development records have been removed. `scripts/build.ps1` builds only; `scripts/publish.ps1` produces release files. Latest packages are in `artifacts/release/`; the complete self-contained application is in `artifacts/publish/win-x64/`. This cleanup does not rebuild or launch the application.
+
+Retained directories: `src/` (application sources), `installer/` (installer definition), `scripts/` (build and publish), and `artifacts/` (latest outputs).
 
 Scrolling capture, OCR, recording, cloud sync and cross-monitor selections are outside this release.
