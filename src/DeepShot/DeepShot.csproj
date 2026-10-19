@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>DeepShot</RootNamespace>
+    <AssemblyName>DeepShot</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <Version>0.1.13</Version>
+    <AssemblyTitle>DeepShot</AssemblyTitle>
+    <Product>DeepShot</Product>
+    <Company>DeepShot</Company>
+    <SatelliteResourceLanguages>en;zh-Hans</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DeepShot.Core\DeepShot.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\app.ico" />
+    <Resource Include="Assets\app-icon.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- T31：中英文资源字典。复制到输出目录，运行时由 LanguageManager 按设置选择加载（不走内嵌 BAML）。 -->
+    <Content Include="Resources\Lang\Strings.zh-Hans.xaml" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Resources\Lang\Strings.en.xaml" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

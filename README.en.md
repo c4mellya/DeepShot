@@ -1,16 +1,14 @@
-# deep-cut
+# DeepShot
 
-deep-cut is a screenshot and desktop pin tool for Windows 10 22H2 / Windows 11 x64, built with C#, .NET 10 and WPF. Includes Simplified Chinese and English, light/dark/system themes.
+DeepShot is a screenshot and desktop pin tool for Windows 10 22H2 / Windows 11 x64, built with C#, .NET 10 and WPF. Includes Simplified Chinese and English, light/dark/system themes.
 
-Repository: [c4mellya/deep-cut](https://github.com/c4mellya/deep-cut) · [简体中文](README.md)
+Repository: [c4mellya/DeepShot](https://github.com/c4mellya/DeepShot) · [简体中文](README.md)
 
 ## Install
 
-The product has been renamed to `deep-cut`. Starting with 0.1.13, the installer and portable ZIP use the new name. Executable names and the data folder continue to use `ZeepCut` to preserve existing settings and history.
+Run `DeepShot-0.1.13-Setup-x64.exe` for a per-user installation, or extract `DeepShot-0.1.13-win-x64.zip`, open the `DeepShot` folder, and run `DeepShot.exe`. Both releases include the .NET runtime. Keep all files and the Resources folder together. The installer is unsigned.
 
-Run `deep-cut-0.1.13-Setup-x64.exe` for a per-user installation, or extract `deep-cut-0.1.13-win-x64.zip` and run `ZeepCut.exe`. Both releases include the .NET runtime. Keep all files and the Resources folder together. The installer is unsigned.
-
-deep-cut lives in the system tray, possibly inside the hidden icons panel. Closing History or Settings keeps the application running; select Exit from the tray menu to stop it. Startup at sign-in is optional and disabled by default. A short guide appears on first launch.
+DeepShot lives in the system tray, possibly inside the hidden icons panel. Closing History or Settings keeps the application running; select Exit from the tray menu to stop it. Startup at sign-in is optional and disabled by default. A short guide appears on first launch.
 
 ## Capture and annotate
 
@@ -42,20 +40,20 @@ Drag a history thumbnail or the full preview image into another application or f
 
 “Save and overwrite” replaces the same history image without keeping older versions. Existing annotations are flattened pixels. Canceling leaves the image unchanged. Already-open pins keep their original snapshot.
 
-Settings provides configurable shortcuts, default capture mode, language, theme, and startup at sign-in. Choose “Draw a rectangle” for manual selection without window detection, or “Detect windows” to select windows on hover/click while retaining manual dragging. The choice is saved automatically and applies to the next capture. Images stay in `%LOCALAPPDATA%\ZeepCut`. Automatic cleanup does not delete manually exported files. Uninstall keeps data by default, with an explicit optional deletion prompt. The update channel has not been configured; update checks report that state.
+Settings provides configurable shortcuts, default capture mode, language, theme, and startup at sign-in. Choose “Draw a rectangle” for manual selection without window detection, or “Detect windows” to select windows on hover/click while retaining manual dragging. The choice is saved automatically and applies to the next capture. Images stay in `%LOCALAPPDATA%\DeepShot`. Automatic cleanup does not delete manually exported files. Uninstall keeps data by default, with an explicit optional deletion prompt. The update channel has not been configured; update checks report that state.
 
 ## Build
 
 Requires Windows and .NET 10 SDK.
 
 ```powershell
-dotnet build ZeepCut.slnx -c Release
+dotnet build "DeepShot.slnx" -c Release
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/publish.ps1
 # Optional explicit installer compiler:
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/publish.ps1 -InnoCompiler 'C:\Path\To\ISCC.exe'
 ```
 
-Test projects, validation scripts, and temporary development records have been removed. `scripts/build.ps1` builds only; `scripts/publish.ps1` produces release files. Latest packages are in `artifacts/release/`; the complete self-contained application is in `artifacts/publish/win-x64/`. Publishing compiles and packages only; it does not run tests or launch the application.
+Test projects, validation scripts, and temporary development records have been removed. `scripts/build.ps1` builds only; `scripts/publish.ps1` produces release files. Latest packages are in `artifacts/release/`; the complete self-contained application is in `artifacts/publish/DeepShot/`. Publishing compiles and packages only; it does not run tests or launch the application.
 
 Retained directories: `src/` (application sources), `installer/` (installer definition), `scripts/` (build and publish), and `artifacts/` (latest outputs).
 

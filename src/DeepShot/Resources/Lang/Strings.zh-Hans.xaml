@@ -1,0 +1,356 @@
+<!--
+  DeepShot 界面文案（简体中文）—— T31。
+  约定：
+    - 键名语义化（S.Tray.Screenshot = 托盘“截图”），必须以 S. 开头（与主题资源 Theme.* 区分）。
+    - {0} / {1} 是 string.Format 位置参数，含义不要改动。
+    - 新增键必须同时加到 Strings.en.xaml（启动时会自检键一致性并写日志）。
+    - 只有界面文案放这里；写进日志的诊断文本（AppLog）保持中文，便于跑验证脚本时 grep 日志。
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+
+    <!-- ===== 通用 ===== -->
+    <sys:String x:Key="S.App.Name">DeepShot</sys:String>
+    <sys:String x:Key="S.Common.Ok">确定</sys:String>
+    <sys:String x:Key="S.Common.Cancel">取消</sys:String>
+    <sys:String x:Key="S.Common.Close">关闭</sys:String>
+    <sys:String x:Key="S.Common.Copy">复制</sys:String>
+    <sys:String x:Key="S.Common.SaveAs">另存为</sys:String>
+    <sys:String x:Key="S.Common.Pin">贴图</sys:String>
+    <sys:String x:Key="S.Common.Delete">删除</sys:String>
+    <sys:String x:Key="S.Common.Rename">改名</sys:String>
+    <sys:String x:Key="S.Common.Annotation">标注</sys:String>
+    <sys:String x:Key="S.Common.Preview">预览</sys:String>
+    <sys:String x:Key="S.Common.Refresh">刷新</sys:String>
+    <sys:String x:Key="S.Common.Settings">设置</sys:String>
+    <sys:String x:Key="S.Common.History">历史</sys:String>
+    <sys:String x:Key="S.Common.Undo">撤销</sys:String>
+    <sys:String x:Key="S.Common.Redo">重做</sys:String>
+    <sys:String x:Key="S.Common.Save">保存</sys:String>
+
+    <!-- ===== 标注工具 / 属性 ===== -->
+    <sys:String x:Key="S.Annotation.Tool.Select">选择</sys:String>
+    <sys:String x:Key="S.Annotation.Tool.Rectangle">矩形</sys:String>
+    <sys:String x:Key="S.Annotation.Tool.Ellipse">椭圆</sys:String>
+    <sys:String x:Key="S.Annotation.Tool.Arrow">箭头</sys:String>
+    <sys:String x:Key="S.Annotation.Tool.Line">直线</sys:String>
+    <sys:String x:Key="S.Annotation.Tool.Freehand">画笔</sys:String>
+    <sys:String x:Key="S.Annotation.Tool.Text">文字</sys:String>
+    <sys:String x:Key="S.Annotation.Tool.Mosaic">马赛克</sys:String>
+    <sys:String x:Key="S.Annotation.Section.Color">颜色</sys:String>
+    <sys:String x:Key="S.Annotation.Section.Thickness">粗细</sys:String>
+    <sys:String x:Key="S.Annotation.Section.Zoom">缩放</sys:String>
+    <sys:String x:Key="S.Annotation.Section.Edit">编辑</sys:String>
+    <sys:String x:Key="S.Annotation.Section.Tools">工具</sys:String>
+    <sys:String x:Key="S.Annotation.Color">颜色 {0}</sys:String>
+    <sys:String x:Key="S.Annotation.Thickness">粗细 {0}</sys:String>
+    <sys:String x:Key="S.Annotation.ThicknessTooltip">粗细 {0} 像素</sys:String>
+
+    <!-- ===== 托盘 ===== -->
+    <sys:String x:Key="S.Tray.Screenshot">截图</sys:String>
+    <sys:String x:Key="S.Tray.PasteFromClipboard">从剪贴板贴图</sys:String>
+    <sys:String x:Key="S.Tray.TogglePinsDefault">显示/隐藏全部贴图</sys:String>
+    <sys:String x:Key="S.Tray.HideAllPins">隐藏全部贴图 ({0})</sys:String>
+    <sys:String x:Key="S.Tray.ShowAllPins">显示全部贴图 ({0})</sys:String>
+    <sys:String x:Key="S.Tray.History">历史</sys:String>
+    <sys:String x:Key="S.Tray.Settings">设置</sys:String>
+    <sys:String x:Key="S.Tray.CheckUpdates">检查更新</sys:String>
+    <sys:String x:Key="S.Tray.Exit">退出</sys:String>
+    <sys:String x:Key="S.Tray.Notification.FailedTitle">从剪贴板贴图失败</sys:String>
+
+    <!-- ===== 截图遮罩 ===== -->
+    <sys:String x:Key="S.Overlay.WindowTitle">DeepShot 截图遮罩</sys:String>
+    <sys:String x:Key="S.Overlay.Copy">复制</sys:String>
+    <sys:String x:Key="S.Overlay.SaveAs">另存为</sys:String>
+    <sys:String x:Key="S.Overlay.Pin">贴图</sys:String>
+    <sys:String x:Key="S.Overlay.Cancel">取消</sys:String>
+    <sys:String x:Key="S.Overlay.Undo">撤销</sys:String>
+    <sys:String x:Key="S.Overlay.Redo">重做</sys:String>
+    <sys:String x:Key="S.Overlay.SizeBadge">{0} × {1}</sys:String>
+    <sys:String x:Key="S.Overlay.SelectionLocked">选区已锁定（{0} 个标注）</sys:String>
+
+    <!-- ===== 贴图 ===== -->
+    <sys:String x:Key="S.Pin.WindowTitle">DeepShot 贴图 {0}</sys:String>
+    <sys:String x:Key="S.Pin.LockedBadge">已锁定位置</sys:String>
+    <sys:String x:Key="S.Pin.LockedBadgeWithSize">已锁定 {0}×{1}</sys:String>
+    <sys:String x:Key="S.Pin.Close">关闭贴图（Esc）</sys:String>
+    <sys:String x:Key="S.Pin.Menu.OriginalSize">原始大小</sys:String>
+    <sys:String x:Key="S.Pin.Menu.OriginalSizeHint">将贴图恢复为原始像素大小</sys:String>
+    <sys:String x:Key="S.Pin.Menu.Lock">锁定位置</sys:String>
+    <sys:String x:Key="S.Pin.Menu.Unlock">解锁位置</sys:String>
+    <sys:String x:Key="S.Pin.Menu.LockHint">锁定后禁止拖动贴图（右键仍可用）</sys:String>
+    <sys:String x:Key="S.Pin.Menu.UnlockHint">解锁后可以拖动贴图</sys:String>
+    <sys:String x:Key="S.Pin.Menu.Copy">复制</sys:String>
+    <sys:String x:Key="S.Pin.Menu.CopyHint">把贴图图片复制到剪贴板</sys:String>
+    <sys:String x:Key="S.Pin.Menu.SaveAs">另存为…</sys:String>
+    <sys:String x:Key="S.Pin.Menu.SaveAsHint">把贴图图片另存为 PNG/JPEG</sys:String>
+    <sys:String x:Key="S.Pin.Menu.Close">关闭</sys:String>
+    <sys:String x:Key="S.Pin.Menu.CloseHint">关闭这张贴图</sys:String>
+
+    <!-- ===== 历史图库 ===== -->
+    <sys:String x:Key="S.History.WindowTitle">历史</sys:String>
+    <sys:String x:Key="S.History.WindowName">DeepShot 历史图库</sys:String>
+    <sys:String x:Key="S.History.Title">历史记录</sys:String>
+    <sys:String x:Key="S.History.SearchPlaceholder">搜索</sys:String>
+    <sys:String x:Key="S.History.SearchName">搜索历史</sys:String>
+    <sys:String x:Key="S.History.SearchClear">清除搜索</sys:String>
+    <sys:String x:Key="S.History.FilterAll">全部</sys:String>
+    <sys:String x:Key="S.History.FilterFavorites">只看收藏</sys:String>
+    <sys:String x:Key="S.History.Refresh">刷新</sys:String>
+    <sys:String x:Key="S.History.Loading">正在加载…</sys:String>
+    <sys:String x:Key="S.History.Count">共 {0} 条历史记录</sys:String>
+    <sys:String x:Key="S.History.CountFiltered">共 {0} 条匹配（库内总计 {1} 条）</sys:String>
+    <sys:String x:Key="S.History.EmptyTitle">还没有历史记录</sys:String>
+    <sys:String x:Key="S.History.NoMatchTitle">没有匹配的记录</sys:String>
+    <sys:String x:Key="S.History.NothingToShowTitle">没有可显示的记录</sys:String>
+    <sys:String x:Key="S.History.ClearFilters">清除筛选</sys:String>
+    <sys:String x:Key="S.History.ReadFailedTitle">无法读取历史记录</sys:String>
+    <sys:String x:Key="S.History.ReadFailedBody">数据库读取失败：{0}</sys:String>
+    <sys:String x:Key="S.History.ReadFailedStatus">读取失败（详见日志）</sys:String>
+    <sys:String x:Key="S.History.Footer">双击预览 · 点星标收藏（收藏不会被自动清理）</sys:String>
+    <sys:String x:Key="S.History.GroupTitle">日期分组 {0}</sys:String>
+    <sys:String x:Key="S.History.CardName">历史记录 {0}</sys:String>
+    <sys:String x:Key="S.History.Today">今天</sys:String>
+    <sys:String x:Key="S.History.Yesterday">昨天</sys:String>
+    <sys:String x:Key="S.History.TimeToday">今天 {0}</sys:String>
+    <sys:String x:Key="S.History.SourceScreenshot">截图</sys:String>
+    <sys:String x:Key="S.History.SourceClipboard">剪贴板贴图</sys:String>
+    <sys:String x:Key="S.History.SourceHistory">历史记录</sys:String>
+    <sys:String x:Key="S.History.ThumbnailMissing">缩略图缺失</sys:String>
+    <sys:String x:Key="S.History.StarOn">取消收藏</sys:String>
+    <sys:String x:Key="S.History.StarOff">收藏</sys:String>
+    <sys:String x:Key="S.History.StarOnHint">取消收藏</sys:String>
+    <sys:String x:Key="S.History.StarOffHint">收藏</sys:String>
+    <sys:String x:Key="S.History.ActionRename">重命名</sys:String>
+    <sys:String x:Key="S.History.ActionDeleteHint">删除这条历史</sys:String>
+    <sys:String x:Key="S.History.ActionAnnotateHint">标注</sys:String>
+    <sys:String x:Key="S.History.ActionPreviewHint">预览大图</sys:String>
+    <sys:String x:Key="S.History.SelectedStatus">{0} · {1}×{2}</sys:String>
+    <sys:String x:Key="S.History.ActionFailed">{0}失败：{1}</sys:String>
+    <sys:String x:Key="S.History.LoadMoreFailed">加载更多失败（详见日志）。</sys:String>
+
+    <!-- ===== 历史：空状态说明（与 Core 的 HistoryView.DescribeEmptyState 对应） ===== -->
+    <sys:String x:Key="S.History.EmptyNoRecords">按 {0} 开始截图，记录会出现在这里。</sys:String>
+    <sys:String x:Key="S.History.EmptySearchAndFavorites">没有匹配“{0}”的收藏。</sys:String>
+    <sys:String x:Key="S.History.EmptyFavorites">点击缩略图上的星标即可收藏。</sys:String>
+    <sys:String x:Key="S.History.EmptySearch">没有匹配“{0}”的记录。</sys:String>
+    <sys:String x:Key="S.History.EmptyOther">没有可显示的记录。</sys:String>
+
+    <!-- ===== 历史：收藏 / 过期提示（与 Core 的 HistoryRetentionPolicy 对应） ===== -->
+    <sys:String x:Key="S.History.RetentionRule">普通记录保留 {0} 天，收藏不会被自动清理。</sys:String>
+    <sys:String x:Key="S.History.UnfavoriteDialogTitle">取消收藏</sys:String>
+    <sys:String x:Key="S.History.KeptFavorite">已保持收藏“{0}”。</sys:String>
+    <sys:String x:Key="S.History.FavoriteFailed">切换收藏失败（记录可能已不存在），请点“刷新”。</sys:String>
+    <sys:String x:Key="S.History.Favorited">已收藏“{0}”。</sys:String>
+    <sys:String x:Key="S.History.UnfavoritedExpired">已取消收藏“{0}”，它超过 30 天，将在下次清理时删除。</sys:String>
+    <sys:String x:Key="S.History.Unfavorited">已取消收藏“{0}”。</sys:String>
+
+    <!-- ===== 历史：删除 ===== -->
+    <sys:String x:Key="S.History.DeleteConfirmFavorite">删除收藏“{0}”？\n\n图片和记录将永久移除。</sys:String>
+    <sys:String x:Key="S.History.DeleteConfirm">删除“{0}”？\n\n图片和记录将永久移除。</sys:String>
+    <sys:String x:Key="S.History.DeleteDialogTitle">删除历史记录</sys:String>
+    <sys:String x:Key="S.History.DeleteCancelled">已取消删除。</sys:String>
+
+    <!-- ===== 历史：重命名 ===== -->
+    <sys:String x:Key="S.History.RenameTitle">重命名历史记录</sys:String>
+    <sys:String x:Key="S.History.RenameLabel">名称</sys:String>
+    <sys:String x:Key="S.History.RenameInputName">历史记录名称</sys:String>
+    <sys:String x:Key="S.History.RenameHint">不能包含 \ / : * ? " &lt; &gt; |（会被替换为 _）。</sys:String>
+    <sys:String x:Key="S.History.RenameOk">确定</sys:String>
+    <sys:String x:Key="S.History.RenameCancel">取消</sys:String>
+    <sys:String x:Key="S.History.RenameCancelled">已取消重命名。</sys:String>
+    <sys:String x:Key="S.History.RenameFailed">重命名失败：{0}</sys:String>
+    <sys:String x:Key="S.History.RenameUnchanged">名称没有变化。</sys:String>
+    <sys:String x:Key="S.History.Renamed">已重命名为“{0}”。</sys:String>
+
+    <!-- ===== 历史：动作结果（与 HistoryActions 对应） ===== -->
+    <sys:String x:Key="S.History.Copied">已复制“{0}”。</sys:String>
+    <sys:String x:Key="S.History.CopyFailed">复制失败：{0}</sys:String>
+    <sys:String x:Key="S.History.SaveFailed">另存为失败：{0}</sys:String>
+    <sys:String x:Key="S.History.DeleteFailed">删除失败：{0}</sys:String>
+    <sys:String x:Key="S.History.Deleted">已删除“{0}”。</sys:String>
+    <sys:String x:Key="S.History.SelectCard">选择</sys:String>
+    <sys:String x:Key="S.History.SelectGroup">选择 {0}</sys:String>
+    <sys:String x:Key="S.History.SelectedCount">已选 {0} 项</sys:String>
+    <sys:String x:Key="S.History.SelectAll">全选</sys:String>
+    <sys:String x:Key="S.History.ClearSelection">取消选择</sys:String>
+    <sys:String x:Key="S.History.DeleteSelected">删除</sys:String>
+    <sys:String x:Key="S.History.DeleteSelectedConfirm">删除所选 {0} 项？\n\n图片和记录将永久移除。</sys:String>
+    <sys:String x:Key="S.History.DeleteSelectedConfirmFav">删除所选 {0} 项（含 {1} 项收藏）？\n\n图片和记录将永久移除。</sys:String>
+    <sys:String x:Key="S.History.DeletedMany">已删除 {0} 项。</sys:String>
+    <sys:String x:Key="S.History.DeletedManyFailed">已删除 {0} 项，{1} 项失败。</sys:String>
+    <sys:String x:Key="S.History.PinFailed">贴图失败：{0}</sys:String>
+    <sys:String x:Key="S.History.Pinned">已贴图“{0}”。</sys:String>
+
+    <!-- ===== 历史：预览 ===== -->
+    <sys:String x:Key="S.History.PreviewTitle">预览</sys:String>
+    <sys:String x:Key="S.History.PreviewActualSize">实际大小</sys:String>
+    <sys:String x:Key="S.History.PreviewFit">适应窗口</sys:String>
+    <sys:String x:Key="S.History.PreviewMeta">{0} · {1}×{2} px · {3} · {4} · 缩放 {5}%</sys:String>
+    <sys:String x:Key="S.History.ImageMissingPreview">图片文件已丢失，无法预览。</sys:String>
+    <sys:String x:Key="S.History.ImageMissingEdit">图片文件已丢失，无法追加标注。</sys:String>
+    <sys:String x:Key="S.History.PreviewOpenFailed">打开预览失败：{0}</sys:String>
+
+    <!-- ===== 历史：追加标注编辑窗口 ===== -->
+    <sys:String x:Key="S.History.EditTitle">编辑</sys:String>
+    <sys:String x:Key="S.History.EditWindowName">DeepShot 编辑历史</sys:String>
+    <sys:String x:Key="S.History.EditSave">保存并覆盖</sys:String>
+    <sys:String x:Key="S.History.EditSaveHint">用追加标注后的新图替换这条记录原来的图片（不保留旧版本，不新增记录）</sys:String>
+    <sys:String x:Key="S.History.EditCancel">取消</sys:String>
+    <sys:String x:Key="S.History.EditCancelName">取消编辑</sys:String>
+    <sys:String x:Key="S.History.EditDeleteSelected">删除选中</sys:String>
+    <sys:String x:Key="S.History.EditFit">适应窗口</sys:String>
+    <sys:String x:Key="S.History.EditNothingToUndo">没有可撤销的标注。</sys:String>
+    <sys:String x:Key="S.History.EditNothingToRedo">没有可重做的标注。</sys:String>
+    <sys:String x:Key="S.History.EditSelectFirst">先点“选择”工具，再点中一个标注才能删除。</sys:String>
+    <sys:String x:Key="S.History.EditMarkedDirty">已追加 {0} 个标注</sys:String>
+    <sys:String x:Key="S.History.EditCannotDraw">当前状态不能绘制：{0}</sys:String>
+    <sys:String x:Key="S.History.EditCannotType">无法输入文字：{0}</sys:String>
+    <sys:String x:Key="S.History.EditToolSwitchFailed">切换工具失败：{0}</sys:String>
+    <sys:String x:Key="S.History.EditRecordMissing">无法确认记录是否还在：{0}</sys:String>
+    <sys:String x:Key="S.History.EditComposeFailed">合成图片失败：{0}</sys:String>
+    <sys:String x:Key="S.History.EditSaveFailed">保存失败（原图未改动）：{0}</sys:String>
+    <sys:String x:Key="S.History.EditSaveCancelled">已取消保存，编辑内容还在。</sys:String>
+    <sys:String x:Key="S.History.EditStayed">已留在编辑窗口。</sys:String>
+    <sys:String x:Key="S.History.EditCancelDialogTitle">取消编辑</sys:String>
+    <sys:String x:Key="S.History.EditCancelConfirm">放弃本次追加的 {0} 个标注？</sys:String>
+    <sys:String x:Key="S.History.EditOpened">正在编辑“{0}”。</sys:String>
+    <sys:String x:Key="S.History.EditAlreadyOpen">这条记录已经在编辑窗口中打开。</sys:String>
+    <sys:String x:Key="S.History.EditSaveOverwritten">已保存“{0}”。</sys:String>
+    <sys:String x:Key="S.History.EditOpenFailed">打开编辑窗口失败：{0}</sys:String>
+    <sys:String x:Key="S.History.EditSaveFailedBody">保存失败，原图未修改：\n{0}</sys:String>
+    <sys:String x:Key="S.History.EditRecordInfo">{0} · {1}×{2}</sys:String>
+    <sys:String x:Key="S.History.EditFavoritedBadge">  ★</sys:String>
+
+    <!-- ===== 历史：覆盖语义说明（与 Core 的 HistoryOverwritePlan 对应） ===== -->
+    <sys:String x:Key="S.History.OverwriteSaved">已保存“{0}”（{1} 个标注）。</sys:String>
+    <sys:String x:Key="S.History.OverwriteDeleted">“{0}”已被删除，修改未保存。</sys:String>
+    <sys:String x:Key="S.History.OverwriteExplain">将覆盖“{0}”：旧图片不会保留，也不会新增记录。\n\n确定保存吗？</sys:String>
+
+    <!-- ===== 设置窗口 ===== -->
+    <sys:String x:Key="S.Settings.WindowTitle">设置</sys:String>
+    <sys:String x:Key="S.Settings.WindowName">DeepShot 设置</sys:String>
+    <sys:String x:Key="S.Settings.Heading">设置</sys:String>
+    <sys:String x:Key="S.Settings.Subtitle">更改会自动保存</sys:String>
+    <sys:String x:Key="S.Settings.Section.Shortcuts">快捷键</sys:String>
+    <sys:String x:Key="S.Settings.Shortcut.Screenshot">截图快捷键</sys:String>
+    <sys:String x:Key="S.Settings.Shortcut.Pin">贴图快捷键</sys:String>
+    <sys:String x:Key="S.Settings.Shortcut.Hint">点击后直接按下组合键，需包含 Ctrl / Alt / Shift / Win 之一。</sys:String>
+    <sys:String x:Key="S.Settings.Shortcut.Waiting">请按下组合键…</sys:String>
+    <sys:String x:Key="S.Settings.Shortcut.NeedModifier">需要至少一个修饰键（Ctrl / Alt / Shift / Win），主键支持 A–Z、0–9、F1–F12。</sys:String>
+    <sys:String x:Key="S.Settings.Shortcut.SecondKey">一次只能设一个主键。</sys:String>
+    <sys:String x:Key="S.Settings.Shortcut.ConflictLocal">与{0}（{1}）冲突，请换一个组合。</sys:String>
+    <sys:String x:Key="S.Settings.Shortcut.ConflictOther">快捷键 {0} 已被其他程序占用，请换一个组合。</sys:String>
+    <sys:String x:Key="S.Settings.Shortcut.RegisteredHint">当前生效：{0}</sys:String>
+    <sys:String x:Key="S.Settings.Shortcut.RegistrationFailed">注册失败：{0}</sys:String>
+    <sys:String x:Key="S.Settings.Shortcut.Reset">恢复默认</sys:String>
+    <sys:String x:Key="S.Settings.Section.Capture">截图方式</sys:String>
+    <sys:String x:Key="S.Settings.CaptureMode.Label">默认选区方式</sys:String>
+    <sys:String x:Key="S.Settings.CaptureMode.Rectangle">手动框选矩形</sys:String>
+    <sys:String x:Key="S.Settings.CaptureMode.Window">自动捕获窗口</sys:String>
+    <sys:String x:Key="S.Settings.CaptureMode.Hint">下次截图生效。</sys:String>
+    <sys:String x:Key="S.Settings.Section.Language">语言</sys:String>
+    <sys:String x:Key="S.Settings.Language.System">跟随系统</sys:String>
+    <sys:String x:Key="S.Settings.Language.ZhHans">简体中文</sys:String>
+    <sys:String x:Key="S.Settings.Language.English">English</sys:String>
+    <sys:String x:Key="S.Settings.Language.Effective">当前使用：{0}</sys:String>
+    <sys:String x:Key="S.Settings.Section.Theme">主题</sys:String>
+    <sys:String x:Key="S.Settings.Section.Appearance">外观</sys:String>
+    <sys:String x:Key="S.Settings.Theme.System">跟随系统</sys:String>
+    <sys:String x:Key="S.Settings.Theme.Light">浅色</sys:String>
+    <sys:String x:Key="S.Settings.Theme.Dark">深色</sys:String>
+    <sys:String x:Key="S.Settings.Theme.Effective">当前外观：{0}（系统为{1}）</sys:String>
+    <sys:String x:Key="S.Settings.Section.Startup">开机启动</sys:String>
+    <sys:String x:Key="S.Settings.Startup.Enable">开机时自动启动 DeepShot</sys:String>
+    <sys:String x:Key="S.Settings.Startup.Detail">当前用户，写入 HKCU\Software\Microsoft\Windows\CurrentVersion\Run</sys:String>
+    <sys:String x:Key="S.Settings.Startup.On">已写入注册表启动项。</sys:String>
+    <sys:String x:Key="S.Settings.Startup.Off">已从注册表启动项移除。</sys:String>
+    <sys:String x:Key="S.Settings.Startup.Failed">更新开机启动失败（注册表写入被拒绝，详见日志）。</sys:String>
+    <sys:String x:Key="S.Settings.Startup.BusyHint">开机启动开关在等待注册表结果，请稍候。</sys:String>
+    <sys:String x:Key="S.Settings.Update.ManifestUrl">更新渠道（AppInfo.UpdateManifestUrl）</sys:String>
+    <sys:String x:Key="S.Settings.Update.Check">检查更新</sys:String>
+    <sys:String x:Key="S.Settings.Section.Data">数据目录</sys:String>
+    <sys:String x:Key="S.Settings.Data.Open">打开目录</sys:String>
+    <sys:String x:Key="S.Settings.Data.Opened">已打开数据目录。</sys:String>
+    <sys:String x:Key="S.Settings.Data.OpenFailed">打开数据目录失败：{0}</sys:String>
+    <sys:String x:Key="S.Settings.Data.History">历史库：{0}</sys:String>
+    <sys:String x:Key="S.Settings.Data.Counts">{0} 条记录 · {1} 张图片</sys:String>
+    <sys:String x:Key="S.Settings.Section.Retention">历史保留规则</sys:String>
+    <sys:String x:Key="S.Settings.Section.Update">检查更新</sys:String>
+    <sys:String x:Key="S.Settings.Saved">设置已保存。</sys:String>
+    <sys:String x:Key="S.Settings.SaveFailed">保存设置失败：{0}</sys:String>
+    <sys:String x:Key="S.Settings.SavePath">设置文件：{0}</sys:String>
+    <sys:String x:Key="S.Settings.Close">关闭</sys:String>
+    <sys:String x:Key="S.Settings.Version">版本 {0}</sys:String>
+
+    <!-- ===== 检查更新 ===== -->
+    <sys:String x:Key="S.Update.Title">检查更新</sys:String>
+    <sys:String x:Key="S.Update.Checking">正在检查更新…</sys:String>
+    <sys:String x:Key="S.Update.NotConfiguredTitle">尚未配置更新渠道</sys:String>
+    <sys:String x:Key="S.Update.NotConfigured">当前版本 {0}。\n尚未配置更新渠道，无法检查新版本。</sys:String>
+    <sys:String x:Key="S.Update.FailedTitle">检查更新失败</sys:String>
+    <sys:String x:Key="S.Update.Failed">当前版本 {0}。\n无法检查更新：{1}</sys:String>
+    <sys:String x:Key="S.Update.UpToDateTitle">已是最新版</sys:String>
+    <sys:String x:Key="S.Update.UpToDate">已是最新版（{0}）。</sys:String>
+    <sys:String x:Key="S.Update.AvailableTitle">发现新版本 {0}</sys:String>
+    <sys:String x:Key="S.Update.Available">发现新版本 {0}（当前版本 {1}）。</sys:String>
+    <sys:String x:Key="S.Update.AvailableWithNotes">发现新版本 {0}（当前版本 {1}）。\n\n更新说明：{2}</sys:String>
+    <sys:String x:Key="S.Update.CurrentVersion">当前版本 {0}</sys:String>
+    <sys:String x:Key="S.Update.Channel">更新渠道：{0}</sys:String>
+    <sys:String x:Key="S.Update.Download">打开发布页</sys:String>
+    <sys:String x:Key="S.Update.Ok">确定</sys:String>
+    <sys:String x:Key="S.Update.FailedToast">检查更新失败：{0}</sys:String>
+    <sys:String x:Key="S.Update.NoUrl">新版本没有提供下载页地址（清单里缺少 url）。</sys:String>
+
+    <!-- ===== 提示 / 通用对话框 ===== -->
+    <sys:String x:Key="S.Toast.WindowTitle">DeepShot 提示 {0}</sys:String>
+    <sys:String x:Key="S.Toast.NoPins">当前没有贴图，先按 {0} 截图或 {1} 从剪贴板贴图。</sys:String>
+    <sys:String x:Key="S.Toast.PinsHidden">已隐藏 {0} 张贴图（再次点击托盘菜单可显示）</sys:String>
+    <sys:String x:Key="S.Toast.PinsShown">已显示 {0} 张贴图</sys:String>
+    <sys:String x:Key="S.Toast.HistoryFailed">{0}已成功，但历史保存失败（详见日志）。</sys:String>
+    <sys:String x:Key="S.Message.AlreadyRunning">DeepShot 已在运行。\n\n请使用任务栏通知区域（如未显示，请点击“显示隐藏的图标”）中的托盘图标。</sys:String>
+    <sys:String x:Key="S.Message.TrayFailed">DeepShot 无法创建托盘图标，程序将退出。</sys:String>
+    <sys:String x:Key="S.Message.StartupFailed">DeepShot 启动失败，已记录日志：\n{0}\n\n{1}</sys:String>
+    <sys:String x:Key="S.Message.HistoryUnavailableTitle">历史功能不可用</sys:String>
+    <sys:String x:Key="S.Message.HistoryUnavailable">无法初始化历史数据库，本次运行的截图与贴图不会被记录：\n{0}</sys:String>
+    <sys:String x:Key="S.Message.HistoryGalleryUnavailable">历史库本次启动初始化失败，图库不可用。\n\n截图与贴图仍可正常使用，但不会记录历史。详情见日志：\n{0}</sys:String>
+    <sys:String x:Key="S.Message.HistoryGalleryOpenFailed">打开历史图库失败，详情见日志：\n{0}</sys:String>
+    <sys:String x:Key="S.Message.SettingsOpenFailed">打开设置窗口失败，详情见日志。</sys:String>
+    <sys:String x:Key="S.Message.HotkeyUnavailableTitle">全局热键不可用</sys:String>
+    <sys:String x:Key="S.Message.HotkeyUnavailable">无法创建热键消息窗口：{0}</sys:String>
+    <sys:String x:Key="S.Message.HotkeyInvalidTitle">快捷键配置无效</sys:String>
+    <sys:String x:Key="S.Message.HotkeyInvalid">快捷键配置“{0}”无效：{1}</sys:String>
+    <sys:String x:Key="S.Message.HotkeyRegisterFailedTitle">全局热键注册失败</sys:String>
+    <sys:String x:Key="S.Message.HotkeyBusy">快捷键 {0} 被占用，请修改。</sys:String>
+    <sys:String x:Key="S.Message.HotkeyRegisterError">快捷键 {0} 注册失败（Win32 错误 {1}），请修改。</sys:String>
+    <sys:String x:Key="S.Message.CaptureFailedTitle">截图失败</sys:String>
+    <sys:String x:Key="S.Message.CaptureFailed">截图失败：{0}</sys:String>
+    <sys:String x:Key="S.Message.PinLocationFailed">无法定位屏幕位置，贴图失败。</sys:String>
+    <sys:String x:Key="S.Message.Unhandled">DeepShot 遇到未处理的错误，已记录日志：\n{0}\n\n{1}</sys:String>
+    <sys:String x:Key="S.Message.ClipboardEmpty">剪贴板里没有图片。</sys:String>
+    <sys:String x:Key="S.Message.ClipboardNotImage">剪贴板内容不是图片。</sys:String>
+    <sys:String x:Key="S.Message.ClipboardBusy">剪贴板正被其他程序占用，请稍后重试。</sys:String>
+    <sys:String x:Key="S.Message.ClipboardFailed">读取剪贴板图片失败：{0}</sys:String>
+
+    <!-- ===== 另存为对话框 ===== -->
+    <sys:String x:Key="S.Dialog.SaveTitle">另存为图片</sys:String>
+    <sys:String x:Key="S.Dialog.SaveFilter">PNG 图片 (*.png)|*.png|JPEG 图片 (*.jpg;*.jpeg)|*.jpg;*.jpeg</sys:String>
+
+    <sys:String x:Key="S.History.DragAction">拖出图片</sys:String>
+    <sys:String x:Key="S.History.DragHint">拖出图片</sys:String>
+    <sys:String x:Key="S.History.DragMissing">原图文件已丢失。</sys:String>
+    <sys:String x:Key="S.History.DragDelivered">已拖出图片。</sys:String>
+    <sys:String x:Key="S.History.DragCancelled">已取消。</sys:String>
+    <sys:String x:Key="S.QuickView.Title">最近</sys:String>
+    <sys:String x:Key="S.QuickView.OpenHistory">完整历史</sys:String>
+    <sys:String x:Key="S.QuickView.Previous">上一张</sys:String>
+    <sys:String x:Key="S.QuickView.Next">下一张</sys:String>
+    <sys:String x:Key="S.QuickView.Empty">还没有截图</sys:String>
+    <sys:String x:Key="S.QuickView.LoadFailed">无法加载历史</sys:String>
+    <sys:String x:Key="S.QuickView.ActionFailed">操作失败：{0}</sys:String>
+    <sys:String x:Key="S.QuickView.RecordMissing">这张图片已不在历史中。</sys:String>
+    <sys:String x:Key="S.QuickView.Shortcut">快览快捷键</sys:String>
+    <sys:String x:Key="S.QuickView.ClearShortcut">清除</sys:String>
+    <sys:String x:Key="S.QuickView.ShortcutDisabled">未设置</sys:String>
+</ResourceDictionary>

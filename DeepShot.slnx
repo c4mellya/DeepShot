@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="src/DeepShot.Core/DeepShot.Core.csproj" />
+  <Project Path="src/DeepShot/DeepShot.csproj" />
+</Solution>

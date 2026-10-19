@@ -1,10 +1,10 @@
 param([string]$InnoCompiler = '')
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-$project = Join-Path $root 'src\ZeepCut\ZeepCut.csproj'
+$project = Join-Path $root 'src\DeepShot\DeepShot.csproj'
 [xml]$projectXml = Get-Content -LiteralPath $project -Raw
 $version = [string]$projectXml.Project.PropertyGroup.Version
-$output = Join-Path $root 'artifacts\publish\win-x64'
+$output = Join-Path $root 'artifacts\publish\DeepShot'
 $release = Join-Path $root 'artifacts\release'
 New-Item -ItemType Directory -Force -Path $release | Out-Null
 
@@ -15,9 +15,9 @@ foreach ($name in @('README.md', 'README.en.md', 'RELEASE_NOTES.md')) {
     Copy-Item -LiteralPath (Join-Path $root $name) -Destination $output -Force
 }
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-$zip = Join-Path $release "deep-cut-$version-win-x64.zip"
+$zip = Join-Path $release "DeepShot-$version-win-x64.zip"
 if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }
-[System.IO.Compression.ZipFile]::CreateFromDirectory($output, $zip, [System.IO.Compression.CompressionLevel]::Optimal, $false)
+[System.IO.Compression.ZipFile]::CreateFromDirectory($output, $zip, [System.IO.Compression.CompressionLevel]::Optimal, $true)
 
 if (-not $InnoCompiler) {
     $candidates = @(
@@ -27,7 +27,7 @@ if (-not $InnoCompiler) {
     $InnoCompiler = $candidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
 }
 if ($InnoCompiler) {
-    & $InnoCompiler "/DAppVersion=$version" "/DSourceDir=$output" (Join-Path $root 'installer\ZeepCut.iss')
+    & $InnoCompiler "/DAppVersion=$version" "/DSourceDir=$output" (Join-Path $root 'installer\DeepShot.iss')
     if ($LASTEXITCODE -ne 0) { throw "Installer compilation failed ($LASTEXITCODE)" }
 } else {
     Write-Warning 'Inno Setup was not found. ZIP is available; pass -InnoCompiler to build the installer.'

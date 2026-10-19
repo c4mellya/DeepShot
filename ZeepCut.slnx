@@ -1,4 +1,0 @@
-<Solution>
-  <Project Path="src/ZeepCut.Core/ZeepCut.Core.csproj" />
-  <Project Path="src/ZeepCut/ZeepCut.csproj" />
-</Solution>

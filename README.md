@@ -1,14 +1,12 @@
-# deep-cut
+# DeepShot
 
-deep-cut 是适用于 Windows 10 22H2 / Windows 11 x64 的截图与桌面贴图工具。使用 C#、.NET 10 与 WPF 构建，提供简体中文与英文、浅色/深色及跟随系统主题。
+DeepShot 是适用于 Windows 10 22H2 / Windows 11 x64 的截图与桌面贴图工具。使用 C#、.NET 10 与 WPF 构建，提供简体中文与英文、浅色/深色及跟随系统主题。
 
-仓库：[c4mellya/deep-cut](https://github.com/c4mellya/deep-cut) · [English](README.en.md)
+仓库：[c4mellya/DeepShot](https://github.com/c4mellya/DeepShot) · [English](README.en.md)
 
 ## 安装与启动
 
-产品已更名为 `deep-cut`，从 0.1.13 起安装包和便携 ZIP 使用新名称；程序文件名和数据目录继续沿用 `ZeepCut`，保留已有设置与历史记录。
-
-优先运行发布目录中的 `deep-cut-0.1.13-Setup-x64.exe`，按当前用户安装，无需管理员权限。也可以解压 `deep-cut-0.1.13-win-x64.zip` 后运行 `ZeepCut.exe`。程序自带 .NET 运行时，不需要另装 .NET；ZIP 版本需要保留同目录的所有文件及 Resources 子目录。
+优先运行发布目录中的 `DeepShot-0.1.13-Setup-x64.exe`，按当前用户安装，无需管理员权限。也可以解压 `DeepShot-0.1.13-win-x64.zip` 后，打开 `DeepShot` 文件夹并运行 `DeepShot.exe`。程序自带 .NET 运行时，不需要另装 .NET；ZIP 版本需要保留同目录的所有文件及 Resources 子目录。
 
 程序启动后驻留系统托盘，图标可能位于“显示隐藏的图标”面板。首次启动显示使用引导。关闭图库或设置窗口不会退出；右键托盘图标选择“退出”才结束程序。开机启动默认关闭，可在设置中开启。安装包未签名。
 
@@ -44,21 +42,21 @@ deep-cut 是适用于 Windows 10 22H2 / Windows 11 x64 的截图与桌面贴图�
 
 设置支持修改快捷键、默认截图方式、语言、主题及开机启动。默认截图方式可选“手动框选矩形”或“自动捕获窗口”，自动保存并在下一次截图生效。手动模式只按鼠标拖动框选；窗口模式悬停识别、单击选中，也可拖动框选。快捷键冲突时会提示。
 
-截图和历史均保存于本机 `%LOCALAPPDATA%\ZeepCut`。另存为的导出文件不受历史自动清理影响。卸载默认保留数据；交互卸载时可明确选择删除。更新渠道尚未配置，检查更新会据实提示，不自动上传图片或下载安装更新。
+截图和历史均保存于本机 `%LOCALAPPDATA%\DeepShot`。另存为的导出文件不受历史自动清理影响。卸载默认保留数据；交互卸载时可明确选择删除。更新渠道尚未配置，检查更新会据实提示，不自动上传图片或下载安装更新。
 
 ## 构建
 
-需要 Windows、.NET 10 SDK。项目入口为 `ZeepCut.slnx`。
+需要 Windows、.NET 10 SDK。项目入口为 `DeepShot.slnx`。
 
 ```powershell
-dotnet build ZeepCut.slnx -c Release
+dotnet build "DeepShot.slnx" -c Release
 # 生成自包含发布目录和 ZIP；有 Inno Setup 时同时生成安装包
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/publish.ps1
 # 可显式指定 Inno Setup 编译器
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/publish.ps1 -InnoCompiler 'C:\Path\To\ISCC.exe'
 ```
 
-项目已移除测试项目、验证脚本及临时记录。`scripts/build.ps1` 仅编译，`scripts/publish.ps1` 生成发布文件。最新生成物位于 `artifacts/release/`，完整自包含程序位于 `artifacts/publish/win-x64/`。发布仅编译和打包，不执行测试或启动程序验收。
+项目已移除测试项目、验证脚本及临时记录。`scripts/build.ps1` 仅编译，`scripts/publish.ps1` 生成发布文件。最新生成物位于 `artifacts/release/`，完整自包含程序位于 `artifacts/publish/DeepShot/`。发布仅编译和打包，不执行测试或启动程序验收。
 
 保留目录：`src/`（应用源码）、`installer/`（安装包脚本）、`scripts/`（构建和发布）、`artifacts/`（最新生成物）。
 
