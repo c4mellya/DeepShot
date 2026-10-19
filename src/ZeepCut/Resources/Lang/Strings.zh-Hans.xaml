@@ -92,7 +92,7 @@
     <sys:String x:Key="S.History.WindowTitle">Zeep Cut 历史</sys:String>
     <sys:String x:Key="S.History.WindowName">Zeep Cut 历史图库</sys:String>
     <sys:String x:Key="S.History.Title">历史记录</sys:String>
-    <sys:String x:Key="S.History.SearchPlaceholder">按名称搜索（不区分大小写；Enter 立即搜索，Esc 清空）</sys:String>
+    <sys:String x:Key="S.History.SearchPlaceholder">搜索</sys:String>
     <sys:String x:Key="S.History.SearchName">搜索历史</sys:String>
     <sys:String x:Key="S.History.SearchClear">清除搜索</sys:String>
     <sys:String x:Key="S.History.FilterAll">全部</sys:String>
@@ -108,7 +108,7 @@
     <sys:String x:Key="S.History.ReadFailedTitle">无法读取历史记录</sys:String>
     <sys:String x:Key="S.History.ReadFailedBody">数据库读取失败：{0}</sys:String>
     <sys:String x:Key="S.History.ReadFailedStatus">读取失败（详见日志）</sys:String>
-    <sys:String x:Key="S.History.Footer">提示：双击缩略图看大图；点击星标收藏（收藏项不会被 30 天清理）；选中后用“标注”在现有图片上追加标注并覆盖这条记录；“贴图”不会新增历史记录。</sys:String>
+    <sys:String x:Key="S.History.Footer">双击预览 · 点星标收藏（收藏不会被自动清理）</sys:String>
     <sys:String x:Key="S.History.GroupTitle">日期分组 {0}</sys:String>
     <sys:String x:Key="S.History.CardName">历史记录 {0}</sys:String>
     <sys:String x:Key="S.History.Today">今天</sys:String>
@@ -121,34 +121,34 @@
     <sys:String x:Key="S.History.StarOn">取消收藏</sys:String>
     <sys:String x:Key="S.History.StarOff">收藏</sys:String>
     <sys:String x:Key="S.History.StarOnHint">取消收藏</sys:String>
-    <sys:String x:Key="S.History.StarOffHint">收藏（收藏项不会被 30 天清理）</sys:String>
+    <sys:String x:Key="S.History.StarOffHint">收藏</sys:String>
     <sys:String x:Key="S.History.ActionRename">重命名</sys:String>
     <sys:String x:Key="S.History.ActionDeleteHint">删除这条历史</sys:String>
-    <sys:String x:Key="S.History.ActionAnnotateHint">追加标注并覆盖这条记录</sys:String>
+    <sys:String x:Key="S.History.ActionAnnotateHint">标注</sys:String>
     <sys:String x:Key="S.History.ActionPreviewHint">预览大图</sys:String>
-    <sys:String x:Key="S.History.SelectedStatus">{0} · {1}×{2} · 已选中</sys:String>
+    <sys:String x:Key="S.History.SelectedStatus">{0} · {1}×{2}</sys:String>
     <sys:String x:Key="S.History.ActionFailed">{0}失败：{1}</sys:String>
     <sys:String x:Key="S.History.LoadMoreFailed">加载更多失败（详见日志）。</sys:String>
 
     <!-- ===== 历史：空状态说明（与 Core 的 HistoryView.DescribeEmptyState 对应） ===== -->
-    <sys:String x:Key="S.History.EmptyNoRecords">还没有历史记录。按 {0} 截个图，或在托盘菜单里从剪贴板贴图，成功后会出现在这里。</sys:String>
-    <sys:String x:Key="S.History.EmptySearchAndFavorites">没有同时匹配“{0}”且已收藏的记录。可以关掉“只看收藏”或清空搜索。</sys:String>
-    <sys:String x:Key="S.History.EmptyFavorites">还没有收藏的记录。点击缩略图左上角的星标即可收藏。</sys:String>
-    <sys:String x:Key="S.History.EmptySearch">没有名称包含“{0}”的记录。换个关键字试试，或清空搜索。</sys:String>
+    <sys:String x:Key="S.History.EmptyNoRecords">按 {0} 开始截图，记录会出现在这里。</sys:String>
+    <sys:String x:Key="S.History.EmptySearchAndFavorites">没有匹配“{0}”的收藏。</sys:String>
+    <sys:String x:Key="S.History.EmptyFavorites">点击缩略图上的星标即可收藏。</sys:String>
+    <sys:String x:Key="S.History.EmptySearch">没有匹配“{0}”的记录。</sys:String>
     <sys:String x:Key="S.History.EmptyOther">没有可显示的记录。</sys:String>
 
     <!-- ===== 历史：收藏 / 过期提示（与 Core 的 HistoryRetentionPolicy 对应） ===== -->
-    <sys:String x:Key="S.History.RetentionRule">普通记录保留最近 {0} 天（按创建时间计算，编辑与重命名不延长期限）；收藏的记录不会被自动清理。</sys:String>
+    <sys:String x:Key="S.History.RetentionRule">普通记录保留 {0} 天，收藏不会被自动清理。</sys:String>
     <sys:String x:Key="S.History.UnfavoriteDialogTitle">取消收藏</sys:String>
-    <sys:String x:Key="S.History.KeptFavorite">已保持收藏“{0}”（收藏不会被自动清理）。</sys:String>
+    <sys:String x:Key="S.History.KeptFavorite">已保持收藏“{0}”。</sys:String>
     <sys:String x:Key="S.History.FavoriteFailed">切换收藏失败（记录可能已不存在），请点“刷新”。</sys:String>
-    <sys:String x:Key="S.History.Favorited">已收藏“{0}”（不会被 30 天清理）。</sys:String>
-    <sys:String x:Key="S.History.UnfavoritedExpired">已取消收藏“{0}”：它已超过 30 天，会在下次清理时被删除。</sys:String>
+    <sys:String x:Key="S.History.Favorited">已收藏“{0}”。</sys:String>
+    <sys:String x:Key="S.History.UnfavoritedExpired">已取消收藏“{0}”，它超过 30 天，将在下次清理时删除。</sys:String>
     <sys:String x:Key="S.History.Unfavorited">已取消收藏“{0}”。</sys:String>
 
     <!-- ===== 历史：删除 ===== -->
-    <sys:String x:Key="S.History.DeleteConfirmFavorite">确定删除“{0}”吗？\n\n这是一条收藏记录，删除后图片、缩略图与记录都会永久移除。</sys:String>
-    <sys:String x:Key="S.History.DeleteConfirm">确定删除“{0}”吗？\n\n图片、缩略图与记录都会永久移除（不可撤销）。</sys:String>
+    <sys:String x:Key="S.History.DeleteConfirmFavorite">删除收藏“{0}”？\n\n图片和记录将永久移除。</sys:String>
+    <sys:String x:Key="S.History.DeleteConfirm">删除“{0}”？\n\n图片和记录将永久移除。</sys:String>
     <sys:String x:Key="S.History.DeleteDialogTitle">删除历史记录</sys:String>
     <sys:String x:Key="S.History.DeleteCancelled">已取消删除。</sys:String>
 
@@ -156,7 +156,7 @@
     <sys:String x:Key="S.History.RenameTitle">重命名历史记录</sys:String>
     <sys:String x:Key="S.History.RenameLabel">名称</sys:String>
     <sys:String x:Key="S.History.RenameInputName">历史记录名称</sys:String>
-    <sys:String x:Key="S.History.RenameHint">名称用于图库显示与搜索；不能包含 \ / : * ? " &lt; &gt; | 这些字符（会被替换为 _）。</sys:String>
+    <sys:String x:Key="S.History.RenameHint">不能包含 \ / : * ? " &lt; &gt; |（会被替换为 _）。</sys:String>
     <sys:String x:Key="S.History.RenameOk">确定</sys:String>
     <sys:String x:Key="S.History.RenameCancel">取消</sys:String>
     <sys:String x:Key="S.History.RenameCancelled">已取消重命名。</sys:String>
@@ -165,13 +165,13 @@
     <sys:String x:Key="S.History.Renamed">已重命名为“{0}”。</sys:String>
 
     <!-- ===== 历史：动作结果（与 HistoryActions 对应） ===== -->
-    <sys:String x:Key="S.History.Copied">已复制“{0}”（{1}×{2}）。</sys:String>
+    <sys:String x:Key="S.History.Copied">已复制“{0}”。</sys:String>
     <sys:String x:Key="S.History.CopyFailed">复制失败：{0}</sys:String>
     <sys:String x:Key="S.History.SaveFailed">另存为失败：{0}</sys:String>
     <sys:String x:Key="S.History.DeleteFailed">删除失败：{0}</sys:String>
-    <sys:String x:Key="S.History.Deleted">已删除“{0}”（图片与缩略图文件已一并删除）。</sys:String>
+    <sys:String x:Key="S.History.Deleted">已删除“{0}”。</sys:String>
     <sys:String x:Key="S.History.PinFailed">贴图失败：{0}</sys:String>
-    <sys:String x:Key="S.History.Pinned">已贴图“{0}”（{1}×{2}，历史记录数仍为 {3}）。</sys:String>
+    <sys:String x:Key="S.History.Pinned">已贴图“{0}”。</sys:String>
 
     <!-- ===== 历史：预览 ===== -->
     <sys:String x:Key="S.History.PreviewTitle">预览 · {0}</sys:String>
@@ -196,7 +196,7 @@
     <sys:String x:Key="S.History.EditNothingToUndo">没有可撤销的标注。</sys:String>
     <sys:String x:Key="S.History.EditNothingToRedo">没有可重做的标注。</sys:String>
     <sys:String x:Key="S.History.EditSelectFirst">先点“选择”工具，再点中一个标注才能删除。</sys:String>
-    <sys:String x:Key="S.History.EditMarkedDirty">已追加 {0} 个标注，点“保存并覆盖”才会写入这条记录。</sys:String>
+    <sys:String x:Key="S.History.EditMarkedDirty">已追加 {0} 个标注</sys:String>
     <sys:String x:Key="S.History.EditCannotDraw">当前状态不能绘制：{0}</sys:String>
     <sys:String x:Key="S.History.EditCannotType">无法输入文字：{0}</sys:String>
     <sys:String x:Key="S.History.EditToolSwitchFailed">切换工具失败：{0}</sys:String>
@@ -206,29 +206,29 @@
     <sys:String x:Key="S.History.EditSaveCancelled">已取消保存，编辑内容还在。</sys:String>
     <sys:String x:Key="S.History.EditStayed">已留在编辑窗口。</sys:String>
     <sys:String x:Key="S.History.EditCancelDialogTitle">取消编辑</sys:String>
-    <sys:String x:Key="S.History.EditCancelConfirm">本次追加的 {0} 个标注不会保存，原图保持不变。\n\n确定取消编辑吗？</sys:String>
-    <sys:String x:Key="S.History.EditOpened">正在编辑“{0}”：追加标注后点“保存并覆盖”。</sys:String>
+    <sys:String x:Key="S.History.EditCancelConfirm">放弃本次追加的 {0} 个标注？</sys:String>
+    <sys:String x:Key="S.History.EditOpened">正在编辑“{0}”。</sys:String>
     <sys:String x:Key="S.History.EditAlreadyOpen">这条记录已经在编辑窗口中打开。</sys:String>
-    <sys:String x:Key="S.History.EditSaveOverwritten">已保存并覆盖“{0}”（{1}×{2}），历史记录数仍为 {3}。</sys:String>
+    <sys:String x:Key="S.History.EditSaveOverwritten">已保存“{0}”。</sys:String>
     <sys:String x:Key="S.History.EditOpenFailed">打开编辑窗口失败：{0}</sys:String>
-    <sys:String x:Key="S.History.EditSaveFailedBody">保存失败，原图没有被修改：\n{0}</sys:String>
-    <sys:String x:Key="S.History.EditRecordInfo">{0} · {1}×{2} · {3} · {4}</sys:String>
-    <sys:String x:Key="S.History.EditFavoritedBadge"> · ★ 已收藏</sys:String>
+    <sys:String x:Key="S.History.EditSaveFailedBody">保存失败，原图未修改：\n{0}</sys:String>
+    <sys:String x:Key="S.History.EditRecordInfo">{0} · {1}×{2}</sys:String>
+    <sys:String x:Key="S.History.EditFavoritedBadge">  ★</sys:String>
 
     <!-- ===== 历史：覆盖语义说明（与 Core 的 HistoryOverwritePlan 对应） ===== -->
-    <sys:String x:Key="S.History.OverwriteSaved">已保存并覆盖“{0}”（追加 {1} 个标注，旧版本已被替换，历史条数不变）。</sys:String>
-    <sys:String x:Key="S.History.OverwriteDeleted">“{0}”已经被删除，本次修改没有保存（原记录不存在，也不会新建一条）。</sys:String>
-    <sys:String x:Key="S.History.OverwriteExplain">即将保存并覆盖历史记录“{0}”。\n\n· 旧版本图片与旧标注「不会被保留」，新图片直接替换原文件；\n· 不会新增一条历史记录，记录的 ID、名称、创建时间与收藏状态保持不变；\n· 30 天保留期仍按创建时间计算，覆盖不会延长期限。\n\n确定保存并覆盖吗？选择“取消”会留在编辑窗口，什么都不写。</sys:String>
+    <sys:String x:Key="S.History.OverwriteSaved">已保存“{0}”（{1} 个标注）。</sys:String>
+    <sys:String x:Key="S.History.OverwriteDeleted">“{0}”已被删除，修改未保存。</sys:String>
+    <sys:String x:Key="S.History.OverwriteExplain">将覆盖“{0}”：旧图片不会保留，也不会新增记录。\n\n确定保存吗？</sys:String>
 
     <!-- ===== 设置窗口 ===== -->
     <sys:String x:Key="S.Settings.WindowTitle">Zeep Cut 设置</sys:String>
     <sys:String x:Key="S.Settings.WindowName">Zeep Cut 设置</sys:String>
     <sys:String x:Key="S.Settings.Heading">设置</sys:String>
-    <sys:String x:Key="S.Settings.Subtitle">改动立即生效并保存到 settings.json；关闭窗口即完成。</sys:String>
+    <sys:String x:Key="S.Settings.Subtitle">更改会自动保存</sys:String>
     <sys:String x:Key="S.Settings.Section.Shortcuts">快捷键</sys:String>
     <sys:String x:Key="S.Settings.Shortcut.Screenshot">截图快捷键</sys:String>
     <sys:String x:Key="S.Settings.Shortcut.Pin">贴图快捷键</sys:String>
-    <sys:String x:Key="S.Settings.Shortcut.Hint">点击输入框后直接按组合键（需要 Ctrl / Alt / Shift / Win 之一，主键支持 A–Z、0–9、F1–F12）。</sys:String>
+    <sys:String x:Key="S.Settings.Shortcut.Hint">点击后直接按下组合键，需包含 Ctrl / Alt / Shift / Win 之一。</sys:String>
     <sys:String x:Key="S.Settings.Shortcut.Waiting">请按下组合键…</sys:String>
     <sys:String x:Key="S.Settings.Shortcut.NeedModifier">需要至少一个修饰键（Ctrl / Alt / Shift / Win），主键支持 A–Z、0–9、F1–F12。</sys:String>
     <sys:String x:Key="S.Settings.Shortcut.SecondKey">一次只能设一个主键。</sys:String>
@@ -241,7 +241,7 @@
     <sys:String x:Key="S.Settings.CaptureMode.Label">默认选区方式</sys:String>
     <sys:String x:Key="S.Settings.CaptureMode.Rectangle">手动框选矩形</sys:String>
     <sys:String x:Key="S.Settings.CaptureMode.Window">自动捕获窗口</sys:String>
-    <sys:String x:Key="S.Settings.CaptureMode.Hint">下次截图生效。手动模式只按鼠标拖动框选；窗口模式悬停识别、单击选中，也可拖动框选。</sys:String>
+    <sys:String x:Key="S.Settings.CaptureMode.Hint">下次截图生效。</sys:String>
     <sys:String x:Key="S.Settings.Section.Language">语言</sys:String>
     <sys:String x:Key="S.Settings.Language.System">跟随系统</sys:String>
     <sys:String x:Key="S.Settings.Language.ZhHans">简体中文</sys:String>
@@ -264,10 +264,10 @@
     <sys:String x:Key="S.Settings.Update.Check">检查更新</sys:String>
     <sys:String x:Key="S.Settings.Section.Data">数据目录</sys:String>
     <sys:String x:Key="S.Settings.Data.Open">打开目录</sys:String>
-    <sys:String x:Key="S.Settings.Data.Opened">已打开数据目录：{0}</sys:String>
+    <sys:String x:Key="S.Settings.Data.Opened">已打开数据目录。</sys:String>
     <sys:String x:Key="S.Settings.Data.OpenFailed">打开数据目录失败：{0}</sys:String>
     <sys:String x:Key="S.Settings.Data.History">历史库：{0}</sys:String>
-    <sys:String x:Key="S.Settings.Data.Counts">共 {0} 条历史记录 · 图片 {1} 个文件 · 缩略图 {2} 个文件</sys:String>
+    <sys:String x:Key="S.Settings.Data.Counts">{0} 条记录 · {1} 张图片</sys:String>
     <sys:String x:Key="S.Settings.Section.Retention">历史保留规则</sys:String>
     <sys:String x:Key="S.Settings.Section.Update">检查更新</sys:String>
     <sys:String x:Key="S.Settings.Saved">设置已保存。</sys:String>
@@ -280,11 +280,11 @@
     <sys:String x:Key="S.Update.Title">检查更新</sys:String>
     <sys:String x:Key="S.Update.Checking">正在检查更新…</sys:String>
     <sys:String x:Key="S.Update.NotConfiguredTitle">尚未配置更新渠道</sys:String>
-    <sys:String x:Key="S.Update.NotConfigured">当前版本 {0}。\n\n本程序还没有配置更新渠道（AppInfo.UpdateManifestUrl 为空），因此无法查询是否有新版本。\n这不影响任何本地功能；请通过你获取 Zeep Cut 的渠道了解更新（本程序不会自行下载或安装）。</sys:String>
+    <sys:String x:Key="S.Update.NotConfigured">当前版本 {0}。\n尚未配置更新渠道，无法检查新版本。</sys:String>
     <sys:String x:Key="S.Update.FailedTitle">检查更新失败</sys:String>
-    <sys:String x:Key="S.Update.Failed">当前版本 {0}。\n\n无法确认是否有新版本：{1}\n请检查网络或更新渠道地址后重试。</sys:String>
+    <sys:String x:Key="S.Update.Failed">当前版本 {0}。\n无法检查更新：{1}</sys:String>
     <sys:String x:Key="S.Update.UpToDateTitle">已是最新版</sys:String>
-    <sys:String x:Key="S.Update.UpToDate">已是最新版：当前版本 {0}，更新渠道的最新版本是 {1}。</sys:String>
+    <sys:String x:Key="S.Update.UpToDate">已是最新版（{0}）。</sys:String>
     <sys:String x:Key="S.Update.AvailableTitle">发现新版本 {0}</sys:String>
     <sys:String x:Key="S.Update.Available">发现新版本 {0}（当前版本 {1}）。</sys:String>
     <sys:String x:Key="S.Update.AvailableWithNotes">发现新版本 {0}（当前版本 {1}）。\n\n更新说明：{2}</sys:String>
@@ -292,7 +292,7 @@
     <sys:String x:Key="S.Update.Channel">更新渠道：{0}</sys:String>
     <sys:String x:Key="S.Update.Download">打开发布页</sys:String>
     <sys:String x:Key="S.Update.Ok">确定</sys:String>
-    <sys:String x:Key="S.Update.FailedToast">检查更新失败：{0}（未能确认版本，不是“已是最新版”）</sys:String>
+    <sys:String x:Key="S.Update.FailedToast">检查更新失败：{0}</sys:String>
     <sys:String x:Key="S.Update.NoUrl">新版本没有提供下载页地址（清单里缺少 url）。</sys:String>
 
     <!-- ===== 提示 / 通用对话框 ===== -->

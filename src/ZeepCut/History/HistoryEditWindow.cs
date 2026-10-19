@@ -5,6 +5,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
+using ZeepCut.Capture;
 using ZeepCut.Core.Annotations;
 using ZeepCut.Core.Geometry;
 using ZeepCut.Core.History;
@@ -63,9 +64,6 @@ internal sealed class HistoryEditWindow : Window
     /// <summary>图像四周留白（DIP）。</summary>
     private const double CanvasPadding = 16;
 
-    /// <summary>右侧工具栏宽度（DIP）。</summary>
-    private const double SidebarWidth = 228;
-
     /// <summary>手柄命中半径与文档命中容差（物理像素，与遮罩一致）。</summary>
     private const int HandleRadius = 8;
     private const int HitTolerance = 4;
@@ -99,17 +97,15 @@ internal sealed class HistoryEditWindow : Window
     private readonly ScrollViewer _scroll;
     private readonly AnnotationLayer _layer;
     private readonly Canvas _editorCanvas;
+    private readonly Canvas _canvasHost;
     private readonly Path _editorOutline;
     private readonly List<(AnnotationHandle Handle, Rectangle Element)> _editorHandles = new();
     private readonly Border _textEditorHost;
     private readonly TextBox _textEditor;
     private readonly TextBlock _status;
     private readonly TextBlock _info;
-    private TextBlock _hint = null!;
 
-    /// <summary>只读字段的占位写法在 C# 里不成立，这里不做声明；侧栏标题随语言重建即可。</summary>
     private readonly List<(AnnotationTool? Tool, Button Element)> _toolButtons = new();
-    private readonly Dictionary<AnnotationTool, string> _toolLabels = new();
     private readonly Button _saveButton;
 
     /// <summary>图像左上角在画布内的位置（DIP）；缩放时改变。</summary>
@@ -142,9 +138,9 @@ internal sealed class HistoryEditWindow : Window
         _textureSize = Math.Max(1, Math.Min(image.PixelWidth, image.PixelHeight));
 
         Title = StringsUi.Format("S.History.EditTitle", record.Name);
-        Width = Math.Min(1180, Math.Max(760, image.PixelWidth / 1.25 + SidebarWidth + 90));
-        Height = Math.Min(860, Math.Max(560, image.PixelHeight / 1.25 + 190));
-        MinWidth = 640;
+        Width = Math.Min(1180, Math.Max(760, image.PixelWidth / 1.25 + 120));
+        Height = Math.Min(860, Math.Max(560, image.PixelHeight / 1.25 + 250));
+        MinWidth = 700;
         MinHeight = 460;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         ShowInTaskbar = false;
@@ -157,11 +153,11 @@ internal sealed class HistoryEditWindow : Window
         AutomationProperties.SetAutomationId(this, "history-edit-window");
         AutomationProperties.SetName(this, StringsUi.Get("S.History.EditWindowName"));
 
-        // --- 图像显示：ScrollViewer + Image（Stretch.None = 1 图像像素显示成 1 个设备无关像素） ---
+        // 图片、鼠标及编辑控件统一使用内容画布 DIP；1 图像像素显示为 _zoom DIP。
         _picture = new Image
         {
             Source = image,
-            Stretch = Stretch.None,
+            Stretch = Stretch.Fill,
             SnapsToDevicePixels = true,
             HorizontalAlignment = HorizontalAlignment.Left,
             VerticalAlignment = VerticalAlignment.Top,
@@ -209,7 +205,7 @@ internal sealed class HistoryEditWindow : Window
             _editorCanvas.Children.Add(element);
         }
 
-        var canvasHost = new Canvas();
+        var canvasHost = _canvasHost = new Canvas();
         canvasHost.Children.Add(_picture);
         canvasHost.Children.Add(_layer);
         canvasHost.Children.Add(_editorCanvas);
@@ -270,77 +266,83 @@ internal sealed class HistoryEditWindow : Window
         };
         _scroll.SetResourceReference(Control.BackgroundProperty, HistoryUi.Keys.SurfaceAlt);
 
-        // --- 头部：记录信息 ---
-        _info = HistoryUi.Text(DescribeRecord(record, image), 13, weight: FontWeights.SemiBold);
+        // --- 头部：名称与尺寸（左），状态提示 / 取消 / 保存（右） ---
+        _info = HistoryUi.Text(DescribeRecord(record, image), 14, weight: FontWeights.SemiBold);
         _info.HorizontalAlignment = HorizontalAlignment.Left;
         AutomationProperties.SetAutomationId(_info, "history-edit-record-info");
 
-        _hint = HistoryUi.Text(
-            StringsUi.Get("S.History.EditHint"),
-            12,
-            brushKey: HistoryUi.Keys.Secondary);
-        _hint.HorizontalAlignment = HorizontalAlignment.Left;
-        _hint.TextWrapping = TextWrapping.Wrap;
-        _hint.Margin = new Thickness(0, 3, 0, 0);
-        AutomationProperties.SetAutomationId(_hint, "history-edit-hint");
-
-        // --- 右侧工具栏 ---
-        var sidebar = BuildSidebar(out _saveButton);
-
-        var body = new Grid();
-        body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        body.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        Grid.SetColumn(_scroll, 0);
-        Grid.SetColumn(sidebar, 1);
-        body.Children.Add(_scroll);
-        body.Children.Add(sidebar);
-
-        // --- 底部状态条 ---
-        _status = HistoryUi.Text(StringsUi.Get("S.History.EditStatusHint"), 12.5, brushKey: HistoryUi.Keys.Secondary);
-        _status.HorizontalAlignment = HorizontalAlignment.Left;
-        _status.TextWrapping = TextWrapping.Wrap;
-        _status.TextTrimming = TextTrimming.None;
+        _status = HistoryUi.Text(string.Empty, 12.5, brushKey: HistoryUi.Keys.Secondary);
+        _status.HorizontalAlignment = HorizontalAlignment.Right;
+        _status.Margin = new Thickness(16, 0, 16, 0);
+        _status.MaxWidth = 380;
         AutomationProperties.SetAutomationId(_status, "history-edit-status");
-        AutomationProperties.SetName(_status, _status.Text);
+
+        var cancel = HistoryUi.Button(
+            StringsUi.Get("S.History.EditCancel"),
+            StringsUi.Get("S.History.EditCancelName"),
+            () => Cancel(confirm: true));
+        AutomationProperties.SetAutomationId(cancel, "history-edit-cancel");
+        cancel.Margin = new Thickness(0, 0, 8, 0);
+
+        _saveButton = HistoryUi.Button(SaveButtonText, SaveButtonText, () => Save("保存按钮"), primary: true);
+        AutomationProperties.SetAutomationId(_saveButton, SaveButtonId);
+        AutomationProperties.SetHelpText(_saveButton, StringsUi.Get("S.History.EditSaveHint"));
+        _saveButton.Margin = new Thickness(0);
+
+        var headerGrid = new Grid();
+        headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        Grid.SetColumn(_info, 0);
+        Grid.SetColumn(_status, 1);
+        Grid.SetColumn(cancel, 2);
+        Grid.SetColumn(_saveButton, 3);
+        headerGrid.Children.Add(_info);
+        headerGrid.Children.Add(_status);
+        headerGrid.Children.Add(cancel);
+        headerGrid.Children.Add(_saveButton);
+
+        var headerBar = new Border
+        {
+            Padding = new Thickness(20, 11, 20, 11),
+            BorderThickness = new Thickness(0, 0, 0, 1),
+            Child = headerGrid,
+        };
+        headerBar.SetResourceReference(Border.BackgroundProperty, HistoryUi.Keys.Surface);
+        headerBar.SetResourceReference(Border.BorderBrushProperty, HistoryUi.Keys.Divider);
+
+        // --- 底部：与截图遮罩同款的深色工具栏，坐在画布底部 ---
+        var toolbar = BuildToolbar();
+        toolbar.Visibility = Visibility.Visible;
+        toolbar.HorizontalAlignment = HorizontalAlignment.Center;
+        var dock = new Border { Padding = new Thickness(16, 6, 16, 18), Child = toolbar };
+        dock.SetResourceReference(Border.BackgroundProperty, HistoryUi.Keys.SurfaceAlt);
 
         var root = new Grid();
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-
-        var header = new StackPanel();
-        header.Children.Add(_info);
-        header.Children.Add(_hint);
-        var headerBar = new Border
-        {
-            Padding = new Thickness(20, 12, 20, 12),
-            BorderThickness = new Thickness(0, 0, 0, 1),
-            Child = header,
-        };
-        headerBar.SetResourceReference(Border.BackgroundProperty, HistoryUi.Keys.Surface);
-        headerBar.SetResourceReference(Border.BorderBrushProperty, HistoryUi.Keys.Divider);
         Grid.SetRow(headerBar, 0);
-        Grid.SetRow(body, 1);
-
-        var statusBar = new Border
-        {
-            Padding = new Thickness(20, 9, 20, 10),
-            BorderThickness = new Thickness(0, 1, 0, 0),
-            Child = _status,
-        };
-        statusBar.SetResourceReference(Border.BackgroundProperty, HistoryUi.Keys.Surface);
-        statusBar.SetResourceReference(Border.BorderBrushProperty, HistoryUi.Keys.Divider);
-        Grid.SetRow(statusBar, 2);
-
+        Grid.SetRow(_scroll, 1);
+        Grid.SetRow(dock, 2);
         root.Children.Add(headerBar);
-        root.Children.Add(body);
-        root.Children.Add(statusBar);
+        root.Children.Add(_scroll);
+        root.Children.Add(dock);
         Content = root;
+        RefreshSelectionVisuals();
 
-        _scroll.PreviewMouseLeftButtonDown += OnCanvasMouseDown;
-        _scroll.PreviewMouseLeftButtonUp += OnCanvasMouseUp;
-        _scroll.PreviewMouseMove += OnCanvasMouseMove;
-        _scroll.MouseLeave += (_, _) => UpdateCursor(null);
+        // Keep input in content coordinates: WPF includes scrolling in GetPosition(_canvasHost).
+        // Scrollbars are siblings of this canvas and must not start annotations.
+        _canvasHost.PreviewMouseLeftButtonDown += OnCanvasMouseDown;
+        _canvasHost.PreviewMouseLeftButtonUp += OnCanvasMouseUp;
+        _canvasHost.PreviewMouseMove += OnCanvasMouseMove;
+        _canvasHost.MouseLeave += (_, _) => UpdateCursor(null);
+        _scroll.ScrollChanged += (_, e) =>
+        {
+            if (e.ViewportWidthChange != 0 || e.ViewportHeightChange != 0)
+                Relayout();
+        };
         _scroll.PreviewMouseWheel += OnPreviewMouseWheel;
         PreviewKeyDown += OnWindowPreviewKeyDown;
 
@@ -395,167 +397,139 @@ internal sealed class HistoryEditWindow : Window
     /// <summary>图像左上角在画布内的位置（DIP）。</summary>
     internal Point ImageOrigin => _origin;
 
-    // --- 侧栏 ---
+    // --- 工具栏 ---
 
-    private Border BuildSidebar(out Button saveButton)
+    private readonly List<(AnnotationColor Color, Button Element)> _colorButtons = new();
+    private readonly List<(int Thickness, Button Element)> _thicknessButtons = new();
+
+    private Border BuildToolbar()
     {
-        var panel = new StackPanel { Width = SidebarWidth - 38 };
+        var tools = OverlayChrome.Group(
+            AddTool("S.Annotation.Tool.Select", null, "select", OverlayChrome.IconSelect, filled: true),
+            AddTool("S.Annotation.Tool.Rectangle", AnnotationTool.Rectangle, "rectangle", OverlayChrome.IconRectangle),
+            AddTool("S.Annotation.Tool.Ellipse", AnnotationTool.Ellipse, "ellipse", OverlayChrome.IconEllipse),
+            AddTool("S.Annotation.Tool.Arrow", AnnotationTool.Arrow, "arrow", OverlayChrome.IconArrow),
+            AddTool("S.Annotation.Tool.Line", AnnotationTool.Line, "line", OverlayChrome.IconLine),
+            AddTool("S.Annotation.Tool.Freehand", AnnotationTool.Freehand, "freehand", OverlayChrome.IconFreehand),
+            AddTool("S.Annotation.Tool.Text", AnnotationTool.Text, "text", OverlayChrome.IconText),
+            AddTool("S.Annotation.Tool.Mosaic", AnnotationTool.Mosaic, "mosaic", OverlayChrome.IconMosaic, filled: true));
 
-        panel.Children.Add(SectionLabel(StringsUi.Get("S.Annotation.Section.Tools")));
-        var toolGrid = new WrapPanel { Margin = new Thickness(0, 0, 0, 8) };
-        AddToolButton(toolGrid, StringsUi.Get("S.Annotation.Tool.Select"), null, "select");
-        AddToolButton(toolGrid, StringsUi.Get("S.Annotation.Tool.Rectangle"), AnnotationTool.Rectangle, "rectangle");
-        AddToolButton(toolGrid, StringsUi.Get("S.Annotation.Tool.Ellipse"), AnnotationTool.Ellipse, "ellipse");
-        AddToolButton(toolGrid, StringsUi.Get("S.Annotation.Tool.Arrow"), AnnotationTool.Arrow, "arrow");
-        AddToolButton(toolGrid, StringsUi.Get("S.Annotation.Tool.Line"), AnnotationTool.Line, "line");
-        AddToolButton(toolGrid, StringsUi.Get("S.Annotation.Tool.Freehand"), AnnotationTool.Freehand, "freehand");
-        AddToolButton(toolGrid, StringsUi.Get("S.Annotation.Tool.Text"), AnnotationTool.Text, "text");
-        AddToolButton(toolGrid, StringsUi.Get("S.Annotation.Tool.Mosaic"), AnnotationTool.Mosaic, "mosaic");
-        panel.Children.Add(toolGrid);
-
-        panel.Children.Add(SectionLabel(StringsUi.Get("S.Annotation.Section.Color")));
-        var colors = new WrapPanel { Margin = new Thickness(0, 0, 0, 8) };
+        var colorRow = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
         foreach (var color in AnnotationPalette.Colors)
         {
-            var swatch = new Button
-            {
-                Width = 26,
-                Height = 26,
-                Margin = new Thickness(0, 0, 6, 6),
-                Background = HistoryUi.Frozen(Color.FromArgb(color.Alpha, color.Red, color.Green, color.Blue)),
-                BorderThickness = new Thickness(1),
-                Cursor = Cursors.Hand,
-                ToolTip = color.ToString(),
-            };
+            var swatch = OverlayChrome.Swatch(Color.FromArgb(color.Alpha, color.Red, color.Green, color.Blue));
+            swatch.ToolTip = color.ToString();
             var captured = color;
             swatch.Click += (_, _) =>
             {
                 _session.Settings.Color = captured;
+                RefreshSelectionVisuals();
                 AppLog.Info("History", $"编辑窗口切换颜色：{captured}");
             };
-            swatch.SetResourceReference(Control.BorderBrushProperty, HistoryUi.Keys.Border);
-            AutomationProperties.SetName(swatch, $"颜色{color}");
-            AutomationProperties.SetAutomationId(swatch, $"history-edit-color-{color}");
-            colors.Children.Add(swatch);
+            OverlayChrome.SetNames(swatch, $"颜色{color}", $"history-edit-color-{color}");
+            _colorButtons.Add((color, swatch));
+            colorRow.Children.Add(swatch);
         }
 
-        panel.Children.Add(colors);
-
-        panel.Children.Add(SectionLabel(StringsUi.Get("S.Annotation.Section.Thickness")));
-        var thicknesses = new WrapPanel { Margin = new Thickness(0, 0, 0, 8) };
+        var thicknessChips = new List<UIElement>();
         foreach (var thickness in AnnotationPalette.Thicknesses)
         {
-            var button = HistoryUi.Button(
-                thickness.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                $"粗细{thickness}",
-                () =>
-                {
-                    _session.Settings.Thickness = thickness;
-                    AppLog.Info("History", $"编辑窗口切换粗细：{thickness} 像素");
-                });
-            button.MinWidth = 34;
-            button.Padding = new Thickness(6, 2, 6, 2);
-            button.Margin = new Thickness(0, 0, 5, 5);
-            AutomationProperties.SetAutomationId(button, $"history-edit-thickness-{thickness}");
-            thicknesses.Children.Add(button);
-        }
-
-        panel.Children.Add(thicknesses);
-
-        panel.Children.Add(SectionLabel(StringsUi.Get("S.Annotation.Section.Edit")));
-        var undo = HistoryUi.Button(StringsUi.Get("S.Common.Undo"), StringsUi.Get("S.Common.Undo"), () => Undo("侧栏"));
-        var redo = HistoryUi.Button(StringsUi.Get("S.Common.Redo"), StringsUi.Get("S.Common.Redo"), () => Redo("侧栏"));
-        var remove = HistoryUi.Button(
-            StringsUi.Get("S.History.EditDeleteSelected"),
-            StringsUi.Get("S.History.EditDeleteSelected"),
-            () => DeleteSelected("侧栏"));
-        AutomationProperties.SetAutomationId(undo, "history-edit-undo");
-        AutomationProperties.SetAutomationId(redo, "history-edit-redo");
-        AutomationProperties.SetAutomationId(remove, "history-edit-delete");
-        var editRow = new WrapPanel { Margin = new Thickness(0, 0, 0, 8) };
-        editRow.Children.Add(undo);
-        editRow.Children.Add(redo);
-        editRow.Children.Add(remove);
-        panel.Children.Add(editRow);
-
-        panel.Children.Add(SectionLabel(StringsUi.Get("S.Annotation.Section.Zoom")));
-        var zoomRow = new WrapPanel { Margin = new Thickness(0, 0, 0, 10) };
-        var zoomOut = HistoryUi.Button("－", "编辑缩小", () => SetZoom(_zoom / 1.25));
-        var zoomIn = HistoryUi.Button("＋", "编辑放大", () => SetZoom(_zoom * 1.25));
-        var zoomReset = HistoryUi.Button("1:1", "编辑实际大小", () => SetZoom(1.0));
-        var zoomFit = HistoryUi.Button(StringsUi.Get("S.History.EditFit"), StringsUi.Get("S.History.EditFit"), FitToWindow);
-        foreach (var button in new[] { zoomOut, zoomIn, zoomReset, zoomFit })
-        {
-            button.MinWidth = 40;
-            button.Padding = new Thickness(6, 2, 6, 2);
-            button.Margin = new Thickness(0, 0, 5, 5);
-            zoomRow.Children.Add(button);
-        }
-
-        AutomationProperties.SetAutomationId(zoomOut, "history-edit-zoom-out");
-        AutomationProperties.SetAutomationId(zoomIn, "history-edit-zoom-in");
-        AutomationProperties.SetAutomationId(zoomReset, "history-edit-zoom-reset");
-        AutomationProperties.SetAutomationId(zoomFit, "history-edit-zoom-fit");
-        panel.Children.Add(zoomRow);
-
-        saveButton = HistoryUi.Button(SaveButtonText, SaveButtonText, () => Save("侧栏按钮"), primary: true);
-        AutomationProperties.SetAutomationId(saveButton, SaveButtonId);
-        saveButton.MinWidth = 0;
-        saveButton.ToolTip = StringsUi.Get("S.History.EditSaveHint");
-        AutomationProperties.SetHelpText(saveButton, saveButton.ToolTip?.ToString() ?? string.Empty);
-
-        var cancel = HistoryUi.Button(
-            StringsUi.Get("S.History.EditCancel"),
-            StringsUi.Get("S.History.EditCancelName"),
-            () => Cancel(confirm: true));
-        AutomationProperties.SetAutomationId(cancel, "history-edit-cancel");
-
-        var actionRow = new StackPanel { Orientation = Orientation.Vertical };
-        saveButton.Margin = new Thickness(0, 0, 0, 6);
-        saveButton.HorizontalAlignment = HorizontalAlignment.Stretch;
-        cancel.Margin = new Thickness(0, 0, 0, 0);
-        cancel.HorizontalAlignment = HorizontalAlignment.Stretch;
-        actionRow.Children.Add(saveButton);
-        actionRow.Children.Add(cancel);
-        panel.Children.Add(actionRow);
-
-        var sidebar = new Border
-        {
-            Width = SidebarWidth,
-            BorderThickness = new Thickness(1, 0, 0, 0),
-            Padding = new Thickness(12, 12, 12, 12),
-            Child = new ScrollViewer
+            var chip = OverlayChrome.ThicknessChip(thickness);
+            var captured = thickness;
+            chip.ToolTip = StringsUi.Format("S.Annotation.ThicknessTooltip", thickness);
+            chip.Click += (_, _) =>
             {
-                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-                Content = panel,
-            },
-        };
-        sidebar.SetResourceReference(Border.BackgroundProperty, HistoryUi.Keys.Surface);
-        sidebar.SetResourceReference(Border.BorderBrushProperty, HistoryUi.Keys.Divider);
-        return sidebar;
+                _session.Settings.Thickness = captured;
+                RefreshSelectionVisuals();
+                AppLog.Info("History", $"编辑窗口切换粗细：{captured} 像素");
+            };
+            OverlayChrome.SetNames(chip, $"粗细{thickness}", $"history-edit-thickness-{thickness}");
+            _thicknessButtons.Add((thickness, chip));
+            thicknessChips.Add(chip);
+        }
+
+        var topRow = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
+        topRow.Children.Add(tools);
+        topRow.Children.Add(OverlayChrome.Divider());
+        topRow.Children.Add(colorRow);
+        topRow.Children.Add(OverlayChrome.Divider());
+        topRow.Children.Add(OverlayChrome.Group(thicknessChips.ToArray()));
+
+        // 第二行：撤销 / 重做 / 删除选中（左）  缩放（右）
+        var undo = OverlayChrome.IconButton(OverlayChrome.IconUndo, StringsUi.Get("S.Common.Undo"));
+        undo.Click += (_, _) => Undo("工具栏");
+        OverlayChrome.SetNames(undo, StringsUi.Get("S.Common.Undo"), "history-edit-undo");
+
+        var redo = OverlayChrome.IconButton(OverlayChrome.IconRedo, StringsUi.Get("S.Common.Redo"));
+        redo.Click += (_, _) => Redo("工具栏");
+        OverlayChrome.SetNames(redo, StringsUi.Get("S.Common.Redo"), "history-edit-redo");
+
+        var remove = OverlayChrome.IconButton(OverlayChrome.IconTrash, StringsUi.Get("S.History.EditDeleteSelected"));
+        remove.Click += (_, _) => DeleteSelected("工具栏");
+        OverlayChrome.SetNames(remove, StringsUi.Get("S.History.EditDeleteSelected"), "history-edit-delete");
+
+        var zoomOut = OverlayChrome.IconButton(OverlayChrome.IconMinus, StringsUi.Get("S.Annotation.Section.Zoom"));
+        zoomOut.Click += (_, _) => SetZoom(_zoom / 1.25);
+        OverlayChrome.SetNames(zoomOut, "编辑缩小", "history-edit-zoom-out");
+
+        var zoomReset = OverlayChrome.TextButton("1:1", "1:1");
+        zoomReset.Click += (_, _) => SetZoom(1.0);
+        OverlayChrome.SetNames(zoomReset, "编辑实际大小", "history-edit-zoom-reset");
+
+        var zoomIn = OverlayChrome.IconButton(OverlayChrome.IconPlus, StringsUi.Get("S.Annotation.Section.Zoom"));
+        zoomIn.Click += (_, _) => SetZoom(_zoom * 1.25);
+        OverlayChrome.SetNames(zoomIn, "编辑放大", "history-edit-zoom-in");
+
+        var zoomFit = OverlayChrome.IconButton(OverlayChrome.IconFit, StringsUi.Get("S.History.EditFit"));
+        zoomFit.Click += (_, _) => FitToWindow();
+        OverlayChrome.SetNames(zoomFit, StringsUi.Get("S.History.EditFit"), "history-edit-zoom-fit");
+
+        var bottomRow = new Grid { Margin = new Thickness(0, 8, 0, 0) };
+        bottomRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        bottomRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 16 });
+        bottomRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var editGroup = OverlayChrome.Group(undo, redo, remove);
+        var zoomGroup = OverlayChrome.Group(zoomOut, zoomReset, zoomIn, zoomFit);
+        Grid.SetColumn(editGroup, 0);
+        Grid.SetColumn(zoomGroup, 2);
+        bottomRow.Children.Add(editGroup);
+        bottomRow.Children.Add(zoomGroup);
+
+        var rows = new StackPanel { Orientation = Orientation.Vertical };
+        rows.Children.Add(topRow);
+        rows.Children.Add(bottomRow);
+        return OverlayChrome.Shell(rows);
     }
 
-    private static TextBlock SectionLabel(string text)
+    private Button AddTool(string textKey, AnnotationTool? tool, string slug, string iconData, bool filled = false)
     {
-        var block = HistoryUi.Text(text, 12, weight: FontWeights.SemiBold, brushKey: HistoryUi.Keys.Secondary);
-        block.HorizontalAlignment = HorizontalAlignment.Left;
-        block.Margin = new Thickness(2, 6, 0, 6);
-        return block;
-    }
-
-    private void AddToolButton(Panel host, string label, AnnotationTool? tool, string slug)
-    {
-        var button = HistoryUi.Button(label, label, () => SelectTool(tool));
-        button.MinWidth = 52;
-        button.Padding = new Thickness(6, 3, 6, 3);
-        button.Margin = new Thickness(0, 0, 5, 5);
+        var label = StringsUi.Get(textKey);
+        var button = OverlayChrome.IconButton(iconData, label, filled);
+        button.Click += (_, _) => SelectTool(tool);
 
         // AutomationId 用语言无关的 slug（T31）：切到英文后脚本仍按同一个 id 找得到。
-        AutomationProperties.SetAutomationId(button, $"history-edit-tool-{slug}");
+        OverlayChrome.SetNames(button, label, $"history-edit-tool-{slug}");
         _toolButtons.Add((tool, button));
-        _toolLabels[tool ?? AnnotationTool.Rectangle] = label;
-        host.Children.Add(button);
+        return button;
+    }
+
+    /// <summary>按当前工具/颜色/粗细刷新工具栏的选中态。</summary>
+    private void RefreshSelectionVisuals()
+    {
+        foreach (var (tool, button) in _toolButtons)
+        {
+            OverlayChrome.SetOn(button, tool == _activeTool);
+        }
+
+        foreach (var (color, button) in _colorButtons)
+        {
+            OverlayChrome.SetOn(button, color == _session.Settings.Color);
+        }
+
+        foreach (var (thickness, button) in _thicknessButtons)
+        {
+            OverlayChrome.SetOn(button, thickness == _session.Settings.Thickness);
+        }
     }
 
     // --- 布局与缩放 ---
@@ -581,6 +555,8 @@ internal sealed class HistoryEditWindow : Window
     /// <summary>按当前缩放摆放图片、标注层与选中态层（全部换算到画布 DIP）。</summary>
     private void Relayout()
     {
+        _dpi = ReadDpi();
+        if (_layer.Dpi != _dpi) _layer.DpiOverride = _dpi;
         var width = _background.PixelWidth * _zoom;
         var height = _background.PixelHeight * _zoom;
 
@@ -597,21 +573,23 @@ internal sealed class HistoryEditWindow : Window
 
         Canvas.SetLeft(_layer, _origin.X);
         Canvas.SetTop(_layer, _origin.Y);
-        _layer.Width = width;
-        _layer.Height = height;
+        // AnnotationLayer renders physical image pixels at 96/dpi DIP internally.
+        // Compensate once, then apply the same image zoom as the background.
+        _layer.Width = _background.PixelWidth * 96.0 / _dpi;
+        _layer.Height = _background.PixelHeight * 96.0 / _dpi;
+        var annotationScale = _zoom * _dpi / 96.0;
+        _layer.RenderTransform = new ScaleTransform(annotationScale, annotationScale);
 
-        Canvas.SetLeft(_editorCanvas, _origin.X);
-        Canvas.SetTop(_editorCanvas, _origin.Y);
-        _editorCanvas.Width = width;
-        _editorCanvas.Height = height;
+        // ToDip already includes the image origin; this layer spans the whole content canvas.
+        Canvas.SetLeft(_editorCanvas, 0);
+        Canvas.SetTop(_editorCanvas, 0);
 
         var hostWidth = Math.Max(viewportWidth, _origin.X * 2 + width);
         var hostHeight = Math.Max(viewportHeight, _origin.Y * 2 + height);
-        if (_scroll.Content is FrameworkElement content)
-        {
-            content.Width = hostWidth;
-            content.Height = hostHeight;
-        }
+        _canvasHost.Width = hostWidth;
+        _canvasHost.Height = hostHeight;
+        _editorCanvas.Width = hostWidth;
+        _editorCanvas.Height = hostHeight;
 
         UpdateTextEditorPlacement();
         UpdateEditorVisuals();
@@ -627,7 +605,7 @@ internal sealed class HistoryEditWindow : Window
 
         _zoom = clamped;
         Relayout();
-        AppLog.Info("History", $"编辑窗口缩放：{_zoom * 100:0}%（1 图像像素 = {_zoom * 96 / _dpi:0.###} DIP）");
+        AppLog.Info("History", $"编辑窗口缩放：{_zoom * 100:0}%（1 图像像素 = {_zoom:0.###} DIP）");
     }
 
     private void FitToWindow()
@@ -652,9 +630,10 @@ internal sealed class HistoryEditWindow : Window
     /// <summary>画布 DIP → 图像的物理像素坐标（可能超出图像，由 Core 夹取/判定）。</summary>
     private PixelPoint ToImage(Point dip, bool clamp = true)
     {
-        // dip 是 ScrollViewer 坐标系，与图片/标注层所在 Canvas 的坐标系一致（无偏移）。
-        var localX = (dip.X - _origin.X) * _dpi / 96.0 / _zoom;
-        var localY = (dip.Y - _origin.Y) * _dpi / 96.0 / _zoom;
+        // dip is relative to the content canvas, including any scroll displacement.
+        // Image dimensions are PixelWidth/Height * zoom DIP, independent of image/screen DPI.
+        var localX = (dip.X - _origin.X) / _zoom;
+        var localY = (dip.Y - _origin.Y) / _zoom;
 
         var x = localX;
         var y = localY;
@@ -669,14 +648,14 @@ internal sealed class HistoryEditWindow : Window
 
     /// <summary>图像物理像素 → 画布 DIP（标注层与选中态层都用这个换算）。</summary>
     private Point ToDip(int x, int y) => new(
-        _origin.X + (x * _zoom * 96.0 / _dpi),
-        _origin.Y + (y * _zoom * 96.0 / _dpi));
+        _origin.X + (x * _zoom),
+        _origin.Y + (y * _zoom));
 
     // --- 鼠标 ---
 
     private void OnCanvasMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (e.OriginalSource is TextBox || IsInsideTextEditor(e.GetPosition(_scroll)))
+        if (e.OriginalSource is TextBox || IsInsideTextEditor(e.GetPosition(_canvasHost)))
         {
             return;
         }
@@ -688,7 +667,12 @@ internal sealed class HistoryEditWindow : Window
             CommitText("点击其它位置");
         }
 
-        var dip = e.GetPosition(_scroll);
+        var dip = e.GetPosition(_canvasHost);
+        // Ignore image margins; only an existing captured drag may clamp to image edges.
+        if (dip.X < _origin.X || dip.Y < _origin.Y ||
+            dip.X >= _origin.X + _background.PixelWidth * _zoom ||
+            dip.Y >= _origin.Y + _background.PixelHeight * _zoom)
+            return;
         var point = ToImage(dip);
 
         // 1) 选择模式：先试手柄，再试命中已有**本次**标注。
@@ -702,7 +686,7 @@ internal sealed class HistoryEditWindow : Window
                     if (editor.BeginDrag(point, HandleRadius, HitTolerance))
                     {
                         _pointerEditing = true;
-                        _scroll.CaptureMouse();
+                        _canvasHost.CaptureMouse();
                         e.Handled = true;
                         UpdateEditorVisuals();
                         AppLog.Info("History", $"编辑窗口开始缩放标注：手柄={editor.ActiveHandle} 图像={point}");
@@ -725,7 +709,7 @@ internal sealed class HistoryEditWindow : Window
                     if (editor.BeginDrag(point, HandleRadius, HitTolerance))
                     {
                         _pointerEditing = true;
-                        _scroll.CaptureMouse();
+                        _canvasHost.CaptureMouse();
                         e.Handled = true;
                         UpdateEditorVisuals();
                         AppLog.Info("History", $"编辑窗口开始移动标注：类型={hit.Kind} 图像={point}");
@@ -766,14 +750,14 @@ internal sealed class HistoryEditWindow : Window
         }
 
         _pointerDrawing = true;
-        _scroll.CaptureMouse();
+        _canvasHost.CaptureMouse();
         e.Handled = true;
         AppLog.Info("History", $"编辑窗口开始画标注：工具={_activeTool} 起点图像={point} 图片={_background.PixelWidth}x{_background.PixelHeight}");
     }
 
     private void OnCanvasMouseMove(object sender, MouseEventArgs e)
     {
-        var dip = e.GetPosition(_scroll);
+        var dip = e.GetPosition(_canvasHost);
 
         if (_pointerEditing)
         {
@@ -798,15 +782,15 @@ internal sealed class HistoryEditWindow : Window
         if (_pointerEditing)
         {
             _pointerEditing = false;
-            if (_scroll.IsMouseCaptured)
+            if (_canvasHost.IsMouseCaptured)
             {
-                _scroll.ReleaseMouseCapture();
+                _canvasHost.ReleaseMouseCapture();
             }
 
             var editor = _session.Editing;
             if (editor is not null)
             {
-                editor.DragTo(ToImage(e.GetPosition(_scroll)));
+                editor.DragTo(ToImage(e.GetPosition(_canvasHost)));
                 var description = editor.EndDrag();
                 MarkDirty();
                 AppLog.Info(
@@ -827,12 +811,12 @@ internal sealed class HistoryEditWindow : Window
         }
 
         _pointerDrawing = false;
-        if (_scroll.IsMouseCaptured)
+        if (_canvasHost.IsMouseCaptured)
         {
-            _scroll.ReleaseMouseCapture();
+            _canvasHost.ReleaseMouseCapture();
         }
 
-        _session.UpdateDraft(ToImage(e.GetPosition(_scroll)));
+        _session.UpdateDraft(ToImage(e.GetPosition(_canvasHost)));
         var tool = _activeTool?.ToString() ?? "无";
         var committed = _session.CommitDraft();
         if (committed)
@@ -894,7 +878,7 @@ internal sealed class HistoryEditWindow : Window
             var pending = _session.BeginText(point);
             _textEditor.Text = string.Empty;
             _session.UpdateTextPreview(string.Empty);
-            _textEditor.FontSize = Math.Max(8, pending.FontSize * _zoom * 96.0 / _dpi);
+            _textEditor.FontSize = Math.Max(1, pending.FontSize * _zoom);
             _textEditorHost.Visibility = Visibility.Visible;
             UpdateTextEditorPlacement();
             _textEditor.Focus();
@@ -914,7 +898,7 @@ internal sealed class HistoryEditWindow : Window
         _editingTextOriginal = annotation.Text;
         _textEditor.Text = annotation.Text;
         _session.UpdateTextPreview(annotation.Text);
-        _textEditor.FontSize = Math.Max(8, annotation.FontSize * _zoom * 96.0 / _dpi);
+        _textEditor.FontSize = Math.Max(1, annotation.FontSize * _zoom);
         _textEditorHost.Visibility = Visibility.Visible;
         UpdateTextEditorPlacement(annotation.Position);
         _textEditor.Focus();
@@ -936,6 +920,8 @@ internal sealed class HistoryEditWindow : Window
         }
 
         var dip = ToDip(position.X, position.Y);
+        var fontSize = _session.PendingText?.FontSize ?? _editingText?.FontSize;
+        if (fontSize is { } size) _textEditor.FontSize = Math.Max(1, size * _zoom);
         var available = Math.Max(120, (_background.PixelWidth * _zoom) - (dip.X - _origin.X) - 8);
         _textEditorHost.Width = Math.Min(available, 420);
         Canvas.SetLeft(_textEditorHost, dip.X);
@@ -1036,12 +1022,7 @@ internal sealed class HistoryEditWindow : Window
         }
 
         _activeTool = tool;
-        foreach (var (candidate, element) in _toolButtons)
-        {
-            var selected = candidate == tool;
-            HistoryUi.StyleButton(element, selected);
-            element.FontWeight = selected ? FontWeights.SemiBold : FontWeights.Normal;
-        }
+        RefreshSelectionVisuals();
 
         UpdateCursor(null);
         AppLog.Info("History", $"编辑窗口切换工具：{(tool?.ToString() ?? "选择")} 文档标注数={_session.Count}");

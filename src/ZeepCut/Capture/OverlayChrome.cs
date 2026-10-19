@@ -32,6 +32,10 @@ internal static class OverlayChrome
     internal const string IconCopy = "M9,9 H19 V19 H9 Z M15,9 V5 H5 V15 H9";
     internal const string IconSave = "M12,4 V14.5 M7.5,10 L12,14.5 L16.5,10 M5,19.5 H19";
     internal const string IconPin = "M9,4.5 H15 L14.2,10 L17.5,13 H6.5 L9.8,10 Z M12,13 V20";
+    internal const string IconTrash = "M5,7 H19 M10,7 V5 H14 V7 M7,7 L8,19 H16 L17,7 M10.5,11 V16 M13.5,11 V16";
+    internal const string IconMinus = "M6,12 H18";
+    internal const string IconPlus = "M12,6 V18 M6,12 H18";
+    internal const string IconFit = "M4,9 V4 H9 M15,4 H20 V9 M20,15 V20 H15 M9,20 H4 V15";
     internal const string IconCancel = "M6.5,6.5 L17.5,17.5 M17.5,6.5 L6.5,17.5";
 
     /// <summary>马赛克图标：4×4 棋盘格（实心）。</summary>
@@ -182,6 +186,25 @@ internal static class OverlayChrome
         button.Height = height;
         button.Content = Icon(iconData, filled, 17);
         button.ToolTip = tooltip;
+        return button;
+    }
+
+    /// <summary>纯文字的小按钮（如缩放的“1:1”）。</summary>
+    internal static Button TextButton(string text, string tooltip, double width = 40)
+    {
+        var button = Base(ToolTemplate.Value);
+        button.Width = width;
+        button.Height = 32;
+        button.ToolTip = tooltip;
+        button.Content = new TextBlock
+        {
+            Text = text,
+            Foreground = TextBrush,
+            FontSize = 12.5,
+            FontWeight = FontWeights.Medium,
+            VerticalAlignment = VerticalAlignment.Center,
+            IsHitTestVisible = false,
+        };
         return button;
     }
 

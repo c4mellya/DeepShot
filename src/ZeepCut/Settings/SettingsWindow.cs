@@ -354,14 +354,14 @@ public sealed class SettingsWindow : Window
         // 外观（语言 + 主题）
         _sections.Children.Add(Section(StringsUi.Get("S.Settings.Section.Appearance")));
         _sections.Children.Add(Card(
-            Row(StringsUi.Get("S.Settings.Section.Language"), string.Empty, _language, out _languageLabel),
-            Row(StringsUi.Get("S.Settings.Section.Theme"), string.Empty, _theme, out _themeLabel)));
+            Row(StringsUi.Get("S.Settings.Section.Language"), null, _language, out _languageLabel),
+            Row(StringsUi.Get("S.Settings.Section.Theme"), null, _theme, out _themeLabel)));
         RefreshEffectiveLabels();
 
         // 开机启动
         _sections.Children.Add(Section(StringsUi.Get("S.Settings.Section.Startup")));
         _sections.Children.Add(Card(
-            Row(StringsUi.Get("S.Settings.Startup.Enable"), StringsUi.Get("S.Settings.Startup.Detail"), _startup)));
+            Row(StringsUi.Get("S.Settings.Startup.Enable"), null, _startup)));
 
         // 数据目录
         _sections.Children.Add(Section(StringsUi.Get("S.Settings.Section.Data")));
@@ -373,18 +373,9 @@ public sealed class SettingsWindow : Window
         openData.VerticalAlignment = VerticalAlignment.Center;
         openData.HorizontalAlignment = HorizontalAlignment.Right;
 
-        var settingsFile = MakeText(StringsUi.Format("S.Settings.SavePath", _store.FilePath), 11.5, ThemeManager.BrushKeys.SecondaryForeground);
-        settingsFile.TextWrapping = TextWrapping.Wrap;
-        settingsFile.HorizontalAlignment = HorizontalAlignment.Left;
-        AutomationProperties.SetAutomationId(settingsFile, "settings-save-path");
-
         _sections.Children.Add(Card(
             RowCore(dataLeft, openData),
-            FullRow(settingsFile)));
-
-        // 历史保留规则
-        _sections.Children.Add(Section(StringsUi.Get("S.Settings.Section.Retention")));
-        _sections.Children.Add(Card(FullRow(_retentionRule)));
+            FullRow(_retentionRule)));
 
         // 更新：版本 + 渠道 + 检查按钮
         _sections.Children.Add(Section(StringsUi.Get("S.Settings.Section.Update")));

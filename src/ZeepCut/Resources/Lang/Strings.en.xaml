@@ -89,7 +89,7 @@
     <sys:String x:Key="S.History.WindowTitle">Zeep Cut History</sys:String>
     <sys:String x:Key="S.History.WindowName">Zeep Cut history gallery</sys:String>
     <sys:String x:Key="S.History.Title">History</sys:String>
-    <sys:String x:Key="S.History.SearchPlaceholder">Search by name (case-insensitive; Enter to search, Esc to clear)</sys:String>
+    <sys:String x:Key="S.History.SearchPlaceholder">Search</sys:String>
     <sys:String x:Key="S.History.SearchName">Search history</sys:String>
     <sys:String x:Key="S.History.SearchClear">Clear search</sys:String>
     <sys:String x:Key="S.History.FilterAll">All</sys:String>
@@ -105,7 +105,7 @@
     <sys:String x:Key="S.History.ReadFailedTitle">Cannot read history</sys:String>
     <sys:String x:Key="S.History.ReadFailedBody">Database read failed: {0}</sys:String>
     <sys:String x:Key="S.History.ReadFailedStatus">Read failed (see log)</sys:String>
-    <sys:String x:Key="S.History.Footer">Tip: double-click a thumbnail for a larger view; click the star to favorite (favorites are never cleaned up after 30 days); use “Annotate” to add annotations on top of the image and overwrite the record; “Pin” does not create a new record.</sys:String>
+    <sys:String x:Key="S.History.Footer">Double-click to preview · Star to keep (favorites are never cleaned up)</sys:String>
     <sys:String x:Key="S.History.GroupTitle">Date group {0}</sys:String>
     <sys:String x:Key="S.History.CardName">History record {0}</sys:String>
     <sys:String x:Key="S.History.Today">Today</sys:String>
@@ -118,34 +118,34 @@
     <sys:String x:Key="S.History.StarOn">Remove favorite</sys:String>
     <sys:String x:Key="S.History.StarOff">Favorite</sys:String>
     <sys:String x:Key="S.History.StarOnHint">Remove from favorites</sys:String>
-    <sys:String x:Key="S.History.StarOffHint">Add to favorites (favorites are never cleaned up)</sys:String>
+    <sys:String x:Key="S.History.StarOffHint">Favorite</sys:String>
     <sys:String x:Key="S.History.ActionRename">Rename</sys:String>
     <sys:String x:Key="S.History.ActionDeleteHint">Delete this record</sys:String>
-    <sys:String x:Key="S.History.ActionAnnotateHint">Add annotations and overwrite this record</sys:String>
+    <sys:String x:Key="S.History.ActionAnnotateHint">Annotate</sys:String>
     <sys:String x:Key="S.History.ActionPreviewHint">Preview large image</sys:String>
-    <sys:String x:Key="S.History.SelectedStatus">{0} · {1}×{2} · selected</sys:String>
+    <sys:String x:Key="S.History.SelectedStatus">{0} · {1}×{2}</sys:String>
     <sys:String x:Key="S.History.ActionFailed">{0} failed: {1}</sys:String>
     <sys:String x:Key="S.History.LoadMoreFailed">Loading more failed (see log).</sys:String>
 
     <!-- ===== History: empty states ===== -->
-    <sys:String x:Key="S.History.EmptyNoRecords">No history yet. Press {0} to capture, or pin from the clipboard from the tray menu — successful results show up here.</sys:String>
-    <sys:String x:Key="S.History.EmptySearchAndFavorites">No favorite record matches “{0}”. Turn off “Favorites” or clear the search.</sys:String>
-    <sys:String x:Key="S.History.EmptyFavorites">No favorites yet. Click the star in the top-left corner of a thumbnail to add one.</sys:String>
-    <sys:String x:Key="S.History.EmptySearch">No record has “{0}” in its name. Try another keyword or clear the search.</sys:String>
+    <sys:String x:Key="S.History.EmptyNoRecords">Press {0} to capture; your history will show up here.</sys:String>
+    <sys:String x:Key="S.History.EmptySearchAndFavorites">No favorites match “{0}”.</sys:String>
+    <sys:String x:Key="S.History.EmptyFavorites">Star a capture to see it here.</sys:String>
+    <sys:String x:Key="S.History.EmptySearch">Nothing matches “{0}”.</sys:String>
     <sys:String x:Key="S.History.EmptyOther">Nothing to show.</sys:String>
 
     <!-- ===== History: favorites / retention ===== -->
-    <sys:String x:Key="S.History.RetentionRule">Regular records are kept for {0} days (counted from creation; editing and renaming do not extend it); favorites are never cleaned up automatically.</sys:String>
+    <sys:String x:Key="S.History.RetentionRule">Records are kept for {0} days; favorites are never cleaned up.</sys:String>
     <sys:String x:Key="S.History.UnfavoriteDialogTitle">Remove favorite</sys:String>
-    <sys:String x:Key="S.History.KeptFavorite">“{0}” stays a favorite (favorites are never cleaned up automatically).</sys:String>
+    <sys:String x:Key="S.History.KeptFavorite">Kept “{0}” as favorite.</sys:String>
     <sys:String x:Key="S.History.FavoriteFailed">Changing the favorite failed (the record may be gone). Click “Refresh”.</sys:String>
-    <sys:String x:Key="S.History.Favorited">“{0}” added to favorites (never cleaned up after 30 days).</sys:String>
-    <sys:String x:Key="S.History.UnfavoritedExpired">“{0}” removed from favorites: it is older than 30 days and will be deleted at the next cleanup.</sys:String>
+    <sys:String x:Key="S.History.Favorited">Favorited “{0}”.</sys:String>
+    <sys:String x:Key="S.History.UnfavoritedExpired">Unfavorited “{0}”; it is older than 30 days and will be cleaned up.</sys:String>
     <sys:String x:Key="S.History.Unfavorited">“{0}” removed from favorites.</sys:String>
 
     <!-- ===== History: delete ===== -->
-    <sys:String x:Key="S.History.DeleteConfirmFavorite">Delete “{0}”?\n\nThis is a favorite record; the image, thumbnail and record are removed permanently.</sys:String>
-    <sys:String x:Key="S.History.DeleteConfirm">Delete “{0}”?\n\nThe image, thumbnail and record are removed permanently (cannot be undone).</sys:String>
+    <sys:String x:Key="S.History.DeleteConfirmFavorite">Delete favorite “{0}”?\n\nThe image and record will be removed permanently.</sys:String>
+    <sys:String x:Key="S.History.DeleteConfirm">Delete “{0}”?\n\nThe image and record will be removed permanently.</sys:String>
     <sys:String x:Key="S.History.DeleteDialogTitle">Delete history record</sys:String>
     <sys:String x:Key="S.History.DeleteCancelled">Delete cancelled.</sys:String>
 
@@ -153,7 +153,7 @@
     <sys:String x:Key="S.History.RenameTitle">Rename history record</sys:String>
     <sys:String x:Key="S.History.RenameLabel">Name</sys:String>
     <sys:String x:Key="S.History.RenameInputName">History record name</sys:String>
-    <sys:String x:Key="S.History.RenameHint">The name is shown in the gallery and used for search; these characters are not allowed: \ / : * ? " &lt; &gt; | (they are replaced with _).</sys:String>
+    <sys:String x:Key="S.History.RenameHint">Cannot contain \ / : * ? " &lt; &gt; | (replaced with _).</sys:String>
     <sys:String x:Key="S.History.RenameOk">OK</sys:String>
     <sys:String x:Key="S.History.RenameCancel">Cancel</sys:String>
     <sys:String x:Key="S.History.RenameCancelled">Rename cancelled.</sys:String>
@@ -162,13 +162,13 @@
     <sys:String x:Key="S.History.Renamed">Renamed to “{0}”.</sys:String>
 
     <!-- ===== History: action results ===== -->
-    <sys:String x:Key="S.History.Copied">Copied “{0}” ({1}×{2}).</sys:String>
+    <sys:String x:Key="S.History.Copied">Copied “{0}”.</sys:String>
     <sys:String x:Key="S.History.CopyFailed">Copy failed: {0}</sys:String>
     <sys:String x:Key="S.History.SaveFailed">Save as failed: {0}</sys:String>
     <sys:String x:Key="S.History.DeleteFailed">Delete failed: {0}</sys:String>
-    <sys:String x:Key="S.History.Deleted">Deleted “{0}” (image and thumbnail files removed too).</sys:String>
+    <sys:String x:Key="S.History.Deleted">Deleted “{0}”.</sys:String>
     <sys:String x:Key="S.History.PinFailed">Pin failed: {0}</sys:String>
-    <sys:String x:Key="S.History.Pinned">Pinned “{0}” ({1}×{2}; history still has {3} records).</sys:String>
+    <sys:String x:Key="S.History.Pinned">Pinned “{0}”.</sys:String>
 
     <!-- ===== History: preview ===== -->
     <sys:String x:Key="S.History.PreviewTitle">Preview · {0}</sys:String>
@@ -193,7 +193,7 @@
     <sys:String x:Key="S.History.EditNothingToUndo">Nothing to undo.</sys:String>
     <sys:String x:Key="S.History.EditNothingToRedo">Nothing to redo.</sys:String>
     <sys:String x:Key="S.History.EditSelectFirst">Pick the “Select” tool and click an annotation first.</sys:String>
-    <sys:String x:Key="S.History.EditMarkedDirty">{0} annotation(s) added; click “Save and overwrite” to write them to this record.</sys:String>
+    <sys:String x:Key="S.History.EditMarkedDirty">{0} annotation(s) added</sys:String>
     <sys:String x:Key="S.History.EditCannotDraw">Cannot draw in this state: {0}</sys:String>
     <sys:String x:Key="S.History.EditCannotType">Cannot type text: {0}</sys:String>
     <sys:String x:Key="S.History.EditToolSwitchFailed">Switching tools failed: {0}</sys:String>
@@ -203,29 +203,29 @@
     <sys:String x:Key="S.History.EditSaveCancelled">Save cancelled; your edits are still here.</sys:String>
     <sys:String x:Key="S.History.EditStayed">Staying in the editor.</sys:String>
     <sys:String x:Key="S.History.EditCancelDialogTitle">Cancel editing</sys:String>
-    <sys:String x:Key="S.History.EditCancelConfirm">The {0} annotation(s) added in this session will not be saved; the original image stays unchanged.\n\nCancel editing?</sys:String>
-    <sys:String x:Key="S.History.EditOpened">Editing “{0}”: add annotations, then click “Save and overwrite”.</sys:String>
+    <sys:String x:Key="S.History.EditCancelConfirm">Discard the {0} annotation(s) you added?</sys:String>
+    <sys:String x:Key="S.History.EditOpened">Editing “{0}”.</sys:String>
     <sys:String x:Key="S.History.EditAlreadyOpen">This record is already open in the editor.</sys:String>
-    <sys:String x:Key="S.History.EditSaveOverwritten">Saved and overwrote “{0}” ({1}×{2}); history still has {3} records.</sys:String>
+    <sys:String x:Key="S.History.EditSaveOverwritten">Saved “{0}”.</sys:String>
     <sys:String x:Key="S.History.EditOpenFailed">Opening the editor failed: {0}</sys:String>
-    <sys:String x:Key="S.History.EditSaveFailedBody">Saving failed, the original image was not modified:\n{0}</sys:String>
-    <sys:String x:Key="S.History.EditRecordInfo">{0} · {1}×{2} · {3} · {4}</sys:String>
-    <sys:String x:Key="S.History.EditFavoritedBadge"> · ★ Favorite</sys:String>
+    <sys:String x:Key="S.History.EditSaveFailedBody">Save failed; the original is untouched:\n{0}</sys:String>
+    <sys:String x:Key="S.History.EditRecordInfo">{0} · {1}×{2}</sys:String>
+    <sys:String x:Key="S.History.EditFavoritedBadge">  ★</sys:String>
 
     <!-- ===== History: overwrite semantics ===== -->
-    <sys:String x:Key="S.History.OverwriteSaved">Saved and overwrote “{0}” ({1} annotation(s) added; the old version was replaced, the record count is unchanged).</sys:String>
-    <sys:String x:Key="S.History.OverwriteDeleted">“{0}” has been deleted; this change was not saved (the record no longer exists and no new one is created).</sys:String>
-    <sys:String x:Key="S.History.OverwriteExplain">About to save and overwrite history record “{0}”.\n\n· The old image and its old annotations are NOT kept; the new image replaces the original file.\n· No new history record is created; the ID, name, creation time and favorite state stay the same.\n· The 30-day retention is still counted from the creation time; overwriting does not extend it.\n\nSave and overwrite? Choose “Cancel” to stay in the editor without writing anything.</sys:String>
+    <sys:String x:Key="S.History.OverwriteSaved">Saved “{0}” ({1} annotation(s)).</sys:String>
+    <sys:String x:Key="S.History.OverwriteDeleted">“{0}” no longer exists; changes were not saved.</sys:String>
+    <sys:String x:Key="S.History.OverwriteExplain">This will overwrite “{0}”. The old image is not kept and no new record is created.\n\nSave?</sys:String>
 
     <!-- ===== Settings ===== -->
     <sys:String x:Key="S.Settings.WindowTitle">Zeep Cut Settings</sys:String>
     <sys:String x:Key="S.Settings.WindowName">Zeep Cut settings</sys:String>
     <sys:String x:Key="S.Settings.Heading">Settings</sys:String>
-    <sys:String x:Key="S.Settings.Subtitle">Changes apply immediately and are saved to settings.json; closing the window finishes.</sys:String>
+    <sys:String x:Key="S.Settings.Subtitle">Changes are saved automatically</sys:String>
     <sys:String x:Key="S.Settings.Section.Shortcuts">Shortcuts</sys:String>
     <sys:String x:Key="S.Settings.Shortcut.Screenshot">Capture shortcut</sys:String>
     <sys:String x:Key="S.Settings.Shortcut.Pin">Pin shortcut</sys:String>
-    <sys:String x:Key="S.Settings.Shortcut.Hint">Click a box and press the combination (needs one of Ctrl / Alt / Shift / Win; main keys are A–Z, 0–9, F1–F12).</sys:String>
+    <sys:String x:Key="S.Settings.Shortcut.Hint">Click a box, then press the combination (include Ctrl / Alt / Shift / Win).</sys:String>
     <sys:String x:Key="S.Settings.Shortcut.Waiting">Press the combination…</sys:String>
     <sys:String x:Key="S.Settings.Shortcut.NeedModifier">Needs at least one modifier (Ctrl / Alt / Shift / Win); main keys are A–Z, 0–9, F1–F12.</sys:String>
     <sys:String x:Key="S.Settings.Shortcut.SecondKey">Only one main key is allowed.</sys:String>
@@ -238,7 +238,7 @@
     <sys:String x:Key="S.Settings.CaptureMode.Label">Default selection</sys:String>
     <sys:String x:Key="S.Settings.CaptureMode.Rectangle">Draw a rectangle</sys:String>
     <sys:String x:Key="S.Settings.CaptureMode.Window">Detect windows</sys:String>
-    <sys:String x:Key="S.Settings.CaptureMode.Hint">Applies to the next capture. Rectangle mode uses only mouse dragging. Window mode detects windows on hover; click to select or drag a region.</sys:String>
+    <sys:String x:Key="S.Settings.CaptureMode.Hint">Applies to the next capture.</sys:String>
     <sys:String x:Key="S.Settings.Section.Language">Language</sys:String>
     <sys:String x:Key="S.Settings.Language.System">Follow system</sys:String>
     <sys:String x:Key="S.Settings.Language.ZhHans">简体中文</sys:String>
@@ -261,10 +261,10 @@
     <sys:String x:Key="S.Settings.Update.Check">Check for updates</sys:String>
     <sys:String x:Key="S.Settings.Section.Data">Data folder</sys:String>
     <sys:String x:Key="S.Settings.Data.Open">Open folder</sys:String>
-    <sys:String x:Key="S.Settings.Data.Opened">Opened data folder: {0}</sys:String>
+    <sys:String x:Key="S.Settings.Data.Opened">Opened the data folder.</sys:String>
     <sys:String x:Key="S.Settings.Data.OpenFailed">Opening the data folder failed: {0}</sys:String>
     <sys:String x:Key="S.Settings.Data.History">History DB: {0}</sys:String>
-    <sys:String x:Key="S.Settings.Data.Counts">{0} history records · {1} image files · {2} thumbnail files</sys:String>
+    <sys:String x:Key="S.Settings.Data.Counts">{0} records · {1} images</sys:String>
     <sys:String x:Key="S.Settings.Section.Retention">History retention</sys:String>
     <sys:String x:Key="S.Settings.Section.Update">Check for updates</sys:String>
     <sys:String x:Key="S.Settings.Saved">Settings saved.</sys:String>
@@ -277,11 +277,11 @@
     <sys:String x:Key="S.Update.Title">Check for updates</sys:String>
     <sys:String x:Key="S.Update.Checking">Checking for updates…</sys:String>
     <sys:String x:Key="S.Update.NotConfiguredTitle">Update channel not configured</sys:String>
-    <sys:String x:Key="S.Update.NotConfigured">Current version {0}.\n\nThis build has no update channel configured (AppInfo.UpdateManifestUrl is empty), so it cannot check for a newer version.\nThis does not affect any local feature; check the place you got Zeep Cut from for updates (the app never downloads or installs by itself).</sys:String>
+    <sys:String x:Key="S.Update.NotConfigured">Current version {0}.\nNo update channel is configured, so updates cannot be checked.</sys:String>
     <sys:String x:Key="S.Update.FailedTitle">Update check failed</sys:String>
-    <sys:String x:Key="S.Update.Failed">Current version {0}.\n\nCannot tell whether a newer version exists: {1}\nCheck your network or the update channel address and try again.</sys:String>
+    <sys:String x:Key="S.Update.Failed">Current version {0}.\nCould not check for updates: {1}</sys:String>
     <sys:String x:Key="S.Update.UpToDateTitle">You are up to date</sys:String>
-    <sys:String x:Key="S.Update.UpToDate">You are up to date: current version {0}, the channel's newest version is {1}.</sys:String>
+    <sys:String x:Key="S.Update.UpToDate">You are up to date ({0}).</sys:String>
     <sys:String x:Key="S.Update.AvailableTitle">Version {0} is available</sys:String>
     <sys:String x:Key="S.Update.Available">Version {0} is available (current version {1}).</sys:String>
     <sys:String x:Key="S.Update.AvailableWithNotes">Version {0} is available (current version {1}).\n\nRelease notes: {2}</sys:String>
@@ -289,7 +289,7 @@
     <sys:String x:Key="S.Update.Channel">Update channel: {0}</sys:String>
     <sys:String x:Key="S.Update.Download">Open release page</sys:String>
     <sys:String x:Key="S.Update.Ok">OK</sys:String>
-    <sys:String x:Key="S.Update.FailedToast">Update check failed: {0} (the version is unknown — this is not “up to date”)</sys:String>
+    <sys:String x:Key="S.Update.FailedToast">Update check failed: {0}</sys:String>
     <sys:String x:Key="S.Update.NoUrl">The new version does not provide a release page (url is missing from the manifest).</sys:String>
 
     <!-- ===== Toasts / dialogs ===== -->
