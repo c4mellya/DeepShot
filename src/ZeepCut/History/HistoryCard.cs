@@ -81,7 +81,7 @@ internal sealed class HistoryCard : Border
     private readonly Border _ring;
     private readonly Border _tint;
     private readonly CheckBox _checkBox;
-    private readonly TranslateTransform _lift = new();
+    private readonly Border _shadow;
     private Action<HistoryCard>? _checkedChanged;
     private bool _checked;
     private bool _selectionMode;
@@ -110,7 +110,6 @@ internal sealed class HistoryCard : Border
         Padding = new Thickness(0);
         Cursor = Cursors.Hand;
         SnapsToDevicePixels = true;
-        RenderTransform = _lift;
         this.Ref(BackgroundProperty, HistoryUi.Keys.Surface).Ref(BorderBrushProperty, HistoryUi.Keys.Divider);
         ToolTip = $"{record.Name}\n{FormatTime(record)}\n{record.Width}×{record.Height} · " +
                   $"{DescribeSource(record.Source)}";
@@ -128,6 +127,23 @@ internal sealed class HistoryCard : Border
             VerticalAlignment = VerticalAlignment.Center,
         };
         RenderOptions.SetBitmapScalingMode(_picture, BitmapScalingMode.HighQuality);
+
+        // 缩略图像素不够铺满卡片时，放大会发糊：改为不放大、居中显示原始像素；够用时才裁切铺满。
+        if (preview is not null)
+        {
+            Loaded += (_, _) =>
+            {
+                var scale = VisualTreeHelper.GetDpi(this).DpiScaleX;
+                var needed = Math.Max(
+                    (CardWidth - 2) * scale / preview.PixelWidth,
+                    ThumbnailHeight * scale / preview.PixelHeight);
+                if (needed > 1.15)
+                {
+                    _picture.Stretch = Stretch.Uniform;
+                    _picture.StretchDirection = StretchDirection.DownOnly;
+                }
+            };
+        }
 
         _thumbnailFrame = new Border
         {
@@ -255,7 +271,18 @@ internal sealed class HistoryCard : Border
         };
         _tint.SetResourceReference(BackgroundProperty, HistoryUi.Keys.Accent);
 
+        // 悬停阴影放在独立的空壳元素上：Effect 绝不能套在带文字/图标的元素上，否则内容会被整体栅格化而发糊。
+        _shadow = new Border
+        {
+            CornerRadius = new CornerRadius(Radius),
+            Opacity = 0,
+            IsHitTestVisible = false,
+            Effect = HoverShadow,
+        };
+        _shadow.SetResourceReference(BackgroundProperty, HistoryUi.Keys.Surface);
+
         var root = new Grid();
+        root.Children.Add(_shadow);
         root.Children.Add(stack);
         root.Children.Add(_tint);
         root.Children.Add(_ring);
@@ -440,12 +467,7 @@ internal sealed class HistoryCard : Border
         HistoryUi.Fade(_sourceChip, OpacityProperty, hot ? 1 : 0);
         HistoryUi.Fade(_starButton, OpacityProperty, hot || _favorite ? 1 : 0);
 
-        Effect = _hovered ? HoverShadow : null;
-        var lift = new DoubleAnimation(_hovered ? -2 : 0, TimeSpan.FromMilliseconds(140))
-        {
-            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
-        };
-        _lift.BeginAnimation(TranslateTransform.YProperty, lift);
+        HistoryUi.Fade(_shadow, OpacityProperty, _hovered ? 1 : 0);
     }
 
     private FrameworkElement BuildActionBar(HistoryCardCallbacks callbacks)
@@ -487,16 +509,30 @@ internal sealed class HistoryCard : Border
             CornerRadius = new CornerRadius(11),
             BorderThickness = new Thickness(1),
             Padding = new Thickness(3),
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Bottom,
-            Margin = new Thickness(0, 0, 0, 10),
             Child = row,
-            Effect = PillShadow,
         };
         pill.SetResourceReference(BackgroundProperty, HistoryUi.Keys.Surface);
         pill.SetResourceReference(BorderBrushProperty, HistoryUi.Keys.Divider);
+
+        // 阴影在独立的底衬上，按钮与图标保持清晰（不被 Effect 栅格化）。
+        var pillShadow = new Border
+        {
+            CornerRadius = new CornerRadius(11),
+            IsHitTestVisible = false,
+            Effect = PillShadow,
+        };
+        pillShadow.SetResourceReference(BackgroundProperty, HistoryUi.Keys.Surface);
+
+        var host = new Grid
+        {
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Bottom,
+            Margin = new Thickness(0, 0, 0, 10),
+        };
+        host.Children.Add(pillShadow);
+        host.Children.Add(pill);
         AutomationProperties.SetAutomationId(pill, $"history-actions-{Index}");
-        return pill;
+        return host;
     }
 
     private static readonly Effect PillShadow = CreatePillShadow();

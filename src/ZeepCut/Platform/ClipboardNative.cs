@@ -17,6 +17,16 @@ internal static class ClipboardNative
     internal static extern bool EmptyClipboard();
 
     [DllImport("user32.dll", SetLastError = true)]
+    internal static extern IntPtr GetClipboardData(uint format);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool IsClipboardFormatAvailable(uint format);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    internal static extern nuint GlobalSize(IntPtr memory);
+
+    [DllImport("user32.dll", SetLastError = true)]
     internal static extern IntPtr SetClipboardData(uint format, IntPtr memory);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]

@@ -12,10 +12,10 @@
     <AssemblyName>ZeepCut</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
-    <Version>0.1.11</Version>
-    <AssemblyTitle>Zeep Cut</AssemblyTitle>
-    <Product>Zeep Cut</Product>
-    <Company>Zeep Cut</Company>
+    <Version>0.1.12</Version>
+    <AssemblyTitle>deep-cut</AssemblyTitle>
+    <Product>deep-cut</Product>
+    <Company>deep-cut</Company>
     <SatelliteResourceLanguages>en;zh-Hans</SatelliteResourceLanguages>
   </PropertyGroup>
 

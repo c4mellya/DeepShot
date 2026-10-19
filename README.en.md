@@ -1,12 +1,16 @@
-# Zeep Cut
+# deep-cut
 
-A screenshot and desktop pin tool for Windows 10 22H2 / Windows 11 x64, built with C#, .NET 10 and WPF. Includes Simplified Chinese and English, light/dark/system themes.
+deep-cut is a screenshot and desktop pin tool for Windows 10 22H2 / Windows 11 x64, built with C#, .NET 10 and WPF. Includes Simplified Chinese and English, light/dark/system themes.
+
+Repository: [c4mellya/deep-cut](https://github.com/c4mellya/deep-cut) · [简体中文](README.md)
 
 ## Install
 
-Run `ZeepCut-0.1.11-Setup-x64.exe` for a per-user installation, or extract `ZeepCut-0.1.11-win-x64.zip` and run `ZeepCut.exe`. Both releases include the .NET runtime. Keep all files and the Resources folder together. The installer is unsigned.
+The product has been renamed to `deep-cut`. Existing 0.1.12 release files retain the previous name; this rename does not produce a new release. Executable names and the data folder continue to use `ZeepCut` to preserve existing settings and history.
 
-Zeep Cut lives in the system tray, possibly inside the hidden icons panel. Closing History or Settings keeps the application running; select Exit from the tray menu to stop it. Startup at sign-in is optional and disabled by default. A short guide appears on first launch.
+Run `ZeepCut-0.1.12-Setup-x64.exe` for a per-user installation, or extract `ZeepCut-0.1.12-win-x64.zip` and run `ZeepCut.exe`. Both releases include the .NET runtime. Keep all files and the Resources folder together. The installer is unsigned.
+
+deep-cut lives in the system tray, possibly inside the hidden icons panel. Closing History or Settings keeps the application running; select Exit from the tray menu to stop it. Startup at sign-in is optional and disabled by default. A short guide appears on first launch.
 
 ## Capture and annotate
 

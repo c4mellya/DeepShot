@@ -1,6 +1,6 @@
-#define AppName "Zeep Cut"
+#define AppName "deep-cut"
 #ifndef AppVersion
-  #define AppVersion "0.1.11"
+  #define AppVersion "0.1.12"
 #endif
 #ifndef SourceDir
   #define SourceDir "..\artifacts\publish\win-x64"
@@ -10,9 +10,9 @@
 AppId={{6CEB8212-F8EF-436A-8B11-778EE1545D70}
 AppName={#AppName}
 AppVersion={#AppVersion}
-AppPublisher=Zeep Cut
+AppPublisher=deep-cut
 DefaultDirName={localappdata}\Programs\Zeep Cut
-DefaultGroupName=Zeep Cut
+DefaultGroupName=deep-cut
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
@@ -39,20 +39,20 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; Flags: unchecked
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\Zeep Cut"; Filename: "{app}\ZeepCut.exe"
-Name: "{autodesktop}\Zeep Cut"; Filename: "{app}\ZeepCut.exe"; Tasks: desktopicon
+Name: "{group}\deep-cut"; Filename: "{app}\ZeepCut.exe"
+Name: "{autodesktop}\deep-cut"; Filename: "{app}\ZeepCut.exe"; Tasks: desktopicon
 
 [Registry]
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "ZeepCut"; Flags: uninsdeletevalue
 
 [Run]
-Filename: "{app}\ZeepCut.exe"; Description: "Start Zeep Cut"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\ZeepCut.exe"; Description: "Start deep-cut"; Flags: nowait postinstall skipifsilent
 
 [Code]
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
   if CurUninstallStep = usPostUninstall then
     if not UninstallSilent then
-      if MsgBox('Also delete your Zeep Cut history, favorites, and settings? This cannot be undone. Choose No to keep your data.', mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
+      if MsgBox('Also delete your deep-cut history, favorites, and settings? This cannot be undone. Choose No to keep your data.', mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
         DelTree(ExpandConstant('{localappdata}\ZeepCut'), True, True, True);
 end;

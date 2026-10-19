@@ -9,8 +9,8 @@ namespace ZeepCut.History;
 /// </summary>
 /// <remarks>
 /// <para>
-/// 缩略图最大边 <see cref="MaxEdge"/> = 320 物理像素（图库按 240–320 的格子展示，
-/// 125% 屏上仍然清晰）；小图不放大。缩放用 <see cref="TransformedBitmap"/> +
+/// 缩略图最大边 <see cref="MaxEdge"/> = 640 物理像素（图库卡片 240×144 DIP，
+/// 200% 缩放的屏上也不需要放大缩略图）；小图不放大。缩放用 <see cref="TransformedBitmap"/> +
 /// <see cref="BitmapScalingMode.HighQuality"/>，比 <c>RenderTargetBitmap</c> 便宜且不丢 DPI。
 /// </para>
 /// <para>
@@ -22,7 +22,7 @@ namespace ZeepCut.History;
 public static class HistoryThumbnail
 {
     /// <summary>缩略图最大边（物理像素）。</summary>
-    public const int MaxEdge = 320;
+    public const int MaxEdge = 640;
 
     /// <summary>
     /// 把图片编码成 PNG 字节（历史内部一律存 PNG）。
@@ -44,7 +44,7 @@ public static class HistoryThumbnail
     /// 生成缩略图的 PNG 字节：最长边缩到 <see cref="MaxEdge"/>，小图原样返回。
     /// </summary>
     /// <param name="image">已冻结的位图。</param>
-    /// <param name="maxEdge">最大边（1–4096，默认 320）。</param>
+    /// <param name="maxEdge">最大边（1–4096，默认 640）。</param>
     public static byte[] CreatePngBytes(BitmapSource image, int maxEdge = MaxEdge)
     {
         ArgumentNullException.ThrowIfNull(image);
@@ -66,9 +66,21 @@ public static class HistoryThumbnail
         }
 
         // 等比缩放：宽高都用同一个系数，避免缩略图变形。
+        // TransformedBitmap 不理会缩放质量设置（默认双线性，缩小很多时会糊/锯齿）；
+        // 这里用 HighQuality(Fant) 绘制到精确像素尺寸的位图。
         var factor = (double)edge / longest;
-        var scaled = new TransformedBitmap(image, new ScaleTransform(factor, factor));
-        scaled.Freeze();
-        return scaled;
+        var width = Math.Max(1, (int)Math.Round(image.PixelWidth * factor));
+        var height = Math.Max(1, (int)Math.Round(image.PixelHeight * factor));
+        var visual = new DrawingVisual();
+        RenderOptions.SetBitmapScalingMode(visual, BitmapScalingMode.HighQuality);
+        using (var context = visual.RenderOpen())
+        {
+            context.DrawImage(image, new System.Windows.Rect(0, 0, width, height));
+        }
+
+        var target = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+        target.Render(visual);
+        target.Freeze();
+        return target;
     }
 }

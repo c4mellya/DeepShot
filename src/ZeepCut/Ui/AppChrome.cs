@@ -128,6 +128,11 @@ internal static class AppChrome
         var inner = window.Content as UIElement;
         window.Content = null;
 
+        // 逐像素对齐 + GDI 兼容的文字排版：高 DPI / 非整数缩放下文字与图标边缘才锐利。
+        window.UseLayoutRounding = true;
+        window.SnapsToDevicePixels = true;
+        TextOptions.SetTextFormattingMode(window, TextFormattingMode.Display);
+
         var resizable = window.ResizeMode is ResizeMode.CanResize or ResizeMode.CanResizeWithGrip;
         WindowChrome.SetWindowChrome(window, new WindowChrome
         {

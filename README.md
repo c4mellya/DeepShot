@@ -1,10 +1,14 @@
-# Zeep Cut
+# deep-cut
 
-Windows 10 22H2 / Windows 11 x64 截图与桌面贴图工具。使用 C#、.NET 10 与 WPF 构建，提供简体中文与英文、浅色/深色及跟随系统主题。
+deep-cut 是适用于 Windows 10 22H2 / Windows 11 x64 的截图与桌面贴图工具。使用 C#、.NET 10 与 WPF 构建，提供简体中文与英文、浅色/深色及跟随系统主题。
+
+仓库：[c4mellya/deep-cut](https://github.com/c4mellya/deep-cut) · [English](README.en.md)
 
 ## 安装与启动
 
-优先运行发布目录中的 `ZeepCut-0.1.11-Setup-x64.exe`，按当前用户安装，无需管理员权限。也可以解压 `ZeepCut-0.1.11-win-x64.zip` 后运行 `ZeepCut.exe`。程序自带 .NET 运行时，不需要另装 .NET；ZIP 版本需要保留同目录的所有文件及 Resources 子目录。
+产品已更名为 `deep-cut`。现有 0.1.12 发布文件仍使用旧名称，本次更名不生成新版本；程序文件名和数据目录继续沿用 `ZeepCut`，保留已有设置与历史记录。
+
+优先运行发布目录中的 `ZeepCut-0.1.12-Setup-x64.exe`，按当前用户安装，无需管理员权限。也可以解压 `ZeepCut-0.1.12-win-x64.zip` 后运行 `ZeepCut.exe`。程序自带 .NET 运行时，不需要另装 .NET；ZIP 版本需要保留同目录的所有文件及 Resources 子目录。
 
 程序启动后驻留系统托盘，图标可能位于“显示隐藏的图标”面板。首次启动显示使用引导。关闭图库或设置窗口不会退出；右键托盘图标选择“退出”才结束程序。开机启动默认关闭，可在设置中开启。安装包未签名。
 

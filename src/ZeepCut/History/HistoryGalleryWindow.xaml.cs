@@ -69,6 +69,7 @@ public sealed class HistoryGalleryWindow : Window
     private readonly List<GroupSection> _sections = new();
     private GroupSection? _currentSection;
     private readonly Border _selectionBar;
+    private readonly Grid _selectionHost;
     private readonly TranslateTransform _barShift = new(0, 18);
     private readonly TextBlock _selectionCount;
     private readonly Button _selectAllButton;
@@ -352,13 +353,14 @@ public sealed class HistoryGalleryWindow : Window
             CornerRadius = new CornerRadius(16),
             BorderThickness = new Thickness(1),
             Padding = new Thickness(10, 7, 8, 7),
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Bottom,
-            Margin = new Thickness(24, 0, 24, 22),
             Child = barRow,
-            Visibility = Visibility.Collapsed,
-            Opacity = 0,
-            RenderTransform = _barShift,
+        };
+
+        // 阴影放在独立的底衬上；Effect 不能套在带文字/按钮的元素上，否则整条栏会被栅格化而发糊。
+        var barShadow = new Border
+        {
+            CornerRadius = new CornerRadius(16),
+            IsHitTestVisible = false,
             Effect = new System.Windows.Media.Effects.DropShadowEffect
             {
                 Color = Colors.Black,
@@ -368,6 +370,19 @@ public sealed class HistoryGalleryWindow : Window
                 Opacity = 0.22,
             },
         };
+        barShadow.SetResourceReference(Border.BackgroundProperty, HistoryUi.Keys.Surface);
+
+        _selectionHost = new Grid
+        {
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Bottom,
+            Margin = new Thickness(24, 0, 24, 22),
+            Visibility = Visibility.Collapsed,
+            Opacity = 0,
+            RenderTransform = _barShift,
+        };
+        _selectionHost.Children.Add(barShadow);
+        _selectionHost.Children.Add(_selectionBar);
         _selectionBar.SetResourceReference(Border.BackgroundProperty, HistoryUi.Keys.Surface);
         _selectionBar.SetResourceReference(Border.BorderBrushProperty, HistoryUi.Keys.Divider);
         AutomationProperties.SetAutomationId(_selectionBar, "history-selection-bar");
@@ -375,7 +390,7 @@ public sealed class HistoryGalleryWindow : Window
         var body = new Grid();
         body.Children.Add(_scroll);
         body.Children.Add(_empty);
-        body.Children.Add(_selectionBar);
+        body.Children.Add(_selectionHost);
         Grid.SetRow(body, 1);
         content.Children.Add(body);
 
@@ -699,23 +714,28 @@ public sealed class HistoryGalleryWindow : Window
 
         if (show)
         {
-            _selectionBar.Visibility = Visibility.Visible;
+            _selectionHost.Visibility = Visibility.Visible;
         }
 
         var fade = new System.Windows.Media.Animation.DoubleAnimation(show ? 1 : 0, duration) { EasingFunction = ease };
         var slide = new System.Windows.Media.Animation.DoubleAnimation(show ? 0 : 18, duration) { EasingFunction = ease };
-        if (!show)
+        fade.Completed += (_, _) =>
         {
-            fade.Completed += (_, _) =>
+            // 动画结束后释放时钟并落实终值：静止时不留任何变换/半透明，内容才是逐像素清晰的。
+            if (show && _selectionMode)
             {
-                if (!_selectionMode)
-                {
-                    _selectionBar.Visibility = Visibility.Collapsed;
-                }
-            };
-        }
+                _selectionHost.BeginAnimation(UIElement.OpacityProperty, null);
+                _selectionHost.Opacity = 1;
+                _barShift.BeginAnimation(TranslateTransform.YProperty, null);
+                _barShift.Y = 0;
+            }
+            else if (!show && !_selectionMode)
+            {
+                _selectionHost.Visibility = Visibility.Collapsed;
+            }
+        };
 
-        _selectionBar.BeginAnimation(UIElement.OpacityProperty, fade);
+        _selectionHost.BeginAnimation(UIElement.OpacityProperty, fade);
         _barShift.BeginAnimation(TranslateTransform.YProperty, slide);
     }
 

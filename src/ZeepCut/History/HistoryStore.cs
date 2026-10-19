@@ -140,7 +140,50 @@ public sealed class HistoryStore
     {
         ArgumentNullException.ThrowIfNull(record);
 
-        return TryLoad(record.RelativeThumbnailPath) ?? TryLoad(record.RelativeImagePath);
+        var thumbnail = TryLoad(record.RelativeThumbnailPath);
+        if (thumbnail is not null && !NeedsSharperThumbnail(record, thumbnail))
+        {
+            return thumbnail;
+        }
+
+        // 旧版本只存 320px 的缩略图，卡片里被放大就发糊：按需用原图重做一份（每条记录只做一次）。
+        return TryUpgradeThumbnail(record) ?? thumbnail ?? TryLoad(record.RelativeImagePath);
+    }
+
+    private static bool NeedsSharperThumbnail(HistoryRecord record, BitmapSource thumbnail)
+    {
+        var thumbEdge = Math.Max(thumbnail.PixelWidth, thumbnail.PixelHeight);
+        var originalEdge = Math.Max(record.Width, record.Height);
+        return thumbEdge < HistoryThumbnail.MaxEdge && originalEdge > thumbEdge;
+    }
+
+    private BitmapSource? TryUpgradeThumbnail(HistoryRecord record)
+    {
+        try
+        {
+            var original = TryLoad(record.RelativeImagePath);
+            if (original is null)
+            {
+                return null;
+            }
+
+            var scaled = HistoryThumbnail.Scale(original);
+            if (!string.IsNullOrWhiteSpace(record.RelativeThumbnailPath))
+            {
+                var absolute = HistoryPaths.ToAbsolute(_repository.DataRoot, record.RelativeThumbnailPath);
+                var temp = absolute + ".tmp";
+                File.WriteAllBytes(temp, HistoryThumbnail.EncodePng(scaled));
+                File.Move(temp, absolute, overwrite: true);
+                AppLog.Info("History", $"缩略图已升级为 {scaled.PixelWidth}x{scaled.PixelHeight}：{record.RelativeThumbnailPath}");
+            }
+
+            return scaled;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn("History", $"升级缩略图失败（继续用旧缩略图）：{record.RelativeThumbnailPath}（{ex.GetType().Name}: {ex.Message}）");
+            return null;
+        }
     }
 
     /// <summary>图库列表页（T25 用；本轮只提供入口，没有 UI）。</summary>
