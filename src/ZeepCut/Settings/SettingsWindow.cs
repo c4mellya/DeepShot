@@ -171,10 +171,11 @@ public sealed class SettingsWindow : Window
         headerTextStack.Children.Add(_header);
         headerTextStack.Children.Add(_subtitle);
 
-        var headerGrid = new Grid { MaxWidth = 640, Margin = new Thickness(28, 26, 28, 16) };
+        var headerGrid = new Grid { MaxWidth = 640, Margin = new Thickness(28, 12, 28, 14) };
         headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        var badge = BuildBadge();
+        var badge = AppChrome.IconImage(56);
+        badge.VerticalAlignment = VerticalAlignment.Center;
         Grid.SetColumn(badge, 0);
         Grid.SetColumn(headerTextStack, 1);
         headerGrid.Children.Add(badge);
@@ -203,6 +204,7 @@ public sealed class SettingsWindow : Window
         root.Children.Add(scroll);
         root.Children.Add(footer);
         Content = root;
+        AppChrome.Apply(this);
 
         BuildSections();
 
@@ -293,47 +295,6 @@ public sealed class SettingsWindow : Window
     internal string StatusText => _status.Text;
 
     // --- 构建界面 ---
-
-    /// <summary>头部的品牌徽标：强调色圆角方块 + 白色裁剪图标 + 顶部高光。</summary>
-    private static FrameworkElement BuildBadge()
-    {
-        var icon = new Shapes.Path
-        {
-            Data = Geometry.Parse("M7,3 V17 H21 M3,7 H17 V21"),
-            StrokeThickness = 2.2,
-            StrokeStartLineCap = PenLineCap.Round,
-            StrokeEndLineCap = PenLineCap.Round,
-            StrokeLineJoin = PenLineJoin.Round,
-        };
-        icon.SetResourceReference(Shapes.Shape.StrokeProperty, ThemeManager.BrushKeys.OnAccent);
-        var canvas = new Canvas { Width = 24, Height = 24 };
-        canvas.Children.Add(icon);
-
-        var gloss = new Border
-        {
-            CornerRadius = new CornerRadius(14),
-            IsHitTestVisible = false,
-            Background = new LinearGradientBrush(
-                Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF),
-                Color.FromArgb(0x00, 0xFF, 0xFF, 0xFF),
-                90),
-        };
-
-        var grid = new Grid();
-        grid.Children.Add(gloss);
-        grid.Children.Add(new Viewbox { Width = 24, Height = 24, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Child = canvas });
-
-        var badge = new Border
-        {
-            Width = 48,
-            Height = 48,
-            CornerRadius = new CornerRadius(14),
-            Child = grid,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        badge.SetResourceReference(Border.BackgroundProperty, ThemeManager.BrushKeys.Accent);
-        return badge;
-    }
 
     private void BuildSections()
     {

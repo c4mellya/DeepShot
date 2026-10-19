@@ -5,6 +5,7 @@ using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using ZeepCut.Core.History;
 using ZeepCut.Core.Settings;
@@ -59,11 +60,39 @@ public sealed class HistoryGalleryWindow : Window
     private readonly TextBlock _emptyTitle;
     private readonly TextBlock _emptyBody;
     private readonly Button _clearFilters;
-    private readonly TextBlock _status;
     private readonly DispatcherTimer _searchTimer;
     private readonly TextBlock _title;
     private readonly Button _refreshButton;
-    private readonly TextBlock _footer;
+
+    // --- 多选 ---
+    private readonly HashSet<Guid> _checkedIds = new();
+    private readonly List<GroupSection> _sections = new();
+    private GroupSection? _currentSection;
+    private readonly Border _selectionBar;
+    private readonly TranslateTransform _barShift = new(0, 18);
+    private readonly TextBlock _selectionCount;
+    private readonly Button _selectAllButton;
+    private readonly Button _deleteSelectedButton;
+    private readonly Button _clearSelectionButton;
+    private bool _selectionMode;
+
+    /// <summary>一个日期分区：标题行的复选框 + 该分区里的卡片。</summary>
+    private sealed class GroupSection
+    {
+        internal GroupSection(DateOnly date, CheckBox box)
+        {
+            Date = date;
+            Box = box;
+        }
+
+        internal DateOnly Date { get; }
+
+        internal CheckBox Box { get; }
+
+        internal List<HistoryCard> Cards { get; } = new();
+
+        internal bool Hovered { get; set; }
+    }
 
     /// <summary>当前页的卡片（顺序 = 查询顺序 = 日期分组顺序）。</summary>
     private readonly List<HistoryCard> _loaded = new();
@@ -84,7 +113,6 @@ public sealed class HistoryGalleryWindow : Window
     private DateOnly? _currentDate;
 
     /// <summary>T27：自动清理后写进状态栏的说明（下次有其它操作时会被覆盖）。</summary>
-    private string? _retentionNotice;
 
     /// <summary>
     /// 创建图库窗口。外部必须走 <see cref="HistoryGallery.Show"/>（单实例），
@@ -109,10 +137,9 @@ public sealed class HistoryGalleryWindow : Window
         var content = new Grid();
         content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         content.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
         // --- 顶栏：标题 | 搜索胶囊 | 全部/收藏分段 | 刷新 ---
-        var header = new Grid { Margin = new Thickness(24, 20, 24, 14) };
+        var header = new Grid { Margin = new Thickness(24, 8, 24, 14) };
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -120,9 +147,20 @@ public sealed class HistoryGalleryWindow : Window
 
         _title = HistoryUi.Text(StringsUi.Get("S.History.Title"), 21, weight: FontWeights.SemiBold);
         _title.HorizontalAlignment = HorizontalAlignment.Left;
-        _title.Margin = new Thickness(0, 0, 28, 3);
-        Grid.SetColumn(_title, 0);
-        header.Children.Add(_title);
+        _title.Margin = new Thickness(0, 0, 0, 2);
+        var appIcon = AppChrome.IconImage(30);
+        appIcon.Margin = new Thickness(0, 0, 12, 0);
+        appIcon.VerticalAlignment = VerticalAlignment.Center;
+        var titleRow = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 28, 0),
+        };
+        titleRow.Children.Add(appIcon);
+        titleRow.Children.Add(_title);
+        Grid.SetColumn(titleRow, 0);
+        header.Children.Add(titleRow);
 
         _search = new TextBox
         {
@@ -277,40 +315,72 @@ public sealed class HistoryGalleryWindow : Window
         _empty.Children.Add(_clearFilters);
         AutomationProperties.SetAutomationId(_empty, "history-empty-state");
 
+        // --- 多选操作条：勾选 ≥1 张时从底部滑入的悬浮胶囊 ---
+        _selectionCount = HistoryUi.Text(string.Empty, 13, weight: FontWeights.SemiBold, measureNaturalWidth: true);
+        _selectionCount.Margin = new Thickness(8, 0, 4, 0);
+        AutomationProperties.SetAutomationId(_selectionCount, "history-selection-count");
+
+        _selectAllButton = HistoryUi.GhostButton(
+            StringsUi.Get("S.History.SelectAll"),
+            null,
+            StringsUi.Get("S.History.SelectAll"),
+            SelectAllOrClear);
+        AutomationProperties.SetAutomationId(_selectAllButton, "history-select-all");
+
+        _deleteSelectedButton = BuildDeleteSelectedButton();
+
+        _clearSelectionButton = HistoryUi.IconButton(
+            HistoryIcons.Close,
+            StringsUi.Get("S.History.ClearSelection"),
+            StringsUi.Get("S.History.ClearSelection") + " (Esc)",
+            ClearSelection,
+            size: 28,
+            iconKey: HistoryUi.Keys.Secondary,
+            iconSize: 13);
+        AutomationProperties.SetAutomationId(_clearSelectionButton, "history-clear-selection");
+
+        var barRow = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+        barRow.Children.Add(_selectionCount);
+        barRow.Children.Add(HistoryUi.VerticalSeparator(16));
+        barRow.Children.Add(_selectAllButton);
+        barRow.Children.Add(_deleteSelectedButton);
+        _clearSelectionButton.Margin = new Thickness(6, 0, 0, 0);
+        barRow.Children.Add(_clearSelectionButton);
+
+        _selectionBar = new Border
+        {
+            CornerRadius = new CornerRadius(16),
+            BorderThickness = new Thickness(1),
+            Padding = new Thickness(10, 7, 8, 7),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Bottom,
+            Margin = new Thickness(24, 0, 24, 22),
+            Child = barRow,
+            Visibility = Visibility.Collapsed,
+            Opacity = 0,
+            RenderTransform = _barShift,
+            Effect = new System.Windows.Media.Effects.DropShadowEffect
+            {
+                Color = Colors.Black,
+                BlurRadius = 24,
+                ShadowDepth = 5,
+                Direction = 270,
+                Opacity = 0.22,
+            },
+        };
+        _selectionBar.SetResourceReference(Border.BackgroundProperty, HistoryUi.Keys.Surface);
+        _selectionBar.SetResourceReference(Border.BorderBrushProperty, HistoryUi.Keys.Divider);
+        AutomationProperties.SetAutomationId(_selectionBar, "history-selection-bar");
+
         var body = new Grid();
         body.Children.Add(_scroll);
         body.Children.Add(_empty);
+        body.Children.Add(_selectionBar);
         Grid.SetRow(body, 1);
         content.Children.Add(body);
 
-        // --- 底栏：状态（计数 / 上次操作结果）+ 使用提示 ---
-        _status = HistoryUi.Text(StringsUi.Get("S.History.Loading"), 12.5, brushKey: HistoryUi.Keys.Foreground);
-        _status.HorizontalAlignment = HorizontalAlignment.Left;
-        _status.Opacity = 0.85;
-        AutomationProperties.SetAutomationId(_status, "history-status");
-
-        _footer = HistoryUi.Text(StringsUi.Get("S.History.Footer"), 11.5, brushKey: HistoryUi.Keys.Secondary);
-        _footer.HorizontalAlignment = HorizontalAlignment.Left;
-        _footer.TextWrapping = TextWrapping.Wrap;
-        _footer.TextTrimming = TextTrimming.None;
-        _footer.Margin = new Thickness(0, 3, 0, 0);
-
-        var footerStack = new StackPanel();
-        footerStack.Children.Add(_status);
-        footerStack.Children.Add(_footer);
-
-        var footerBar = new Border
-        {
-            Padding = new Thickness(24, 10, 24, 12),
-            BorderThickness = new Thickness(0, 1, 0, 0),
-            Child = footerStack,
-        };
-        footerBar.SetResourceReference(Border.BackgroundProperty, HistoryUi.Keys.Surface);
-        footerBar.SetResourceReference(Border.BorderBrushProperty, HistoryUi.Keys.Divider);
-        Grid.SetRow(footerBar, 2);
-        content.Children.Add(footerBar);
-
         Content = content;
+        AppChrome.Apply(this);
 
         SourceInitialized += (_, _) => DwmApi.TrySetDarkTitleBar(this, ThemeManager.Palette.IsDark);
 
@@ -364,8 +434,6 @@ public sealed class HistoryGalleryWindow : Window
     /// <summary>当前的追加标注编辑窗口（T28，未打开为 null）。</summary>
     internal HistoryEditWindow? Edit { get; private set; }
 
-    /// <summary>状态栏当前文本（供验证脚本通过日志核对）。</summary>
-    internal string StatusText => _status.Text;
 
     // --- 刷新 ---
 
@@ -393,7 +461,7 @@ public sealed class HistoryGalleryWindow : Window
             RebuildCards(HistoryGrouping.Flatten(_groups));
             UpdateEmptyState();
 
-            UpdateStatus(_view.HasFilter
+            LogResult(_view.HasFilter
                 ? StringsUi.Format("S.History.CountFiltered", page.TotalCount, _totalCount)
                 : StringsUi.Format("S.History.Count", page.TotalCount));
 
@@ -414,7 +482,7 @@ public sealed class HistoryGalleryWindow : Window
                 StringsUi.Get("S.History.ReadFailedTitle"),
                 StringsUi.Format("S.History.ReadFailedBody", ex.Message),
                 showClearFilters: false);
-            UpdateStatus(StringsUi.Get("S.History.ReadFailedStatus"));
+            LogResult(StringsUi.Get("S.History.ReadFailedStatus"));
         }
         finally
         {
@@ -430,8 +498,14 @@ public sealed class HistoryGalleryWindow : Window
         _selected = null;
         _currentWrap = null;
         _currentDate = null;
+        _sections.Clear();
+        _currentSection = null;
 
         AppendGroups(_groups);
+
+        // 勾选集合按 Id 保存：仍在列表里的保持勾选，不在了（被删/被筛掉）的丢弃。
+        _checkedIds.IntersectWith(_loaded.Select(card => card.Record.Id));
+        RefreshSelectionUi();
     }
 
     /// <summary>把若干日期分组追加到列表末尾；与当前最后一个分区同一天的接着放进去（加载更多时用）。</summary>
@@ -442,7 +516,10 @@ public sealed class HistoryGalleryWindow : Window
             if (_currentWrap is null || _currentDate != group.Date)
             {
                 var section = new StackPanel();
-                section.Children.Add(BuildGroupHeader(group, first: _cards.Children.Count == 0));
+                var info = BuildGroupHeader(group, first: _cards.Children.Count == 0, out var headerElement);
+                _sections.Add(info);
+                _currentSection = info;
+                section.Children.Add(headerElement);
                 _currentWrap = new WrapPanel { Orientation = Orientation.Horizontal };
                 section.Children.Add(_currentWrap);
                 _cards.Children.Add(section);
@@ -452,8 +529,11 @@ public sealed class HistoryGalleryWindow : Window
             foreach (var record in group.Items)
             {
                 var card = CreateCard(record, _loaded.Count, _store.TryLoadPreview(record));
+                card.IsChecked = _checkedIds.Contains(record.Id);
+                card.SetSelectionMode(_selectionMode);
                 _currentWrap.Children.Add(card);
                 _loaded.Add(card);
+                _currentSection?.Cards.Add(card);
             }
         }
     }
@@ -463,19 +543,46 @@ public sealed class HistoryGalleryWindow : Window
         var card = new HistoryCard(record, index, preview, BuildCallbacks());
         card.SetDoubleClickPreview(OpenPreview);
         card.SetClickSelect(SelectCard);
+        card.SetCheckedChanged(OnCardCheckedChanged);
         card.SetDragScroll(_scroll);
         return card;
     }
 
-    /// <summary>日期分区标题：小号次要色标题 + 数量徽标 + 一条延伸到行尾的分隔线。</summary>
-    private static UIElement BuildGroupHeader(HistoryDayGroup group, bool first)
+    /// <summary>日期分区标题：三态复选框 + 小号次要色标题 + 数量徽标 + 一条延伸到行尾的分隔线。</summary>
+    private GroupSection BuildGroupHeader(HistoryDayGroup group, bool first, out UIElement header)
     {
+        var dateKey = group.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         var text = HistoryUi.Text(group.Title, 12.5, weight: FontWeights.SemiBold, measureNaturalWidth: true, brushKey: HistoryUi.Keys.Secondary);
         text.HorizontalAlignment = HorizontalAlignment.Left;
-        AutomationProperties.SetAutomationId(
-            text,
-            $"history-group-{group.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}");
+        AutomationProperties.SetAutomationId(text, $"history-group-{dateKey}");
         AutomationProperties.SetName(text, StringsUi.Format("S.History.GroupTitle", group.Title));
+
+        var box = HistoryUi.CheckBox($"history-group-select-{dateKey}", StringsUi.Format("S.History.SelectGroup", group.Title));
+        box.IsThreeState = true;
+        box.Margin = new Thickness(0, 0, 10, 0);
+        box.VerticalAlignment = VerticalAlignment.Center;
+        box.Opacity = 0;
+        var section = new GroupSection(group.Date, box);
+        box.Click += (_, e) =>
+        {
+            e.Handled = true;
+            // 全部已勾 → 取消；否则（含半选）→ 全部勾上。
+            var check = !section.Cards.All(card => card.IsChecked);
+            foreach (var card in section.Cards)
+            {
+                card.IsChecked = check;
+                if (check)
+                {
+                    _checkedIds.Add(card.Record.Id);
+                }
+                else
+                {
+                    _checkedIds.Remove(card.Record.Id);
+                }
+            }
+
+            RefreshSelectionUi();
+        };
 
         var count = HistoryUi.Text(group.Count.ToString(CultureInfo.InvariantCulture), 11, brushKey: HistoryUi.Keys.Secondary, measureNaturalWidth: true);
         var badge = new Border
@@ -491,17 +598,241 @@ public sealed class HistoryGalleryWindow : Window
         var line = new Border { Height = 1, Margin = new Thickness(14, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
         line.SetResourceReference(Border.BackgroundProperty, HistoryUi.Keys.Divider);
 
-        var grid = new Grid { Margin = new Thickness(2, first ? 6 : 14, 0, 14) };
+        var grid = new Grid { Margin = new Thickness(2, first ? 6 : 14, 0, 10), Background = Brushes.Transparent };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        Grid.SetColumn(text, 0);
-        Grid.SetColumn(badge, 1);
-        Grid.SetColumn(line, 2);
+        Grid.SetColumn(box, 0);
+        Grid.SetColumn(text, 1);
+        Grid.SetColumn(badge, 2);
+        Grid.SetColumn(line, 3);
+        grid.Children.Add(box);
         grid.Children.Add(text);
         grid.Children.Add(badge);
         grid.Children.Add(line);
-        return grid;
+
+        // 复选框：悬停标题行 / 选择模式 / 本组有勾选时才显示。
+        grid.MouseEnter += (_, _) =>
+        {
+            section.Hovered = true;
+            UpdateGroupBoxVisibility(section);
+        };
+        grid.MouseLeave += (_, _) =>
+        {
+            section.Hovered = false;
+            UpdateGroupBoxVisibility(section);
+        };
+
+        header = grid;
+        return section;
+    }
+
+    private void UpdateGroupBoxVisibility(GroupSection section)
+    {
+        var visible = section.Hovered || _selectionMode || section.Box.IsChecked != false || section.Box.IsKeyboardFocusWithin;
+        HistoryUi.Fade(section.Box, UIElement.OpacityProperty, visible ? 1 : 0);
+    }
+
+    // --- 多选 ---
+
+    private void OnCardCheckedChanged(HistoryCard card)
+    {
+        if (card.IsChecked)
+        {
+            _checkedIds.Add(card.Record.Id);
+        }
+        else
+        {
+            _checkedIds.Remove(card.Record.Id);
+        }
+
+        RefreshSelectionUi();
+    }
+
+    /// <summary>勾选集合变化后：同步日期复选框三态、各卡片的选择模式、操作条显隐与文案。</summary>
+    private void RefreshSelectionUi()
+    {
+        var count = _checkedIds.Count;
+        var mode = count > 0;
+
+        if (mode != _selectionMode)
+        {
+            _selectionMode = mode;
+            foreach (var card in _loaded)
+            {
+                card.SetSelectionMode(mode);
+            }
+
+            AnimateSelectionBar(mode);
+        }
+
+        foreach (var section in _sections)
+        {
+            var checkedCount = section.Cards.Count(card => card.IsChecked);
+            section.Box.IsChecked = checkedCount == 0 ? false : checkedCount == section.Cards.Count ? true : null;
+            UpdateGroupBoxVisibility(section);
+        }
+
+        UpdateSelectionTexts();
+    }
+
+    private void UpdateSelectionTexts()
+    {
+        var count = _checkedIds.Count;
+        _selectionCount.Text = StringsUi.Format("S.History.SelectedCount", count);
+        var all = count > 0 && count >= _loaded.Count;
+        var allText = StringsUi.Get(all ? "S.History.ClearSelection" : "S.History.SelectAll");
+        HistoryUi.SetButtonText(_selectAllButton, allText);
+        AutomationProperties.SetName(_selectAllButton, allText);
+        var delete = StringsUi.Get("S.History.DeleteSelected");
+        AutomationProperties.SetName(_deleteSelectedButton, delete);
+        AutomationProperties.SetName(_clearSelectionButton, StringsUi.Get("S.History.ClearSelection"));
+        _clearSelectionButton.ToolTip = StringsUi.Get("S.History.ClearSelection") + " (Esc)";
+    }
+
+    private void AnimateSelectionBar(bool show)
+    {
+        _scroll.Padding = new Thickness(24, 2, 12, show ? 92 : 16);
+        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+        var duration = TimeSpan.FromMilliseconds(show ? 190 : 140);
+
+        if (show)
+        {
+            _selectionBar.Visibility = Visibility.Visible;
+        }
+
+        var fade = new System.Windows.Media.Animation.DoubleAnimation(show ? 1 : 0, duration) { EasingFunction = ease };
+        var slide = new System.Windows.Media.Animation.DoubleAnimation(show ? 0 : 18, duration) { EasingFunction = ease };
+        if (!show)
+        {
+            fade.Completed += (_, _) =>
+            {
+                if (!_selectionMode)
+                {
+                    _selectionBar.Visibility = Visibility.Collapsed;
+                }
+            };
+        }
+
+        _selectionBar.BeginAnimation(UIElement.OpacityProperty, fade);
+        _barShift.BeginAnimation(TranslateTransform.YProperty, slide);
+    }
+
+    private void SelectAllOrClear()
+    {
+        if (_checkedIds.Count > 0 && _checkedIds.Count >= _loaded.Count)
+        {
+            ClearSelection();
+            return;
+        }
+
+        foreach (var card in _loaded)
+        {
+            card.IsChecked = true;
+            _checkedIds.Add(card.Record.Id);
+        }
+
+        RefreshSelectionUi();
+    }
+
+    private void ClearSelection()
+    {
+        foreach (var card in _loaded)
+        {
+            card.IsChecked = false;
+        }
+
+        _checkedIds.Clear();
+        RefreshSelectionUi();
+    }
+
+    private Button BuildDeleteSelectedButton()
+    {
+        var glyph = HistoryIcons.Create(HistoryIcons.Delete, 15, HistoryUi.Keys.OnAccent);
+        glyph.Margin = new Thickness(0, 0, 7, 0);
+        glyph.VerticalAlignment = VerticalAlignment.Center;
+        var label = HistoryUi.Text(StringsUi.Get("S.History.DeleteSelected"), 13, weight: FontWeights.SemiBold, measureNaturalWidth: true);
+        label.ClearValue(TextBlock.ForegroundProperty);
+        var content = new StackPanel { Orientation = Orientation.Horizontal };
+        content.Children.Add(glyph);
+        content.Children.Add(label);
+
+        var button = new Button
+        {
+            Content = content,
+            Height = 32,
+            Padding = new Thickness(13, 0, 15, 0),
+            Margin = new Thickness(4, 0, 0, 0),
+            BorderThickness = new Thickness(0),
+            FontSize = 13,
+        };
+        button.SetResourceReference(Control.BackgroundProperty, HistoryUi.Keys.Error);
+        button.SetResourceReference(Control.ForegroundProperty, HistoryUi.Keys.OnAccent);
+        AutomationProperties.SetName(button, StringsUi.Get("S.History.DeleteSelected"));
+        AutomationProperties.SetAutomationId(button, "history-delete-selected");
+        button.Click += (_, _) => DeleteSelected();
+        return button;
+    }
+
+    /// <summary>批量删除：整批只问一次；失败的保留勾选，其余删除并刷新。</summary>
+    private void DeleteSelected()
+    {
+        var records = _loaded.Where(card => card.IsChecked).Select(card => card.Record).ToList();
+        if (records.Count == 0)
+        {
+            return;
+        }
+
+        var favorites = records.Count(record => record.IsFavorite);
+        var message = favorites > 0
+            ? StringsUi.Format("S.History.DeleteSelectedConfirmFav", records.Count, favorites)
+            : StringsUi.Format("S.History.DeleteSelectedConfirm", records.Count);
+
+        AppLog.Info("History", $"批量删除确认框已打开：数量={records.Count} 其中收藏={favorites}");
+        var answer = MessageBox.Show(
+            this,
+            message,
+            StringsUi.Get("S.History.DeleteDialogTitle"),
+            MessageBoxButton.OKCancel,
+            MessageBoxImage.Warning,
+            MessageBoxResult.Cancel);
+
+        if (answer != MessageBoxResult.OK)
+        {
+            AppLog.Info("History", "批量删除已取消");
+            return;
+        }
+
+        var deleted = 0;
+        var failed = 0;
+        foreach (var record in records)
+        {
+            if (HistoryActions.TryDelete(_store, record, out _))
+            {
+                deleted++;
+                _checkedIds.Remove(record.Id);
+                if (Preview is { } preview && preview.Record.Id == record.Id)
+                {
+                    preview.Close();
+                }
+
+                if (Edit is { } edit && edit.Record.Id == record.Id)
+                {
+                    edit.Close();
+                }
+            }
+            else
+            {
+                failed++;
+            }
+        }
+
+        AppLog.Info("History", $"批量删除完成：成功={deleted} 失败={failed}");
+        Reload();
+        LogResult(failed == 0
+            ? StringsUi.Format("S.History.DeletedMany", deleted)
+            : StringsUi.Format("S.History.DeletedManyFailed", deleted, failed));
     }
 
     private HistoryCardCallbacks BuildCallbacks() => new()
@@ -534,7 +865,7 @@ public sealed class HistoryGalleryWindow : Window
             message = StringsUi.Format("S.History.ActionFailed", action, ex.Message);
         }
 
-        UpdateStatus(message);
+        LogResult(message);
         AppLog.Info("History", $"历史图库“{action}”结果：名称={record.Name} {message}");
     }
 
@@ -568,7 +899,7 @@ public sealed class HistoryGalleryWindow : Window
                 if (answer != MessageBoxResult.OK)
                 {
                     AppLog.Info("History", $"取消过期收藏已放弃：用户选择保留收藏 名称={record.Name}");
-                    UpdateStatus(StringsUi.Format("S.History.KeptFavorite", record.Name));
+                    LogResult(StringsUi.Format("S.History.KeptFavorite", record.Name));
                     return;
                 }
 
@@ -579,7 +910,7 @@ public sealed class HistoryGalleryWindow : Window
         var updated = HistoryActions.ToggleFavorite(_store, record);
         if (updated is null)
         {
-            UpdateStatus(StringsUi.Get("S.History.FavoriteFailed"));
+            LogResult(StringsUi.Get("S.History.FavoriteFailed"));
             return;
         }
 
@@ -591,15 +922,15 @@ public sealed class HistoryGalleryWindow : Window
 
         if (updated.IsFavorite)
         {
-            UpdateStatus(StringsUi.Format("S.History.Favorited", updated.Name));
+            LogResult(StringsUi.Format("S.History.Favorited", updated.Name));
         }
         else if (HistoryRetentionPolicy.IsExpired(updated, DateTime.UtcNow))
         {
-            UpdateStatus(StringsUi.Format("S.History.UnfavoritedExpired", updated.Name));
+            LogResult(StringsUi.Format("S.History.UnfavoritedExpired", updated.Name));
         }
         else
         {
-            UpdateStatus(StringsUi.Format("S.History.Unfavorited", updated.Name));
+            LogResult(StringsUi.Format("S.History.Unfavorited", updated.Name));
         }
     }
 
@@ -678,6 +1009,12 @@ public sealed class HistoryGalleryWindow : Window
             Reload();
             e.Handled = true;
         }
+        else if (e.Key == Key.Escape && _checkedIds.Count > 0 &&
+                 !(_search.IsKeyboardFocusWithin && _search.Text.Length > 0))
+        {
+            ClearSelection();
+            e.Handled = true;
+        }
     }
 
     // --- T26 重命名 ---
@@ -695,19 +1032,19 @@ public sealed class HistoryGalleryWindow : Window
         var updated = HistoryActions.Rename(_store, record, dialog.Result, out var error);
         if (updated is null)
         {
-            UpdateStatus(StringsUi.Format("S.History.RenameFailed", error ?? "?"));
+            LogResult(StringsUi.Format("S.History.RenameFailed", error ?? "?"));
             return;
         }
 
         if (ReferenceEquals(updated, record))
         {
-            UpdateStatus(StringsUi.Get("S.History.RenameUnchanged"));
+            LogResult(StringsUi.Get("S.History.RenameUnchanged"));
             return;
         }
 
         Reload();
         _loaded.FirstOrDefault(card => card.Record.Id == updated.Id)?.ApplyName(updated.Name);
-        UpdateStatus(StringsUi.Format("S.History.Renamed", updated.Name));
+        LogResult(StringsUi.Format("S.History.Renamed", updated.Name));
     }
 
     // --- T25 删除 ---
@@ -743,7 +1080,7 @@ public sealed class HistoryGalleryWindow : Window
         }
 
         Reload();
-        UpdateStatus(result);
+        LogResult(result);
     }
 
     // --- T28 追加标注覆盖 ---
@@ -761,7 +1098,7 @@ public sealed class HistoryGalleryWindow : Window
             {
                 AppLog.Info("History", $"编辑窗口已打开，本次只激活：名称={record.Name} Id={record.Id}");
                 existing.Activate();
-                UpdateStatus(StringsUi.Get("S.History.EditAlreadyOpen"));
+                LogResult(StringsUi.Get("S.History.EditAlreadyOpen"));
                 return;
             }
 
@@ -774,7 +1111,7 @@ public sealed class HistoryGalleryWindow : Window
         var image = HistoryActions.LoadImage(_store, record);
         if (image is null)
         {
-            UpdateStatus(StringsUi.Get("S.History.ImageMissingEdit"));
+            LogResult(StringsUi.Get("S.History.ImageMissingEdit"));
             return;
         }
 
@@ -790,12 +1127,12 @@ public sealed class HistoryGalleryWindow : Window
                 "History",
                 $"历史编辑窗口已打开：名称={record.Name} Id={record.Id} 图片={image.PixelWidth}x{image.PixelHeight} " +
                 $"历史条数={before} 收藏={record.IsFavorite}");
-            UpdateStatus(StringsUi.Format("S.History.EditOpened", record.Name));
+            LogResult(StringsUi.Format("S.History.EditOpened", record.Name));
         }
         catch (Exception ex)
         {
             AppLog.Error("History", $"打开历史编辑窗口失败：{record.Name}", ex);
-            UpdateStatus(StringsUi.Format("S.History.EditOpenFailed", ex.Message));
+            LogResult(StringsUi.Format("S.History.EditOpenFailed", ex.Message));
         }
     }
 
@@ -824,7 +1161,7 @@ public sealed class HistoryGalleryWindow : Window
             $"修改时间={HistoryRecord.FormatUtc(saved.UpdatedAtUtc)}");
 
         Reload();
-        UpdateStatus(StringsUi.Format(
+        LogResult(StringsUi.Format(
             "S.History.EditSaveOverwritten",
             saved.Name,
             saved.Width,
@@ -840,7 +1177,7 @@ public sealed class HistoryGalleryWindow : Window
         var card = _loaded.FirstOrDefault(item => item.Record.Id == record.Id);
         if (card is null)
         {
-            UpdateStatus(StringsUi.Get("S.QuickView.RecordMissing"));
+            LogResult(StringsUi.Get("S.QuickView.RecordMissing"));
             return;
         }
         SelectCard(card);
@@ -855,7 +1192,7 @@ public sealed class HistoryGalleryWindow : Window
         var image = HistoryActions.LoadImage(_store, record);
         if (image is null)
         {
-            UpdateStatus(StringsUi.Get("S.History.ImageMissingPreview"));
+            LogResult(StringsUi.Get("S.History.ImageMissingPreview"));
             return;
         }
 
@@ -890,7 +1227,7 @@ public sealed class HistoryGalleryWindow : Window
         catch (Exception ex)
         {
             AppLog.Error("History", $"打开历史预览失败：{record.Name}", ex);
-            UpdateStatus(StringsUi.Format("S.History.PreviewOpenFailed", ex.Message));
+            LogResult(StringsUi.Format("S.History.PreviewOpenFailed", ex.Message));
         }
     }
 
@@ -927,6 +1264,7 @@ public sealed class HistoryGalleryWindow : Window
             var fresh = page.Items.Where(record => !existing.Contains(record.Id)).ToList();
             var added = fresh.Count;
             AppendGroups(HistoryGrouping.GroupByDay(fresh, DateTime.Now));
+            RefreshSelectionUi();
 
             _filteredCount = page.TotalCount;
             AppLog.Info(
@@ -937,7 +1275,7 @@ public sealed class HistoryGalleryWindow : Window
         catch (Exception ex)
         {
             AppLog.Error("History", "历史图库加载更多失败", ex);
-            UpdateStatus(StringsUi.Get("S.History.LoadMoreFailed"));
+            LogResult(StringsUi.Get("S.History.LoadMoreFailed"));
         }
     }
 
@@ -976,25 +1314,13 @@ public sealed class HistoryGalleryWindow : Window
             $"有筛选={_view.HasFilter}");
     }
 
-    private void UpdateStatus(string message)
+    private static void LogResult(string message)
     {
-        _status.Text = message;
-        _status.ToolTip = message;
+        if (!string.IsNullOrWhiteSpace(message)) AppLog.Info("History", message);
     }
 
-    /// <summary>
-    /// 自动清理删掉记录后在图库状态栏写一句说明（T27）。清理是静默的家务活，
-    /// 但用户正看着图库时卡片突然变少会困惑，所以给一行原因。
-    /// </summary>
-    internal void ShowRetentionNotice(string reason)
-    {
-        _retentionNotice = reason;
-        UpdateStatus(reason);
-        AppLog.Info("History", $"历史图库显示清理提示：{reason}");
-    }
-
-    /// <summary>最近一次清理提示文本（验证脚本通过 UIA 的 history-status 读取）。</summary>
-    internal string? RetentionNotice => _retentionNotice;
+    /// <summary>保留清理日志；图库不再显示底部提示栏。</summary>
+    internal void ShowRetentionNotice(string reason) => LogResult(reason);
 
     private void SelectCard(HistoryCard card)
     {
@@ -1010,7 +1336,7 @@ public sealed class HistoryGalleryWindow : Window
 
         _selected = card;
         card.IsSelected = true;
-        UpdateStatus(StringsUi.Format(
+        LogResult(StringsUi.Format(
             "S.History.SelectedStatus",
             card.Record.Name,
             card.Record.Width,
@@ -1058,7 +1384,7 @@ public sealed class HistoryGalleryWindow : Window
         _searchClear.ToolTip = StringsUi.Get("S.History.SearchClear");
         _searchHint.Text = StringsUi.Get("S.History.SearchName");
         HistoryUi.SetButtonText(_clearFilters, StringsUi.Get("S.History.ClearFilters"));
-        _footer.Text = StringsUi.Get("S.History.Footer");
+        UpdateSelectionTexts();
         _filter.Recreate(
             StringsUi.Get("S.History.FilterAll"),
             StringsUi.Get("S.History.FilterFavorites"),

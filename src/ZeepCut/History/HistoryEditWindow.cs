@@ -330,6 +330,7 @@ internal sealed class HistoryEditWindow : Window
         root.Children.Add(_scroll);
         root.Children.Add(dock);
         Content = root;
+        AppChrome.Apply(this);
         RefreshSelectionVisuals();
 
         // Keep input in content coordinates: WPF includes scrolling in GetPosition(_canvasHost).

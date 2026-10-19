@@ -306,6 +306,63 @@ internal static class HistoryUi
         }
     }
 
+    private static readonly Lazy<ControlTemplate> CheckBoxTemplate = new(() =>
+        (ControlTemplate)System.Windows.Markup.XamlReader.Parse("""
+        <ControlTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                         TargetType="CheckBox">
+          <Grid Width="22" Height="22" Background="Transparent" SnapsToDevicePixels="True">
+            <Border x:Name="Box" CornerRadius="6" BorderThickness="1.5"
+                    Background="{DynamicResource Theme.Surface}"
+                    BorderBrush="{DynamicResource Theme.Border}" />
+            <Path x:Name="Check" Data="M6,11.4 L9.6,15 L16.2,7.6" Opacity="0" IsHitTestVisible="False"
+                  Stroke="{DynamicResource Theme.OnAccent}" StrokeThickness="2.1"
+                  StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
+            <Path x:Name="Dash" Data="M6.5,11 H15.5" Opacity="0" IsHitTestVisible="False"
+                  Stroke="{DynamicResource Theme.OnAccent}" StrokeThickness="2.1"
+                  StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Theme.Accent}" />
+            </Trigger>
+            <Trigger Property="IsKeyboardFocused" Value="True">
+              <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Theme.Accent}" />
+            </Trigger>
+            <Trigger Property="IsChecked" Value="True">
+              <Setter TargetName="Box" Property="Background" Value="{DynamicResource Theme.Accent}" />
+              <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Theme.Accent}" />
+              <Setter TargetName="Check" Property="Opacity" Value="1" />
+            </Trigger>
+            <Trigger Property="IsChecked" Value="{x:Null}">
+              <Setter TargetName="Box" Property="Background" Value="{DynamicResource Theme.Accent}" />
+              <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Theme.Accent}" />
+              <Setter TargetName="Dash" Property="Opacity" Value="1" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+        """));
+
+    /// <summary>
+    /// 圆角小方框复选框（多选用）：选中 = 强调色底 + 白色对勾；半选 = 强调色底 + 横杠。
+    /// 全局 CheckBox 样式是开关，这里显式换模板。
+    /// </summary>
+    internal static CheckBox CheckBox(string automationId, string automationName)
+    {
+        var box = new CheckBox
+        {
+            Template = CheckBoxTemplate.Value,
+            Width = 22,
+            Height = 22,
+            Cursor = System.Windows.Input.Cursors.Hand,
+            FocusVisualStyle = null,
+            ToolTip = automationName,
+        };
+        AutomationProperties.SetAutomationId(box, automationId);
+        AutomationProperties.SetName(box, automationName);
+        return box;
+    }
+
     /// <summary>给元素设置 UIA AutomationId（验证脚本按它精确定位某条记录的控件）。</summary>
     internal static T WithAutomationId<T>(T element, string automationId)
         where T : DependencyObject

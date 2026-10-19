@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using ZeepCut.Core.Updates;
+using ZeepCut.History;
 using ZeepCut.Platform;
 using ZeepCut.Ui;
 
@@ -35,44 +36,41 @@ internal sealed class UpdateCheckWindow : Window
     private readonly TextBlock _channel;
     private readonly Button _download;
     private readonly Button _ok;
-    private readonly TextBlock _icon;
 
     private UpdateCheckWindow(UpdateCheckResult result)
     {
         _result = result ?? throw new ArgumentNullException(nameof(result));
 
-        var palette = ThemeManager.Palette;
         Title = StringsUi.Get("S.Update.Title");
-        WindowStyle = WindowStyle.None;
-        AllowsTransparency = true;
+        Width = 440;
+        SizeToContent = SizeToContent.Height;
         ResizeMode = ResizeMode.NoResize;
         ShowInTaskbar = false;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        SizeToContent = SizeToContent.WidthAndHeight;
-        MaxWidth = 640;
-        Background = Brushes.Transparent;
-        FontFamily = new FontFamily(ThemeManager.FontFamilyName);
+        SetResourceReference(BackgroundProperty, ThemeManager.BrushKeys.WindowBackground);
+        SetResourceReference(FontFamilyProperty, ThemeManager.FontFamilyKey);
         AutomationProperties.SetAutomationId(this, WindowAutomationId);
         AutomationProperties.SetName(this, Title);
 
-        _icon = new TextBlock
-        {
-            Text = IconFor(result.Status),
-            FontSize = 26,
-            Foreground = BrushFor(result.Status, palette),
-            VerticalAlignment = VerticalAlignment.Top,
-            Margin = new Thickness(0, 0, 12, 0),
-        };
+        // 状态徽标：淡色圆底 + 矢量图标。
+        var (iconData, toneKey) = ToneFor(result.Status);
+        var tint = new Border { Width = 48, Height = 48, CornerRadius = new CornerRadius(24), Opacity = 0.16 };
+        tint.SetResourceReference(Border.BackgroundProperty, toneKey);
+        var glyph = HistoryIcons.Create(iconData, 24, toneKey, 2.0);
+        glyph.HorizontalAlignment = HorizontalAlignment.Center;
+        glyph.VerticalAlignment = VerticalAlignment.Center;
+        var badge = new Grid { Width = 48, Height = 48, VerticalAlignment = VerticalAlignment.Center };
+        badge.Children.Add(tint);
+        badge.Children.Add(glyph);
 
         _title = new TextBlock
         {
             Text = TitleFor(result),
             FontSize = 17,
             FontWeight = FontWeights.SemiBold,
-            Foreground = palette.ForegroundBrush,
             TextWrapping = TextWrapping.Wrap,
-            VerticalAlignment = VerticalAlignment.Center,
         };
+        _title.SetResourceReference(TextBlock.ForegroundProperty, ThemeManager.BrushKeys.Foreground);
         AutomationProperties.SetAutomationId(_title, "update-check-title");
         AutomationProperties.SetName(_title, _title.Text);
 
@@ -81,65 +79,45 @@ internal sealed class UpdateCheckWindow : Window
         {
             Text = StringsUi.Format("S.Update.CurrentVersion", result.CurrentVersion),
             FontSize = 12.5,
-            Foreground = palette.SecondaryForegroundBrush,
-            TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 6, 0, 0),
+            Margin = new Thickness(0, 3, 0, 0),
         };
+        version.SetResourceReference(TextBlock.ForegroundProperty, ThemeManager.BrushKeys.SecondaryForeground);
         AutomationProperties.SetAutomationId(version, "update-check-current-version");
 
-        _body = new TextBlock
-        {
-            Text = BodyFor(result),
-            FontSize = 12.5,
-            Foreground = palette.ForegroundBrush,
-            TextWrapping = TextWrapping.Wrap,
-            MaxWidth = 520,
-            Margin = new Thickness(0, 10, 0, 0),
-        };
-        AutomationProperties.SetAutomationId(_body, "update-check-body");
-        AutomationProperties.SetName(_body, _body.Text);
-
-        _channel = new TextBlock
-        {
-            Text = StringsUi.Format(
-                "S.Update.Channel",
-                result.ManifestUrl ?? StringsUi.Get("S.Update.NotConfiguredTitle")),
-            FontSize = 11,
-            Foreground = palette.SecondaryForegroundBrush,
-            TextWrapping = TextWrapping.Wrap,
-            MaxWidth = 520,
-            Margin = new Thickness(0, 8, 0, 0),
-        };
-        AutomationProperties.SetAutomationId(_channel, "update-check-channel");
+        var titleStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(16, 0, 0, 0) };
+        titleStack.Children.Add(_title);
+        titleStack.Children.Add(version);
 
         var header = new Grid();
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        Grid.SetColumn(_icon, 0);
-        Grid.SetColumn(_title, 1);
-
-        var titleStack = new StackPanel();
-        titleStack.Children.Add(_title);
-        titleStack.Children.Add(version);
         Grid.SetColumn(titleStack, 1);
-        header.Children.Add(_icon);
+        header.Children.Add(badge);
         header.Children.Add(titleStack);
 
-        var close = new Button
+        // 只有“失败原因 / 更新说明”才有正文；其余结论标题已经说清楚，不再重复。
+        _body = new TextBlock
         {
-            Content = "✕",
-            FontSize = 13,
-            Padding = new Thickness(6, 0, 6, 0),
-            Background = Brushes.Transparent,
-            Foreground = palette.SecondaryForegroundBrush,
-            BorderThickness = new Thickness(0),
-            Cursor = System.Windows.Input.Cursors.Hand,
-            VerticalAlignment = VerticalAlignment.Top,
+            Text = BodyFor(result),
+            FontSize = 12.5,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 18, 0, 0),
+            Visibility = string.IsNullOrWhiteSpace(BodyFor(result)) ? Visibility.Collapsed : Visibility.Visible,
         };
-        close.Click += (_, _) => Close();
-        Grid.SetColumn(close, 2);
-        header.Children.Add(close);
+        _body.SetResourceReference(TextBlock.ForegroundProperty, ThemeManager.BrushKeys.SecondaryForeground);
+        AutomationProperties.SetAutomationId(_body, "update-check-body");
+        AutomationProperties.SetName(_body, _body.Text);
+
+        // 仅在打开发布页失败时才出现。
+        _channel = new TextBlock
+        {
+            FontSize = 12,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 10, 0, 0),
+            Visibility = Visibility.Collapsed,
+        };
+        _channel.SetResourceReference(TextBlock.ForegroundProperty, ThemeManager.BrushKeys.Error);
+        AutomationProperties.SetAutomationId(_channel, "update-check-channel");
 
         _download = MakeButton(
             StringsUi.Get("S.Update.Download"),
@@ -148,32 +126,24 @@ internal sealed class UpdateCheckWindow : Window
             primary: true);
         _download.Visibility = result.DownloadUrl is null ? Visibility.Collapsed : Visibility.Visible;
 
-        _ok = MakeButton(StringsUi.Get("S.Update.Ok"), "update-check-ok", Close, primary: false);
+        _ok = MakeButton(StringsUi.Get("S.Update.Ok"), "update-check-ok", Close, primary: _download.Visibility != Visibility.Visible);
 
         var buttons = new StackPanel
         {
             Orientation = Orientation.Horizontal,
             HorizontalAlignment = HorizontalAlignment.Right,
-            Margin = new Thickness(0, 16, 0, 0),
+            Margin = new Thickness(0, 22, 0, 0),
         };
-        buttons.Children.Add(_download);
         buttons.Children.Add(_ok);
+        buttons.Children.Add(_download);
 
-        var stack = new StackPanel();
+        var stack = new StackPanel { Margin = new Thickness(28, 12, 28, 24) };
         stack.Children.Add(header);
         stack.Children.Add(_body);
         stack.Children.Add(_channel);
         stack.Children.Add(buttons);
-
-        Content = new Border
-        {
-            Background = palette.SurfaceBrush,
-            BorderBrush = palette.BorderBrush,
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(palette.RadiusLarge),
-            Padding = new Thickness(20, 16, 20, 16),
-            Child = stack,
-        };
+        Content = stack;
+        AppChrome.Apply(this, allowMaximize: false, allowMinimize: false);
 
         // 结果不依赖语言/主题重建：对话框是一次性的，切换语言后下次检查就是新语言。
         PreviewKeyDown += (_, e) =>
@@ -223,6 +193,7 @@ internal sealed class UpdateCheckWindow : Window
 
         AppLog.Warn("Update", $"打开发布页失败：{url}（{error}）");
         _channel.Text = StringsUi.Get("S.Update.NoUrl");
+        _channel.Visibility = Visibility.Visible;
     }
 
     private static string TitleFor(UpdateCheckResult result) => result.Status switch
@@ -236,57 +207,40 @@ internal sealed class UpdateCheckWindow : Window
 
     private static string BodyFor(UpdateCheckResult result) => result.Status switch
     {
-        UpdateStatus.NotConfigured => StringsUi.Format("S.Update.NotConfigured", result.CurrentVersion),
-        UpdateStatus.Failed => StringsUi.Format("S.Update.Failed", result.CurrentVersion, result.Detail),
-        UpdateStatus.UpToDate => StringsUi.Format(
-            "S.Update.UpToDate",
-            result.CurrentVersion,
-            result.Manifest?.VersionText ?? "?"),
-        UpdateStatus.UpdateAvailable => string.IsNullOrWhiteSpace(result.Manifest?.Notes)
-            ? StringsUi.Format("S.Update.Available", result.AvailableVersion ?? "?", result.CurrentVersion)
-            : StringsUi.Format(
-                "S.Update.AvailableWithNotes",
-                result.AvailableVersion ?? "?",
-                result.CurrentVersion,
-                result.Manifest!.Notes),
-        _ => result.Detail,
+        UpdateStatus.Failed => result.Detail,
+        UpdateStatus.UpdateAvailable => result.Manifest?.Notes ?? string.Empty,
+        _ => string.Empty,
     };
 
-    private static string IconFor(UpdateStatus status) => status switch
+    private static (string Icon, string ToneKey) ToneFor(UpdateStatus status) => status switch
     {
-        UpdateStatus.NotConfigured => "⚙",
-        UpdateStatus.Failed => "⚠",
-        UpdateStatus.UpToDate => "✓",
-        UpdateStatus.UpdateAvailable => "↓",
-        _ => "i",
-    };
-
-    private static Brush BrushFor(UpdateStatus status, ThemePalette palette) => status switch
-    {
-        UpdateStatus.NotConfigured => palette.WarningBrush,
-        UpdateStatus.Failed => palette.ErrorBrush,
-        _ => palette.AccentBrush,
+        UpdateStatus.NotConfigured => (HistoryIcons.Settings, ThemeManager.BrushKeys.Warning),
+        UpdateStatus.Failed => ("M12,3 L22,20 H2 Z M12,10 V14 M12,17 V17.5", ThemeManager.BrushKeys.Error),
+        UpdateStatus.UpToDate => ("M5,13 L10,18 L19,7", ThemeManager.BrushKeys.Success),
+        UpdateStatus.UpdateAvailable => (HistoryIcons.SaveAs, ThemeManager.BrushKeys.Accent),
+        _ => (HistoryIcons.Image, ThemeManager.BrushKeys.Accent),
     };
 
     private static Button MakeButton(string text, string automationId, Action onClick, bool primary)
     {
-        var palette = ThemeManager.Palette;
         var button = new Button
         {
-            Content = new TextBlock
-            {
-                Text = text,
-                FontSize = 13,
-                Foreground = primary ? palette.OnAccentBrush : palette.ForegroundBrush,
-            },
-            Padding = new Thickness(16, 6, 16, 6),
+            Content = text,
+            Padding = new Thickness(18, 8, 18, 8),
             Margin = new Thickness(8, 0, 0, 0),
-            MinWidth = 84,
-            Background = primary ? palette.AccentBrush : palette.SurfaceBrush,
-            BorderBrush = palette.BorderBrush,
-            BorderThickness = new Thickness(1),
-            Cursor = System.Windows.Input.Cursors.Hand,
+            MinWidth = 88,
+            FontSize = 13,
         };
+        if (primary)
+        {
+            button.BorderThickness = new Thickness(0);
+            button.SetResourceReference(Control.BackgroundProperty, ThemeManager.BrushKeys.Accent);
+            button.SetResourceReference(Control.ForegroundProperty, ThemeManager.BrushKeys.OnAccent);
+        }
+        else
+        {
+            button.SetResourceReference(Control.BackgroundProperty, ThemeManager.BrushKeys.SurfaceAlt);
+        }
 
         AutomationProperties.SetAutomationId(button, automationId);
         AutomationProperties.SetName(button, text);

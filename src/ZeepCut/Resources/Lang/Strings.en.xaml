@@ -86,7 +86,7 @@
     <sys:String x:Key="S.Pin.Menu.CloseHint">Close this pin</sys:String>
 
     <!-- ===== History gallery ===== -->
-    <sys:String x:Key="S.History.WindowTitle">Zeep Cut History</sys:String>
+    <sys:String x:Key="S.History.WindowTitle">History</sys:String>
     <sys:String x:Key="S.History.WindowName">Zeep Cut history gallery</sys:String>
     <sys:String x:Key="S.History.Title">History</sys:String>
     <sys:String x:Key="S.History.SearchPlaceholder">Search</sys:String>
@@ -167,11 +167,21 @@
     <sys:String x:Key="S.History.SaveFailed">Save as failed: {0}</sys:String>
     <sys:String x:Key="S.History.DeleteFailed">Delete failed: {0}</sys:String>
     <sys:String x:Key="S.History.Deleted">Deleted “{0}”.</sys:String>
+    <sys:String x:Key="S.History.SelectCard">Select</sys:String>
+    <sys:String x:Key="S.History.SelectGroup">Select {0}</sys:String>
+    <sys:String x:Key="S.History.SelectedCount">{0} selected</sys:String>
+    <sys:String x:Key="S.History.SelectAll">Select all</sys:String>
+    <sys:String x:Key="S.History.ClearSelection">Clear</sys:String>
+    <sys:String x:Key="S.History.DeleteSelected">Delete</sys:String>
+    <sys:String x:Key="S.History.DeleteSelectedConfirm">Delete {0} selected item(s)?\n\nImages and records will be removed permanently.</sys:String>
+    <sys:String x:Key="S.History.DeleteSelectedConfirmFav">Delete {0} selected item(s), including {1} favorite(s)?\n\nImages and records will be removed permanently.</sys:String>
+    <sys:String x:Key="S.History.DeletedMany">Deleted {0} item(s).</sys:String>
+    <sys:String x:Key="S.History.DeletedManyFailed">Deleted {0} item(s); {1} failed.</sys:String>
     <sys:String x:Key="S.History.PinFailed">Pin failed: {0}</sys:String>
     <sys:String x:Key="S.History.Pinned">Pinned “{0}”.</sys:String>
 
     <!-- ===== History: preview ===== -->
-    <sys:String x:Key="S.History.PreviewTitle">Preview · {0}</sys:String>
+    <sys:String x:Key="S.History.PreviewTitle">Preview</sys:String>
     <sys:String x:Key="S.History.PreviewActualSize">Actual size</sys:String>
     <sys:String x:Key="S.History.PreviewFit">Fit to window</sys:String>
     <sys:String x:Key="S.History.PreviewMeta">{0} · {1}×{2} px · {3} · {4} · zoom {5}%</sys:String>
@@ -180,7 +190,7 @@
     <sys:String x:Key="S.History.PreviewOpenFailed">Opening the preview failed: {0}</sys:String>
 
     <!-- ===== History: append-annotation editor ===== -->
-    <sys:String x:Key="S.History.EditTitle">Zeep Cut edit history · {0}</sys:String>
+    <sys:String x:Key="S.History.EditTitle">Edit</sys:String>
     <sys:String x:Key="S.History.EditWindowName">Zeep Cut edit history</sys:String>
     <sys:String x:Key="S.History.EditSave">Save and overwrite</sys:String>
     <sys:String x:Key="S.History.EditSaveHint">Replace the original image of this record with the newly annotated image (the old version is not kept, no new record is created)</sys:String>
@@ -216,7 +226,7 @@
     <sys:String x:Key="S.History.OverwriteExplain">This will overwrite “{0}”. The old image is not kept and no new record is created.\n\nSave?</sys:String>
 
     <!-- ===== Settings ===== -->
-    <sys:String x:Key="S.Settings.WindowTitle">Zeep Cut Settings</sys:String>
+    <sys:String x:Key="S.Settings.WindowTitle">Settings</sys:String>
     <sys:String x:Key="S.Settings.WindowName">Zeep Cut settings</sys:String>
     <sys:String x:Key="S.Settings.Heading">Settings</sys:String>
     <sys:String x:Key="S.Settings.Subtitle">Changes are saved automatically</sys:String>

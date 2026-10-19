@@ -151,6 +151,7 @@ internal sealed class HistoryPreviewWindow : Window
         grid.Children.Add(_scroll);
         grid.Children.Add(toolbar);
         Content = grid;
+        AppChrome.Apply(this);
 
         SourceInitialized += (_, _) => DwmApi.TrySetDarkTitleBar(this, ThemeManager.Palette.IsDark);
 

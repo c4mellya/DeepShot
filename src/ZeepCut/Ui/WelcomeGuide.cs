@@ -3,7 +3,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using ZeepCut.Platform;
-using Shapes = System.Windows.Shapes;
 
 namespace ZeepCut.Ui;
 
@@ -34,7 +33,7 @@ internal static class WelcomeGuide
 
         // 标题：品牌徽标 + 一句话。
         var header = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 24) };
-        header.Children.Add(Badge());
+        header.Children.Add(AppChrome.IconImage(60));
         var titles = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(16, 0, 0, 0) };
         titles.Children.Add(Text("Zeep Cut", 22, ThemeManager.BrushKeys.Foreground, FontWeights.SemiBold));
         titles.Children.Add(Text(chinese ? "截图、标注、贴在桌面" : "Capture, annotate, pin", 13, ThemeManager.BrushKeys.SecondaryForeground));
@@ -67,6 +66,7 @@ internal static class WelcomeGuide
         panel.Children.Add(button);
 
         window.Content = panel;
+        AppChrome.Apply(window, allowMaximize: false, allowMinimize: false);
         window.Closed += (_, _) =>
         {
             try { File.WriteAllText(marker, DateTimeOffset.UtcNow.ToString("O")); }
@@ -121,32 +121,5 @@ internal static class WelcomeGuide
         block.SetResourceReference(TextBlock.ForegroundProperty, brushKey);
         if (weight is { } value) block.FontWeight = value;
         return block;
-    }
-
-    private static FrameworkElement Badge()
-    {
-        var icon = new Shapes.Path
-        {
-            Data = Geometry.Parse("M7,3 V17 H21 M3,7 H17 V21"),
-            StrokeThickness = 2.2,
-            StrokeStartLineCap = PenLineCap.Round,
-            StrokeEndLineCap = PenLineCap.Round,
-            StrokeLineJoin = PenLineJoin.Round,
-        };
-        icon.SetResourceReference(Shapes.Shape.StrokeProperty, ThemeManager.BrushKeys.OnAccent);
-        var canvas = new Canvas { Width = 24, Height = 24 };
-        canvas.Children.Add(icon);
-        var gloss = new Border
-        {
-            CornerRadius = new CornerRadius(14),
-            IsHitTestVisible = false,
-            Background = new LinearGradientBrush(Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF), Color.FromArgb(0x00, 0xFF, 0xFF, 0xFF), 90),
-        };
-        var grid = new Grid();
-        grid.Children.Add(gloss);
-        grid.Children.Add(new Viewbox { Width = 24, Height = 24, Child = canvas, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center });
-        var badge = new Border { Width = 52, Height = 52, CornerRadius = new CornerRadius(15), Child = grid };
-        badge.SetResourceReference(Border.BackgroundProperty, ThemeManager.BrushKeys.Accent);
-        return badge;
     }
 }

@@ -110,6 +110,7 @@ internal sealed class HistoryRenameDialog : Window
         panel.Children.Add(hint);
         panel.Children.Add(buttons);
         Content = panel;
+        AppChrome.Apply(this, allowMaximize: false, allowMinimize: false);
 
         if (owner is { IsVisible: true })
         {

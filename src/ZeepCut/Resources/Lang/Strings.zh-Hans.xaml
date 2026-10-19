@@ -89,7 +89,7 @@
     <sys:String x:Key="S.Pin.Menu.CloseHint">关闭这张贴图</sys:String>
 
     <!-- ===== 历史图库 ===== -->
-    <sys:String x:Key="S.History.WindowTitle">Zeep Cut 历史</sys:String>
+    <sys:String x:Key="S.History.WindowTitle">历史</sys:String>
     <sys:String x:Key="S.History.WindowName">Zeep Cut 历史图库</sys:String>
     <sys:String x:Key="S.History.Title">历史记录</sys:String>
     <sys:String x:Key="S.History.SearchPlaceholder">搜索</sys:String>
@@ -170,11 +170,21 @@
     <sys:String x:Key="S.History.SaveFailed">另存为失败：{0}</sys:String>
     <sys:String x:Key="S.History.DeleteFailed">删除失败：{0}</sys:String>
     <sys:String x:Key="S.History.Deleted">已删除“{0}”。</sys:String>
+    <sys:String x:Key="S.History.SelectCard">选择</sys:String>
+    <sys:String x:Key="S.History.SelectGroup">选择 {0}</sys:String>
+    <sys:String x:Key="S.History.SelectedCount">已选 {0} 项</sys:String>
+    <sys:String x:Key="S.History.SelectAll">全选</sys:String>
+    <sys:String x:Key="S.History.ClearSelection">取消选择</sys:String>
+    <sys:String x:Key="S.History.DeleteSelected">删除</sys:String>
+    <sys:String x:Key="S.History.DeleteSelectedConfirm">删除所选 {0} 项？\n\n图片和记录将永久移除。</sys:String>
+    <sys:String x:Key="S.History.DeleteSelectedConfirmFav">删除所选 {0} 项（含 {1} 项收藏）？\n\n图片和记录将永久移除。</sys:String>
+    <sys:String x:Key="S.History.DeletedMany">已删除 {0} 项。</sys:String>
+    <sys:String x:Key="S.History.DeletedManyFailed">已删除 {0} 项，{1} 项失败。</sys:String>
     <sys:String x:Key="S.History.PinFailed">贴图失败：{0}</sys:String>
     <sys:String x:Key="S.History.Pinned">已贴图“{0}”。</sys:String>
 
     <!-- ===== 历史：预览 ===== -->
-    <sys:String x:Key="S.History.PreviewTitle">预览 · {0}</sys:String>
+    <sys:String x:Key="S.History.PreviewTitle">预览</sys:String>
     <sys:String x:Key="S.History.PreviewActualSize">实际大小</sys:String>
     <sys:String x:Key="S.History.PreviewFit">适应窗口</sys:String>
     <sys:String x:Key="S.History.PreviewMeta">{0} · {1}×{2} px · {3} · {4} · 缩放 {5}%</sys:String>
@@ -183,7 +193,7 @@
     <sys:String x:Key="S.History.PreviewOpenFailed">打开预览失败：{0}</sys:String>
 
     <!-- ===== 历史：追加标注编辑窗口 ===== -->
-    <sys:String x:Key="S.History.EditTitle">Zeep Cut 编辑历史 · {0}</sys:String>
+    <sys:String x:Key="S.History.EditTitle">编辑</sys:String>
     <sys:String x:Key="S.History.EditWindowName">Zeep Cut 编辑历史</sys:String>
     <sys:String x:Key="S.History.EditSave">保存并覆盖</sys:String>
     <sys:String x:Key="S.History.EditSaveHint">用追加标注后的新图替换这条记录原来的图片（不保留旧版本，不新增记录）</sys:String>
@@ -219,7 +229,7 @@
     <sys:String x:Key="S.History.OverwriteExplain">将覆盖“{0}”：旧图片不会保留，也不会新增记录。\n\n确定保存吗？</sys:String>
 
     <!-- ===== 设置窗口 ===== -->
-    <sys:String x:Key="S.Settings.WindowTitle">Zeep Cut 设置</sys:String>
+    <sys:String x:Key="S.Settings.WindowTitle">设置</sys:String>
     <sys:String x:Key="S.Settings.WindowName">Zeep Cut 设置</sys:String>
     <sys:String x:Key="S.Settings.Heading">设置</sys:String>
     <sys:String x:Key="S.Settings.Subtitle">更改会自动保存</sys:String>

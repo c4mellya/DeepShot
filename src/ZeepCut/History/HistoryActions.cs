@@ -271,6 +271,13 @@ internal static class HistoryActions
     /// <summary>删除一条记录（行 + 图片 + 缩略图文件）。调用方负责先确认。</summary>
     internal static string Delete(HistoryStore store, HistoryRecord record)
     {
+        TryDelete(store, record, out var message);
+        return message;
+    }
+
+    /// <summary>删除一条记录并告知是否成功（批量删除统计用）。</summary>
+    internal static bool TryDelete(HistoryStore store, HistoryRecord record, out string message)
+    {
         var imagePath = record.RelativeImagePath;
         var thumbPath = record.RelativeThumbnailPath;
         try
@@ -286,14 +293,16 @@ internal static class HistoryActions
                 $"缩略图={thumbPath ?? "-"} 缩略图仍在={thumbExists} " +
                 $"剩余记录数={store.Count()}");
 
-            return removed
+            message = removed
                 ? StringsUi.Format("S.History.Deleted", record.Name)
                 : StringsUi.Format("S.History.DeleteFailed", "?");
+            return removed;
         }
         catch (Exception ex)
         {
             AppLog.Error("History", $"历史删除失败：{record.Name}", ex);
-            return StringsUi.Format("S.History.DeleteFailed", ex.Message);
+            message = StringsUi.Format("S.History.DeleteFailed", ex.Message);
+            return false;
         }
     }
 

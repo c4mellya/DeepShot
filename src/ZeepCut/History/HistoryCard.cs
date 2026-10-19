@@ -79,7 +79,12 @@ internal sealed class HistoryCard : Border
     private readonly FrameworkElement _actionPill;
     private readonly FrameworkElement _sourceChip;
     private readonly Border _ring;
+    private readonly Border _tint;
+    private readonly CheckBox _checkBox;
     private readonly TranslateTransform _lift = new();
+    private Action<HistoryCard>? _checkedChanged;
+    private bool _checked;
+    private bool _selectionMode;
     private bool _selected;
     private bool _hovered;
     private bool _favorite;
@@ -161,8 +166,19 @@ internal sealed class HistoryCard : Border
             _thumbnailFrame.Child = holder;
         }
 
-        // --- 左上角来源标签（悬停浮现） ---
+        // --- 左上角：多选复选框 + 紧随其后的来源标签（悬停浮现） ---
         _sourceChip = BuildSourceChip(record);
+        _checkBox = HistoryUi.CheckBox($"history-select-{index}", StringsUi.Get("S.History.SelectCard"));
+        _checkBox.HorizontalAlignment = HorizontalAlignment.Left;
+        _checkBox.VerticalAlignment = VerticalAlignment.Top;
+        _checkBox.Margin = new Thickness(9, 9, 0, 0);
+        _checkBox.Click += (_, e) =>
+        {
+            e.Handled = true;
+            _checked = _checkBox.IsChecked == true;
+            UpdateChrome();
+            _checkedChanged?.Invoke(this);
+        };
 
         // --- 右上角星标：矢量图标按钮，点它不会触发卡片选中/预览 ---
         _starIcon = HistoryIcons.Create(HistoryIcons.Star, 16, HistoryUi.Keys.Secondary, 1.8);
@@ -192,6 +208,7 @@ internal sealed class HistoryCard : Border
         var thumbnailHost = new Grid();
         thumbnailHost.Children.Add(_thumbnailFrame);
         thumbnailHost.Children.Add(_sourceChip);
+        thumbnailHost.Children.Add(_checkBox);
         thumbnailHost.Children.Add(_starButton);
         thumbnailHost.Children.Add(_actionPill);
 
@@ -229,13 +246,24 @@ internal sealed class HistoryCard : Border
         };
         _ring.SetResourceReference(BorderBrushProperty, HistoryUi.Keys.Accent);
 
+        // 勾选后整张卡片淡淡染上强调色。
+        _tint = new Border
+        {
+            CornerRadius = new CornerRadius(Radius),
+            Opacity = 0,
+            IsHitTestVisible = false,
+        };
+        _tint.SetResourceReference(BackgroundProperty, HistoryUi.Keys.Accent);
+
         var root = new Grid();
         root.Children.Add(stack);
+        root.Children.Add(_tint);
         root.Children.Add(_ring);
         Child = root;
 
         _actionPill.Opacity = 0;
         _sourceChip.Opacity = 0;
+        _checkBox.Opacity = 0;
         _starButton.Opacity = _favorite ? 1 : 0;
 
         MouseLeftButtonDown += OnMouseLeftButtonDown;
@@ -267,6 +295,38 @@ internal sealed class HistoryCard : Border
             _selected = value;
             UpdateChrome();
         }
+    }
+
+    /// <summary>是否被勾选（多选）。程序设置不触发回调。</summary>
+    internal bool IsChecked
+    {
+        get => _checked;
+        set
+        {
+            if (_checked == value)
+            {
+                return;
+            }
+
+            _checked = value;
+            _checkBox.IsChecked = value;
+            UpdateChrome();
+        }
+    }
+
+    /// <summary>勾选框被用户点击后的通知（窗口据此维护选择集合）。</summary>
+    internal void SetCheckedChanged(Action<HistoryCard> changed) => _checkedChanged = changed;
+
+    /// <summary>选择模式（任意一张被勾选）：所有卡片的复选框常驻显示。</summary>
+    internal void SetSelectionMode(bool on)
+    {
+        if (_selectionMode == on)
+        {
+            return;
+        }
+
+        _selectionMode = on;
+        UpdateChrome();
     }
 
     /// <summary>收藏状态变化后更新星标（不重建控件，避免丢失焦点）。</summary>
@@ -336,7 +396,8 @@ internal sealed class HistoryCard : Border
             Padding = new Thickness(9, 3, 9, 3),
             HorizontalAlignment = HorizontalAlignment.Left,
             VerticalAlignment = VerticalAlignment.Top,
-            Margin = new Thickness(8, 8, 0, 0),
+            Margin = new Thickness(38, 9, 0, 0),
+            Height = 22,
             BorderThickness = new Thickness(1),
             IsHitTestVisible = false,
             Child = label,
@@ -371,8 +432,10 @@ internal sealed class HistoryCard : Border
         var focus = IsKeyboardFocusWithin;
         var hot = _hovered || _selected || focus;
 
-        _ring.BorderThickness = new Thickness(_selected ? 2 : 1.5);
-        HistoryUi.Fade(_ring, OpacityProperty, _selected ? 1 : hot ? 0.55 : 0);
+        _ring.BorderThickness = new Thickness(_selected || _checked ? 2 : 1.5);
+        HistoryUi.Fade(_ring, OpacityProperty, _selected || _checked ? 1 : hot ? 0.55 : 0);
+        HistoryUi.Fade(_tint, OpacityProperty, _checked ? 0.1 : 0);
+        HistoryUi.Fade(_checkBox, OpacityProperty, hot || _checked || _selectionMode ? 1 : 0);
         HistoryUi.Fade(_actionPill, OpacityProperty, hot ? 1 : 0);
         HistoryUi.Fade(_sourceChip, OpacityProperty, hot ? 1 : 0);
         HistoryUi.Fade(_starButton, OpacityProperty, hot || _favorite ? 1 : 0);
