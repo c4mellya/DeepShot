@@ -6,9 +6,9 @@ Repository: [c4mellya/deep-cut](https://github.com/c4mellya/deep-cut) · [简体
 
 ## Install
 
-The product has been renamed to `deep-cut`. Existing 0.1.12 release files retain the previous name; this rename does not produce a new release. Executable names and the data folder continue to use `ZeepCut` to preserve existing settings and history.
+The product has been renamed to `deep-cut`. Starting with 0.1.13, the installer and portable ZIP use the new name. Executable names and the data folder continue to use `ZeepCut` to preserve existing settings and history.
 
-Run `ZeepCut-0.1.12-Setup-x64.exe` for a per-user installation, or extract `ZeepCut-0.1.12-win-x64.zip` and run `ZeepCut.exe`. Both releases include the .NET runtime. Keep all files and the Resources folder together. The installer is unsigned.
+Run `deep-cut-0.1.13-Setup-x64.exe` for a per-user installation, or extract `deep-cut-0.1.13-win-x64.zip` and run `ZeepCut.exe`. Both releases include the .NET runtime. Keep all files and the Resources folder together. The installer is unsigned.
 
 deep-cut lives in the system tray, possibly inside the hidden icons panel. Closing History or Settings keeps the application running; select Exit from the tray menu to stop it. Startup at sign-in is optional and disabled by default. A short guide appears on first launch.
 

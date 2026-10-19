@@ -151,7 +151,7 @@ public sealed record UpdateCheckResult(
         UpdateStatus.NotConfigured =>
             $"当前版本 {CurrentVersion}。\n\n" +
             "本程序还没有配置更新渠道（AppInfo.UpdateManifestUrl 为空），因此无法查询是否有新版本。\n" +
-            "这不影响任何本地功能；请通过你获取 Zeep Cut 的渠道了解更新（本程序不会自行下载或安装）。",
+            "这不影响任何本地功能；请通过你获取 deep-cut 的渠道了解更新（本程序不会自行下载或安装）。",
         UpdateStatus.Failed =>
             $"当前版本 {CurrentVersion}。\n\n无法确认是否有新版本：{Detail}\n" +
             "请检查网络或更新渠道地址后重试。",

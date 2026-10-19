@@ -15,7 +15,7 @@ foreach ($name in @('README.md', 'README.en.md', 'RELEASE_NOTES.md')) {
     Copy-Item -LiteralPath (Join-Path $root $name) -Destination $output -Force
 }
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-$zip = Join-Path $release "ZeepCut-$version-win-x64.zip"
+$zip = Join-Path $release "deep-cut-$version-win-x64.zip"
 if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }
 [System.IO.Compression.ZipFile]::CreateFromDirectory($output, $zip, [System.IO.Compression.CompressionLevel]::Optimal, $false)
 

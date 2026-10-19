@@ -1,5 +1,5 @@
 <!--
-  Zeep Cut UI strings (English) — T31.
+  deep-cut UI strings (English) — T31.
   Keys must match Strings.zh-Hans.xaml exactly. Keep English labels short so buttons never clip
   (the Settings and Update dialogs use the same layout in both languages).
 -->
@@ -8,7 +8,7 @@
                     xmlns:sys="clr-namespace:System;assembly=System.Runtime">
 
     <!-- ===== Common ===== -->
-    <sys:String x:Key="S.App.Name">Zeep Cut</sys:String>
+    <sys:String x:Key="S.App.Name">deep-cut</sys:String>
     <sys:String x:Key="S.Common.Ok">OK</sys:String>
     <sys:String x:Key="S.Common.Cancel">Cancel</sys:String>
     <sys:String x:Key="S.Common.Close">Close</sys:String>
@@ -57,7 +57,7 @@
     <sys:String x:Key="S.Tray.Notification.FailedTitle">Pin from clipboard failed</sys:String>
 
     <!-- ===== Capture overlay ===== -->
-    <sys:String x:Key="S.Overlay.WindowTitle">Zeep Cut capture overlay</sys:String>
+    <sys:String x:Key="S.Overlay.WindowTitle">deep-cut capture overlay</sys:String>
     <sys:String x:Key="S.Overlay.Copy">Copy</sys:String>
     <sys:String x:Key="S.Overlay.SaveAs">Save as</sys:String>
     <sys:String x:Key="S.Overlay.Pin">Pin</sys:String>
@@ -68,7 +68,7 @@
     <sys:String x:Key="S.Overlay.SelectionLocked">Selection locked ({0} annotations)</sys:String>
 
     <!-- ===== Pins ===== -->
-    <sys:String x:Key="S.Pin.WindowTitle">Zeep Cut pin {0}</sys:String>
+    <sys:String x:Key="S.Pin.WindowTitle">deep-cut pin {0}</sys:String>
     <sys:String x:Key="S.Pin.LockedBadge">Locked</sys:String>
     <sys:String x:Key="S.Pin.LockedBadgeWithSize">Locked {0}×{1}</sys:String>
     <sys:String x:Key="S.Pin.Close">Close pin (Esc)</sys:String>
@@ -87,7 +87,7 @@
 
     <!-- ===== History gallery ===== -->
     <sys:String x:Key="S.History.WindowTitle">History</sys:String>
-    <sys:String x:Key="S.History.WindowName">Zeep Cut history gallery</sys:String>
+    <sys:String x:Key="S.History.WindowName">deep-cut history gallery</sys:String>
     <sys:String x:Key="S.History.Title">History</sys:String>
     <sys:String x:Key="S.History.SearchPlaceholder">Search</sys:String>
     <sys:String x:Key="S.History.SearchName">Search history</sys:String>
@@ -191,7 +191,7 @@
 
     <!-- ===== History: append-annotation editor ===== -->
     <sys:String x:Key="S.History.EditTitle">Edit</sys:String>
-    <sys:String x:Key="S.History.EditWindowName">Zeep Cut edit history</sys:String>
+    <sys:String x:Key="S.History.EditWindowName">deep-cut edit history</sys:String>
     <sys:String x:Key="S.History.EditSave">Save and overwrite</sys:String>
     <sys:String x:Key="S.History.EditSaveHint">Replace the original image of this record with the newly annotated image (the old version is not kept, no new record is created)</sys:String>
     <sys:String x:Key="S.History.EditCancel">Cancel</sys:String>
@@ -227,7 +227,7 @@
 
     <!-- ===== Settings ===== -->
     <sys:String x:Key="S.Settings.WindowTitle">Settings</sys:String>
-    <sys:String x:Key="S.Settings.WindowName">Zeep Cut settings</sys:String>
+    <sys:String x:Key="S.Settings.WindowName">deep-cut settings</sys:String>
     <sys:String x:Key="S.Settings.Heading">Settings</sys:String>
     <sys:String x:Key="S.Settings.Subtitle">Changes are saved automatically</sys:String>
     <sys:String x:Key="S.Settings.Section.Shortcuts">Shortcuts</sys:String>
@@ -259,7 +259,7 @@
     <sys:String x:Key="S.Settings.Theme.Dark">Dark</sys:String>
     <sys:String x:Key="S.Settings.Theme.Effective">Current look: {0} (system: {1})</sys:String>
     <sys:String x:Key="S.Settings.Section.Startup">Startup</sys:String>
-    <sys:String x:Key="S.Settings.Startup.Enable">Start Zeep Cut when signing in</sys:String>
+    <sys:String x:Key="S.Settings.Startup.Enable">Start deep-cut when signing in</sys:String>
     <sys:String x:Key="S.Settings.Startup.Detail">Current user, written to HKCU\Software\Microsoft\Windows\CurrentVersion\Run</sys:String>
     <sys:String x:Key="S.Settings.Startup.On">Registry startup entry written.</sys:String>
     <sys:String x:Key="S.Settings.Startup.Off">Registry startup entry removed.</sys:String>
@@ -301,14 +301,14 @@
     <sys:String x:Key="S.Update.NoUrl">The new version does not provide a release page (url is missing from the manifest).</sys:String>
 
     <!-- ===== Toasts / dialogs ===== -->
-    <sys:String x:Key="S.Toast.WindowTitle">Zeep Cut notice {0}</sys:String>
+    <sys:String x:Key="S.Toast.WindowTitle">deep-cut notice {0}</sys:String>
     <sys:String x:Key="S.Toast.NoPins">There are no pins right now; press {0} to capture or {1} to pin from the clipboard.</sys:String>
     <sys:String x:Key="S.Toast.PinsHidden">Hid {0} pin(s) (use the tray menu again to show them)</sys:String>
     <sys:String x:Key="S.Toast.PinsShown">Showed {0} pin(s)</sys:String>
     <sys:String x:Key="S.Toast.HistoryFailed">{0} succeeded, but saving the history record failed (see log).</sys:String>
-    <sys:String x:Key="S.Message.AlreadyRunning">Zeep Cut is already running.\n\nUse the tray icon in the notification area (click “Show hidden icons” if needed).</sys:String>
-    <sys:String x:Key="S.Message.TrayFailed">Zeep Cut could not create its tray icon and will exit.</sys:String>
-    <sys:String x:Key="S.Message.StartupFailed">Zeep Cut failed to start. Log written to:\n{0}\n\n{1}</sys:String>
+    <sys:String x:Key="S.Message.AlreadyRunning">deep-cut is already running.\n\nUse the tray icon in the notification area (click “Show hidden icons” if needed).</sys:String>
+    <sys:String x:Key="S.Message.TrayFailed">deep-cut could not create its tray icon and will exit.</sys:String>
+    <sys:String x:Key="S.Message.StartupFailed">deep-cut failed to start. Log written to:\n{0}\n\n{1}</sys:String>
     <sys:String x:Key="S.Message.HistoryUnavailableTitle">History unavailable</sys:String>
     <sys:String x:Key="S.Message.HistoryUnavailable">The history database could not be initialized; screenshots and pins from this run will not be recorded:\n{0}</sys:String>
     <sys:String x:Key="S.Message.HistoryGalleryUnavailable">The history database failed to initialize at startup, so the gallery is unavailable.\n\nCapture and pins still work, but history will not be recorded. See the log:\n{0}</sys:String>
@@ -324,7 +324,7 @@
     <sys:String x:Key="S.Message.CaptureFailedTitle">Capture failed</sys:String>
     <sys:String x:Key="S.Message.CaptureFailed">Capture failed: {0}</sys:String>
     <sys:String x:Key="S.Message.PinLocationFailed">Could not locate the screen position; pinning failed.</sys:String>
-    <sys:String x:Key="S.Message.Unhandled">Zeep Cut hit an unhandled error and wrote a log:\n{0}\n\n{1}</sys:String>
+    <sys:String x:Key="S.Message.Unhandled">deep-cut hit an unhandled error and wrote a log:\n{0}\n\n{1}</sys:String>
     <sys:String x:Key="S.Message.ClipboardEmpty">The clipboard contains no image.</sys:String>
     <sys:String x:Key="S.Message.ClipboardNotImage">The clipboard content is not an image.</sys:String>
     <sys:String x:Key="S.Message.ClipboardBusy">The clipboard is in use by another program; try again shortly.</sys:String>

@@ -17,7 +17,7 @@ internal static class WelcomeGuide
         var chinese = StringsUi.IsChinese;
         var window = new Window
         {
-            Title = chinese ? "欢迎使用 Zeep Cut" : "Welcome to Zeep Cut",
+            Title = chinese ? "欢迎使用 deep-cut" : "Welcome to deep-cut",
             Width = 460,
             SizeToContent = SizeToContent.Height,
             ResizeMode = ResizeMode.NoResize,
@@ -35,7 +35,7 @@ internal static class WelcomeGuide
         var header = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 24) };
         header.Children.Add(AppChrome.IconImage(60));
         var titles = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(16, 0, 0, 0) };
-        titles.Children.Add(Text("Zeep Cut", 22, ThemeManager.BrushKeys.Foreground, FontWeights.SemiBold));
+        titles.Children.Add(Text("deep-cut", 22, ThemeManager.BrushKeys.Foreground, FontWeights.SemiBold));
         titles.Children.Add(Text(chinese ? "截图、标注、贴在桌面" : "Capture, annotate, pin", 13, ThemeManager.BrushKeys.SecondaryForeground));
         header.Children.Add(titles);
         panel.Children.Add(header);

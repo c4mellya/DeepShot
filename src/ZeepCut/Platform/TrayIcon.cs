@@ -24,7 +24,7 @@ public enum TrayMenuCommand
 public sealed class TrayIcon : IDisposable
 {
     private const string WindowClassName = "ZeepCut.TrayMessageWindow";
-    private const string Tooltip = "Zeep Cut";
+    private const string Tooltip = "deep-cut";
     private const uint TrayIconId = 1;
 
     /// <summary>

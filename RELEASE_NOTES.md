@@ -1,3 +1,10 @@
+# deep-cut 0.1.13
+
+- 产品名称统一为 deep-cut，更新中英文界面、欢迎页、托盘提示、错误提示与产品元数据。
+- 更新双语 README 和仓库链接，安装包与便携 ZIP 改用 deep-cut 文件名。
+- 保留 ZeepCut.exe、原安装标识和本地数据目录，继续使用已有设置、收藏与历史记录。
+- 提供 Windows x64 自包含 EXE 安装包与便携 ZIP，无需另装 .NET。
+
 # Zeep Cut 0.1.12
 
 - 修复 Alt+S 从剪贴板贴图变黑的问题：优先读取原始 PNG，绕过 WPF Bitmap/DIB 自动转换路径。

@@ -20,7 +20,7 @@ public static class AppLog
     public static void Initialize()
     {
         AppPaths.EnsureCreated();
-        Write("INFO", "App", $"===== Zeep Cut 启动 (pid={Environment.ProcessId}, version={GetVersion()}) =====", null);
+        Write("INFO", "App", $"===== deep-cut 启动 (pid={Environment.ProcessId}, version={GetVersion()}) =====", null);
         Write("INFO", "App", $"数据目录: {AppPaths.DataRoot}", null);
     }
 

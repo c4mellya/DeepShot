@@ -3,7 +3,7 @@ namespace ZeepCut.Core;
 /// <summary>应用元信息与发布配置。</summary>
 public static class AppInfo
 {
-    public const string Name = "Zeep Cut";
+    public const string Name = "deep-cut";
     public const string DataFolderName = "ZeepCut";
 
     /// <summary>

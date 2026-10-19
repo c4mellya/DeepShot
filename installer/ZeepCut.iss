@@ -1,6 +1,6 @@
 #define AppName "deep-cut"
 #ifndef AppVersion
-  #define AppVersion "0.1.12"
+  #define AppVersion "0.1.13"
 #endif
 #ifndef SourceDir
   #define SourceDir "..\artifacts\publish\win-x64"
@@ -19,7 +19,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0.19045
 OutputDir=..\artifacts\release
-OutputBaseFilename=ZeepCut-{#AppVersion}-Setup-x64
+OutputBaseFilename=deep-cut-{#AppVersion}-Setup-x64
 SetupIconFile=..\src\ZeepCut\Assets\app.ico
 UninstallDisplayIcon={app}\ZeepCut.exe
 Compression=lzma2

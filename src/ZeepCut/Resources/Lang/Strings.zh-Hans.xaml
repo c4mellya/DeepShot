@@ -1,5 +1,5 @@
 <!--
-  Zeep Cut 界面文案（简体中文）—— T31。
+  deep-cut 界面文案（简体中文）—— T31。
   约定：
     - 键名语义化（S.Tray.Screenshot = 托盘“截图”），必须以 S. 开头（与主题资源 Theme.* 区分）。
     - {0} / {1} 是 string.Format 位置参数，含义不要改动。
@@ -11,7 +11,7 @@
                     xmlns:sys="clr-namespace:System;assembly=System.Runtime">
 
     <!-- ===== 通用 ===== -->
-    <sys:String x:Key="S.App.Name">Zeep Cut</sys:String>
+    <sys:String x:Key="S.App.Name">deep-cut</sys:String>
     <sys:String x:Key="S.Common.Ok">确定</sys:String>
     <sys:String x:Key="S.Common.Cancel">取消</sys:String>
     <sys:String x:Key="S.Common.Close">关闭</sys:String>
@@ -60,7 +60,7 @@
     <sys:String x:Key="S.Tray.Notification.FailedTitle">从剪贴板贴图失败</sys:String>
 
     <!-- ===== 截图遮罩 ===== -->
-    <sys:String x:Key="S.Overlay.WindowTitle">Zeep Cut 截图遮罩</sys:String>
+    <sys:String x:Key="S.Overlay.WindowTitle">deep-cut 截图遮罩</sys:String>
     <sys:String x:Key="S.Overlay.Copy">复制</sys:String>
     <sys:String x:Key="S.Overlay.SaveAs">另存为</sys:String>
     <sys:String x:Key="S.Overlay.Pin">贴图</sys:String>
@@ -71,7 +71,7 @@
     <sys:String x:Key="S.Overlay.SelectionLocked">选区已锁定（{0} 个标注）</sys:String>
 
     <!-- ===== 贴图 ===== -->
-    <sys:String x:Key="S.Pin.WindowTitle">Zeep Cut 贴图 {0}</sys:String>
+    <sys:String x:Key="S.Pin.WindowTitle">deep-cut 贴图 {0}</sys:String>
     <sys:String x:Key="S.Pin.LockedBadge">已锁定位置</sys:String>
     <sys:String x:Key="S.Pin.LockedBadgeWithSize">已锁定 {0}×{1}</sys:String>
     <sys:String x:Key="S.Pin.Close">关闭贴图（Esc）</sys:String>
@@ -90,7 +90,7 @@
 
     <!-- ===== 历史图库 ===== -->
     <sys:String x:Key="S.History.WindowTitle">历史</sys:String>
-    <sys:String x:Key="S.History.WindowName">Zeep Cut 历史图库</sys:String>
+    <sys:String x:Key="S.History.WindowName">deep-cut 历史图库</sys:String>
     <sys:String x:Key="S.History.Title">历史记录</sys:String>
     <sys:String x:Key="S.History.SearchPlaceholder">搜索</sys:String>
     <sys:String x:Key="S.History.SearchName">搜索历史</sys:String>
@@ -194,7 +194,7 @@
 
     <!-- ===== 历史：追加标注编辑窗口 ===== -->
     <sys:String x:Key="S.History.EditTitle">编辑</sys:String>
-    <sys:String x:Key="S.History.EditWindowName">Zeep Cut 编辑历史</sys:String>
+    <sys:String x:Key="S.History.EditWindowName">deep-cut 编辑历史</sys:String>
     <sys:String x:Key="S.History.EditSave">保存并覆盖</sys:String>
     <sys:String x:Key="S.History.EditSaveHint">用追加标注后的新图替换这条记录原来的图片（不保留旧版本，不新增记录）</sys:String>
     <sys:String x:Key="S.History.EditCancel">取消</sys:String>
@@ -230,7 +230,7 @@
 
     <!-- ===== 设置窗口 ===== -->
     <sys:String x:Key="S.Settings.WindowTitle">设置</sys:String>
-    <sys:String x:Key="S.Settings.WindowName">Zeep Cut 设置</sys:String>
+    <sys:String x:Key="S.Settings.WindowName">deep-cut 设置</sys:String>
     <sys:String x:Key="S.Settings.Heading">设置</sys:String>
     <sys:String x:Key="S.Settings.Subtitle">更改会自动保存</sys:String>
     <sys:String x:Key="S.Settings.Section.Shortcuts">快捷键</sys:String>
@@ -262,7 +262,7 @@
     <sys:String x:Key="S.Settings.Theme.Dark">深色</sys:String>
     <sys:String x:Key="S.Settings.Theme.Effective">当前外观：{0}（系统为{1}）</sys:String>
     <sys:String x:Key="S.Settings.Section.Startup">开机启动</sys:String>
-    <sys:String x:Key="S.Settings.Startup.Enable">开机时自动启动 Zeep Cut</sys:String>
+    <sys:String x:Key="S.Settings.Startup.Enable">开机时自动启动 deep-cut</sys:String>
     <sys:String x:Key="S.Settings.Startup.Detail">当前用户，写入 HKCU\Software\Microsoft\Windows\CurrentVersion\Run</sys:String>
     <sys:String x:Key="S.Settings.Startup.On">已写入注册表启动项。</sys:String>
     <sys:String x:Key="S.Settings.Startup.Off">已从注册表启动项移除。</sys:String>
@@ -304,14 +304,14 @@
     <sys:String x:Key="S.Update.NoUrl">新版本没有提供下载页地址（清单里缺少 url）。</sys:String>
 
     <!-- ===== 提示 / 通用对话框 ===== -->
-    <sys:String x:Key="S.Toast.WindowTitle">Zeep Cut 提示 {0}</sys:String>
+    <sys:String x:Key="S.Toast.WindowTitle">deep-cut 提示 {0}</sys:String>
     <sys:String x:Key="S.Toast.NoPins">当前没有贴图，先按 {0} 截图或 {1} 从剪贴板贴图。</sys:String>
     <sys:String x:Key="S.Toast.PinsHidden">已隐藏 {0} 张贴图（再次点击托盘菜单可显示）</sys:String>
     <sys:String x:Key="S.Toast.PinsShown">已显示 {0} 张贴图</sys:String>
     <sys:String x:Key="S.Toast.HistoryFailed">{0}已成功，但历史保存失败（详见日志）。</sys:String>
-    <sys:String x:Key="S.Message.AlreadyRunning">Zeep Cut 已在运行。\n\n请使用任务栏通知区域（如未显示，请点击“显示隐藏的图标”）中的托盘图标。</sys:String>
-    <sys:String x:Key="S.Message.TrayFailed">Zeep Cut 无法创建托盘图标，程序将退出。</sys:String>
-    <sys:String x:Key="S.Message.StartupFailed">Zeep Cut 启动失败，已记录日志：\n{0}\n\n{1}</sys:String>
+    <sys:String x:Key="S.Message.AlreadyRunning">deep-cut 已在运行。\n\n请使用任务栏通知区域（如未显示，请点击“显示隐藏的图标”）中的托盘图标。</sys:String>
+    <sys:String x:Key="S.Message.TrayFailed">deep-cut 无法创建托盘图标，程序将退出。</sys:String>
+    <sys:String x:Key="S.Message.StartupFailed">deep-cut 启动失败，已记录日志：\n{0}\n\n{1}</sys:String>
     <sys:String x:Key="S.Message.HistoryUnavailableTitle">历史功能不可用</sys:String>
     <sys:String x:Key="S.Message.HistoryUnavailable">无法初始化历史数据库，本次运行的截图与贴图不会被记录：\n{0}</sys:String>
     <sys:String x:Key="S.Message.HistoryGalleryUnavailable">历史库本次启动初始化失败，图库不可用。\n\n截图与贴图仍可正常使用，但不会记录历史。详情见日志：\n{0}</sys:String>
@@ -327,7 +327,7 @@
     <sys:String x:Key="S.Message.CaptureFailedTitle">截图失败</sys:String>
     <sys:String x:Key="S.Message.CaptureFailed">截图失败：{0}</sys:String>
     <sys:String x:Key="S.Message.PinLocationFailed">无法定位屏幕位置，贴图失败。</sys:String>
-    <sys:String x:Key="S.Message.Unhandled">Zeep Cut 遇到未处理的错误，已记录日志：\n{0}\n\n{1}</sys:String>
+    <sys:String x:Key="S.Message.Unhandled">deep-cut 遇到未处理的错误，已记录日志：\n{0}\n\n{1}</sys:String>
     <sys:String x:Key="S.Message.ClipboardEmpty">剪贴板里没有图片。</sys:String>
     <sys:String x:Key="S.Message.ClipboardNotImage">剪贴板内容不是图片。</sys:String>
     <sys:String x:Key="S.Message.ClipboardBusy">剪贴板正被其他程序占用，请稍后重试。</sys:String>

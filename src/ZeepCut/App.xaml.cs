@@ -623,7 +623,7 @@ public partial class App : Application
 
         AppLog.Info("App", "检测到已有实例，提示后退出");
         MessageBox.Show(
-            "Zeep Cut 已在运行。\n\n请使用任务栏通知区域（如未显示，请点击“显示隐藏的图标”）中的托盘图标。",
+            "deep-cut 已在运行。\n\n请使用任务栏通知区域（如未显示，请点击“显示隐藏的图标”）中的托盘图标。",
             AppInfo.Name,
             MessageBoxButton.OK,
             MessageBoxImage.Information);

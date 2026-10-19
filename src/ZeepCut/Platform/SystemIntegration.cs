@@ -28,7 +28,7 @@ public static class StartupRegistration
     /// <summary>Run 键路径（当前用户）。</summary>
     public const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
 
-    /// <summary>Zeep Cut 的启动项名称。</summary>
+    /// <summary>deep-cut 的启动项名称。</summary>
     public const string ValueName = "ZeepCut";
 
     /// <summary>
@@ -69,7 +69,7 @@ public static class StartupRegistration
         }
     }
 
-    /// <summary>是否已经存在 Zeep Cut 的启动项。</summary>
+    /// <summary>是否已经存在 deep-cut 的启动项。</summary>
     public static bool IsEnabled() => !string.IsNullOrWhiteSpace(Read());
 
     /// <summary>写入启动项。失败返回 false（并写日志），不抛异常。</summary>
