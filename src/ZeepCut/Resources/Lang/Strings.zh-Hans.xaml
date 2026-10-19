@@ -236,6 +236,11 @@
     <sys:String x:Key="S.Settings.Shortcut.RegisteredHint">当前生效：{0}</sys:String>
     <sys:String x:Key="S.Settings.Shortcut.RegistrationFailed">注册失败：{0}</sys:String>
     <sys:String x:Key="S.Settings.Shortcut.Reset">恢复默认</sys:String>
+    <sys:String x:Key="S.Settings.Section.Capture">截图方式</sys:String>
+    <sys:String x:Key="S.Settings.CaptureMode.Label">默认选区方式</sys:String>
+    <sys:String x:Key="S.Settings.CaptureMode.Rectangle">手动框选矩形</sys:String>
+    <sys:String x:Key="S.Settings.CaptureMode.Window">自动捕获窗口</sys:String>
+    <sys:String x:Key="S.Settings.CaptureMode.Hint">下次截图生效。手动模式只按鼠标拖动框选；窗口模式悬停识别、单击选中，也可拖动框选。</sys:String>
     <sys:String x:Key="S.Settings.Section.Language">语言</sys:String>
     <sys:String x:Key="S.Settings.Language.System">跟随系统</sys:String>
     <sys:String x:Key="S.Settings.Language.ZhHans">简体中文</sys:String>

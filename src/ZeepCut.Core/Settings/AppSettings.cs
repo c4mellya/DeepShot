@@ -15,6 +15,15 @@ public enum AppLanguage
     English = 2,
 }
 
+/// <summary>截图唤起后的默认选区方式。</summary>
+public enum CaptureSelectionMode
+{
+    /// <summary>悬停识别窗口，单击选中；仍可拖动自行框选。</summary>
+    Window = 0,
+    /// <summary>只用鼠标拖动框选矩形，不自动识别窗口。</summary>
+    Rectangle = 1,
+}
+
 /// <summary>界面主题（T30）。<see cref="System"/> = 跟随系统（读注册表 <c>AppsUseLightTheme</c>）。</summary>
 public enum AppTheme
 {
@@ -69,6 +78,9 @@ public sealed record AppSettings
     /// <summary>界面主题（默认跟随系统）。</summary>
     public AppTheme Theme { get; init; } = AppTheme.System;
 
+    /// <summary>旧设置没有此字段时保持原有的窗口识别行为。</summary>
+    public CaptureSelectionMode CaptureMode { get; init; } = CaptureSelectionMode.Window;
+
     /// <summary>
     /// 开机启动（当前用户方式：<c>HKCU\Software\Microsoft\Windows\CurrentVersion\Run</c>）。
     /// </summary>
@@ -111,6 +123,7 @@ public sealed record AppSettings
             PinShortcut = NormalizeShortcut(settings.PinShortcut, DefaultPinShortcut, "贴图快捷键", warnings),
             Language = NormalizeLanguage(settings.Language, warnings),
             Theme = NormalizeTheme(settings.Theme, warnings),
+            CaptureMode = NormalizeCaptureMode(settings.CaptureMode, warnings),
             LaunchAtStartup = settings.LaunchAtStartup,
             Version = settings.Version > 0 ? settings.Version : Default.Version,
         };
@@ -164,6 +177,9 @@ public sealed record AppSettings
     /// <summary>修改主题。</summary>
     public AppSettings WithTheme(AppTheme theme) => this with { Theme = theme };
 
+    /// <summary>修改默认截图选区方式。</summary>
+    public AppSettings WithCaptureMode(CaptureSelectionMode mode) => this with { CaptureMode = mode };
+
     /// <summary>修改开机启动。</summary>
     public AppSettings WithLaunchAtStartup(bool enabled) => this with { LaunchAtStartup = enabled };
 
@@ -196,7 +212,7 @@ public sealed record AppSettings
     }
 
     public override string ToString() =>
-        $"截图={ScreenshotShortcut} 贴图={PinShortcut} 语言={Language} 主题={Theme} 开机启动={LaunchAtStartup}";
+        $"截图={ScreenshotShortcut} 贴图={PinShortcut} 语言={Language} 主题={Theme} 截图方式={CaptureMode} 开机启动={LaunchAtStartup}";
 
     private static string NormalizeShortcut(
         string? value,
@@ -223,6 +239,13 @@ public sealed record AppSettings
 
         warnings.Add($"语言值 {(int)language} 不认识，已回退为跟随系统。");
         return AppLanguage.System;
+    }
+
+    private static CaptureSelectionMode NormalizeCaptureMode(CaptureSelectionMode mode, List<string> warnings)
+    {
+        if (Enum.IsDefined(mode)) return mode;
+        warnings.Add($"截图方式 {(int)mode} 不认识，已回退为窗口识别。");
+        return CaptureSelectionMode.Window;
     }
 
     private static AppTheme NormalizeTheme(AppTheme theme, List<string> warnings)

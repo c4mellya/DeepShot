@@ -698,7 +698,9 @@ public partial class App : Application
             IReadOnlyList<WindowCandidate> candidates;
             try
             {
-                candidates = WindowEnumerator.Enumerate(capture.Bounds);
+                candidates = Settings.CaptureMode == CaptureSelectionMode.Window
+                    ? WindowEnumerator.Enumerate(capture.Bounds)
+                    : Array.Empty<WindowCandidate>();
             }
             catch (Exception ex)
             {
@@ -712,7 +714,7 @@ public partial class App : Application
                 $"冻结遮罩：屏幕={capture.DeviceName} 主屏={capture.IsPrimary} 物理={capture.Bounds} " +
                 $"图像={capture.PixelWidth}x{capture.PixelHeight} DPI={capture.Dpi} " +
                 $"→ DIP=({dip.Left:0.##},{dip.Top:0.##}) {dip.Width:0.##}x{dip.Height:0.##}，" +
-                $"窗口候选={candidates.Count}");
+                $"截图方式={Settings.CaptureMode} 窗口候选={candidates.Count}");
 
             var overlay = new CaptureOverlayWindow(capture, candidates, _captureSink);
             overlay.Closed += OnCaptureOverlayClosed;

@@ -4,7 +4,7 @@ A screenshot and desktop pin tool for Windows 10 22H2 / Windows 11 x64, built wi
 
 ## Install
 
-Run `ZeepCut-0.1.2-Setup-x64.exe` for a per-user installation, or extract `ZeepCut-0.1.2-win-x64.zip` and run `ZeepCut.exe`. Both releases include the .NET runtime. Keep all files and the Resources folder together. The installer is unsigned.
+Run `ZeepCut-0.1.3-Setup-x64.exe` for a per-user installation, or extract `ZeepCut-0.1.3-win-x64.zip` and run `ZeepCut.exe`. Both releases include the .NET runtime. Keep all files and the Resources folder together. The installer is unsigned.
 
 Zeep Cut lives in the system tray, possibly inside the hidden icons panel. Closing History or Settings keeps the application running; select Exit from the tray menu to stop it. Startup at sign-in is optional and disabled by default. A short guide appears on first launch.
 
@@ -30,7 +30,7 @@ History provides date groups, name search, favorites, rename, preview, copy, exp
 
 “Save and overwrite” replaces the same history image without keeping older versions. Existing annotations are flattened pixels. Canceling leaves the image unchanged. Already-open pins keep their original snapshot.
 
-Settings provides configurable shortcuts, language, theme, and startup at sign-in. Images stay in `%LOCALAPPDATA%\ZeepCut`. Automatic cleanup does not delete manually exported files. Uninstall keeps data by default, with an explicit optional deletion prompt. The update channel has not been configured; update checks report that state.
+Settings provides configurable shortcuts, default capture mode, language, theme, and startup at sign-in. Choose “Draw a rectangle” for manual selection without window detection, or “Detect windows” to select windows on hover/click while retaining manual dragging. The choice is saved automatically and applies to the next capture. Images stay in `%LOCALAPPDATA%\ZeepCut`. Automatic cleanup does not delete manually exported files. Uninstall keeps data by default, with an explicit optional deletion prompt. The update channel has not been configured; update checks report that state.
 
 ## Build
 

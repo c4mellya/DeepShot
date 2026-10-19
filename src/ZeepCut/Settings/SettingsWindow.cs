@@ -44,6 +44,7 @@ public sealed class SettingsWindow : Window
     private readonly ShortcutBox _pinBox;
     private readonly ComboBox _language;
     private readonly ComboBox _theme;
+    private readonly ComboBox _captureMode;
     private TextBlock _languageLabel = null!;
     private TextBlock _themeLabel = null!;
 
@@ -104,6 +105,11 @@ public sealed class SettingsWindow : Window
         _theme.Items.Add(new ComboItem<AppTheme>(AppTheme.Light, "S.Settings.Theme.Light"));
         _theme.Items.Add(new ComboItem<AppTheme>(AppTheme.Dark, "S.Settings.Theme.Dark"));
         _theme.SelectionChanged += (_, _) => OnThemeChanged();
+
+        _captureMode = CreateCombo("settings-capture-mode");
+        _captureMode.Items.Add(new ComboItem<CaptureSelectionMode>(CaptureSelectionMode.Rectangle, "S.Settings.CaptureMode.Rectangle"));
+        _captureMode.Items.Add(new ComboItem<CaptureSelectionMode>(CaptureSelectionMode.Window, "S.Settings.CaptureMode.Window"));
+        _captureMode.SelectionChanged += (_, _) => OnCaptureModeChanged();
 
         var startupLabel = MakeText(StringsUi.Get("S.Settings.Startup.Enable"), 12.5, ThemeManager.Palette.ForegroundBrush);
         startupLabel.TextWrapping = TextWrapping.Wrap;
@@ -272,7 +278,7 @@ public sealed class SettingsWindow : Window
         // 复用控件先从旧父级上摘下来（否则 Add 会抛"already the logical child"）。
         foreach (var element in new FrameworkElement[]
                  {
-                     _screenshotBox, _pinBox, _language, _theme, _startup,
+                     _screenshotBox, _pinBox, _language, _theme, _captureMode, _startup,
                      _dataPath, _dataCounts, _retentionRule,
                  })
         {
@@ -289,6 +295,13 @@ public sealed class SettingsWindow : Window
         hint.HorizontalAlignment = HorizontalAlignment.Left;
         hint.Margin = new Thickness(0, 2, 0, 8);
         _sections.Children.Add(hint);
+
+        _sections.Children.Add(Section(StringsUi.Get("S.Settings.Section.Capture")));
+        _sections.Children.Add(Field(StringsUi.Get("S.Settings.CaptureMode.Label"), _captureMode));
+        var modeHint = MakeText(StringsUi.Get("S.Settings.CaptureMode.Hint"), 11.5, ThemeManager.Palette.SecondaryForegroundBrush);
+        modeHint.TextWrapping = TextWrapping.Wrap;
+        modeHint.Margin = new Thickness(0, 2, 0, 8);
+        _sections.Children.Add(modeHint);
 
         _sections.Children.Add(Section(StringsUi.Get("S.Settings.Section.Language")));
         _sections.Children.Add(Field(string.Empty, _language, out _languageLabel));
@@ -380,19 +393,31 @@ public sealed class SettingsWindow : Window
         UpdateComboTexts(_theme, new[] { AppTheme.System, AppTheme.Light, AppTheme.Dark },
             new[] { "S.Settings.Theme.System", "S.Settings.Theme.Light", "S.Settings.Theme.Dark" });
 
+        UpdateComboTexts(_captureMode,
+            new[] { CaptureSelectionMode.Rectangle, CaptureSelectionMode.Window },
+            new[] { "S.Settings.CaptureMode.Rectangle", "S.Settings.CaptureMode.Window" });
         _retentionRule.Text = DescribeRetentionRule();
     }
 
-    private static void UpdateComboTexts<T>(ComboBox combo, T[] values, string[] keys) where T : struct, Enum
+    private void UpdateComboTexts<T>(ComboBox combo, T[] values, string[] keys) where T : struct, Enum
     {
-        var selected = combo.SelectedItem is ComboItem<T> current ? current.Value : default;
-        combo.Items.Clear();
-        for (var i = 0; i < values.Length; i++)
+        var wasApplying = _applying;
+        _applying = true;
+        try
         {
-            combo.Items.Add(new ComboItem<T>(values[i], keys[i]));
-        }
+            var selected = combo.SelectedItem is ComboItem<T> current ? current.Value : default;
+            combo.Items.Clear();
+            for (var i = 0; i < values.Length; i++)
+            {
+                combo.Items.Add(new ComboItem<T>(values[i], keys[i]));
+            }
 
-        SelectCombo(combo, selected);
+            SelectCombo(combo, selected);
+        }
+        finally
+        {
+            _applying = wasApplying;
+        }
     }
 
     private static void SelectCombo<T>(ComboBox combo, T value) where T : struct, Enum
@@ -587,6 +612,7 @@ public sealed class SettingsWindow : Window
             _pinBox.SetValue(settings.PinShortcut);
             SelectCombo(_language, settings.Language);
             SelectCombo(_theme, settings.Theme);
+            SelectCombo(_captureMode, settings.CaptureMode);
             _startup.IsChecked = settings.LaunchAtStartup;
         }
         finally
@@ -784,6 +810,13 @@ public sealed class SettingsWindow : Window
         Commit(next, StringsUi.Get("S.Settings.Saved"));
     }
 
+    private void OnCaptureModeChanged()
+    {
+        if (_applying || _captureMode.SelectedItem is not ComboItem<CaptureSelectionMode> item) return;
+        if (item.Value == _store.Current.CaptureMode) return;
+        Commit(_store.Current.WithCaptureMode(item.Value), StringsUi.Get("S.Settings.Saved"));
+    }
+
     private void OnStartupToggled()
     {
         if (_applying)
@@ -849,10 +882,13 @@ public sealed class SettingsWindow : Window
         // 选项模板里的颜色是构造时写进去的，换主题要重建一次。
         _language.ItemTemplate = BuildComboItemTemplate();
         _theme.ItemTemplate = BuildComboItemTemplate();
+        _captureMode.ItemTemplate = BuildComboItemTemplate();
         _language.ItemContainerStyle = BuildComboItemContainerStyle();
         _theme.ItemContainerStyle = BuildComboItemContainerStyle();
+        _captureMode.ItemContainerStyle = BuildComboItemContainerStyle();
         _language.Foreground = palette.ForegroundBrush;
         _theme.Foreground = palette.ForegroundBrush;
+        _captureMode.Foreground = palette.ForegroundBrush;
 
         _screenshotBox.ApplyPalette();
         _pinBox.ApplyPalette();

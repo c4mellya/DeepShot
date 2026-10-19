@@ -233,6 +233,11 @@
     <sys:String x:Key="S.Settings.Shortcut.RegisteredHint">Active now: {0}</sys:String>
     <sys:String x:Key="S.Settings.Shortcut.RegistrationFailed">Registration failed: {0}</sys:String>
     <sys:String x:Key="S.Settings.Shortcut.Reset">Reset defaults</sys:String>
+    <sys:String x:Key="S.Settings.Section.Capture">Capture mode</sys:String>
+    <sys:String x:Key="S.Settings.CaptureMode.Label">Default selection</sys:String>
+    <sys:String x:Key="S.Settings.CaptureMode.Rectangle">Draw a rectangle</sys:String>
+    <sys:String x:Key="S.Settings.CaptureMode.Window">Detect windows</sys:String>
+    <sys:String x:Key="S.Settings.CaptureMode.Hint">Applies to the next capture. Rectangle mode uses only mouse dragging. Window mode detects windows on hover; click to select or drag a region.</sys:String>
     <sys:String x:Key="S.Settings.Section.Language">Language</sys:String>
     <sys:String x:Key="S.Settings.Language.System">Follow system</sys:String>
     <sys:String x:Key="S.Settings.Language.ZhHans">简体中文</sys:String>
