@@ -51,6 +51,24 @@ internal static class HistoryActions
         return image;
     }
 
+    /// <summary>Drag the stored PNG as a standard file, without moving the history original.</summary>
+    internal static string DragFile(HistoryStore store, HistoryRecord record, DependencyObject source)
+    {
+        var path = store.Repository.GetImageAbsolutePath(record);
+        if (!File.Exists(path)) return StringsUi.Get("S.History.DragMissing");
+
+        var files = new System.Collections.Specialized.StringCollection { path };
+        var data = new DataObject();
+        data.SetFileDropList(files);
+        using var preferredEffect = new MemoryStream(BitConverter.GetBytes((int)DragDropEffects.Copy));
+        data.SetData("Preferred DropEffect", preferredEffect, autoConvert: false);
+        var effect = DragDrop.DoDragDrop(source, data, DragDropEffects.Copy);
+        AppLog.Info("History", $"历史图片拖放结束：Id={record.Id} 结果={effect}");
+        return StringsUi.Get((effect & DragDropEffects.Copy) != 0
+            ? "S.History.DragDelivered"
+            : "S.History.DragCancelled");
+    }
+
     /// <summary>复制到剪贴板（PNG 图像格式）。</summary>
     internal static string Copy(HistoryStore store, HistoryRecord record)
     {

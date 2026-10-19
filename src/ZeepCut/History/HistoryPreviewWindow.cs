@@ -50,7 +50,8 @@ internal sealed class HistoryPreviewWindow : Window
         HistoryRecord record,
         BitmapSource image,
         Action<HistoryRecord> onCopy,
-        Action<HistoryRecord> onPin)
+        Action<HistoryRecord> onPin,
+        Action<HistoryRecord, DependencyObject> onDrag)
     {
         _record = record ?? throw new ArgumentNullException(nameof(record));
         _image = image ?? throw new ArgumentNullException(nameof(image));
@@ -77,6 +78,8 @@ internal sealed class HistoryPreviewWindow : Window
         };
         RenderOptions.SetBitmapScalingMode(_picture, BitmapScalingMode.HighQuality);
         AutomationProperties.SetAutomationId(_picture, "history-preview-image");
+        _picture.ToolTip = StringsUi.Get("S.History.DragHint");
+        HistoryImageDrag.Attach(_picture, source => onDrag(_record, source));
 
         // 滚轮 = 缩放（"适应窗口/实际大小"是按钮，不抢滚轮）；ESC 关窗。
         _scroll = new ScrollViewer

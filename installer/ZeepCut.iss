@@ -1,6 +1,6 @@
 #define AppName "Zeep Cut"
 #ifndef AppVersion
-  #define AppVersion "0.1.5"
+  #define AppVersion "0.1.7"
 #endif
 #ifndef SourceDir
   #define SourceDir "..\artifacts\publish\win-x64"

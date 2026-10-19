@@ -507,6 +507,7 @@ public sealed class HistoryGalleryWindow : Window
     private HistoryCardCallbacks BuildCallbacks() => new()
     {
         Copy = record => RunAction(record, StringsUi.Get("S.Common.Copy"), () => HistoryActions.Copy(_store, record)),
+        Drag = DragRecord,
         SaveAs = record => RunAction(record, StringsUi.Get("S.Common.SaveAs"), () => HistoryActions.SaveAs(this, _store, record)),
         Pin = record => RunAction(record, StringsUi.Get("S.Common.Pin"), () => HistoryActions.Pin(_store, record)),
         Delete = DeleteRecord,
@@ -515,6 +516,9 @@ public sealed class HistoryGalleryWindow : Window
         ToggleFavorite = ToggleFavorite,
         Edit = EditRecord,
     };
+
+    private void DragRecord(HistoryRecord record, DependencyObject source) =>
+        RunAction(record, StringsUi.Get("S.History.DragAction"), () => HistoryActions.DragFile(_store, record, source));
 
     /// <summary>执行一个 <see cref="HistoryActions"/> 动作并在状态栏显示结果。</summary>
     private void RunAction(HistoryRecord record, string action, Func<string> run)
@@ -830,6 +834,22 @@ public sealed class HistoryGalleryWindow : Window
             countAfter));
     }
 
+    /// <summary>Open the quick-view image in the existing gallery and optionally edit it.</summary>
+    internal void RevealRecord(HistoryRecord record, bool edit)
+    {
+        ClearFilters();
+        _searchTimer.Stop(); // Clearing the search box must not schedule a second reload.
+        var card = _loaded.FirstOrDefault(item => item.Record.Id == record.Id);
+        if (card is null)
+        {
+            UpdateStatus(StringsUi.Get("S.QuickView.RecordMissing"));
+            return;
+        }
+        SelectCard(card);
+        Dispatcher.BeginInvoke(new Action(() => card.BringIntoView()));
+        if (edit) EditRecord(card.Record);
+    }
+
     // --- T25 预览 ---
 
     private void OpenPreview(HistoryRecord record)
@@ -854,7 +874,8 @@ public sealed class HistoryGalleryWindow : Window
                 record,
                 image,
                 r => RunAction(r, StringsUi.Get("S.Common.Copy"), () => HistoryActions.Copy(_store, r)),
-                r => RunAction(r, StringsUi.Get("S.Common.Pin"), () => HistoryActions.Pin(_store, r)));
+                r => RunAction(r, StringsUi.Get("S.Common.Pin"), () => HistoryActions.Pin(_store, r)),
+                DragRecord);
             window.ClampToWorkArea();
             window.Closed += (_, _) =>
             {

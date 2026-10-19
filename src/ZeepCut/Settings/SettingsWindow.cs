@@ -43,6 +43,7 @@ public sealed class SettingsWindow : Window
     private readonly SettingsStore _store;
     private readonly ShortcutBox _screenshotBox;
     private readonly ShortcutBox _pinBox;
+    private readonly ShortcutBox _quickViewBox;
     private readonly ComboBox _language;
     private readonly SegmentedControl<AppTheme> _theme;
     private readonly SegmentedControl<CaptureSelectionMode> _captureMode;
@@ -94,6 +95,10 @@ public sealed class SettingsWindow : Window
         _pinBox = new ShortcutBox("settings-shortcut-pin");
         _pinBox.SetValue(settings.PinShortcut);
         _pinBox.Committed += OnPinShortcutCommitted;
+
+        _quickViewBox = new ShortcutBox("settings-shortcut-quick-view");
+        _quickViewBox.SetValue(settings.QuickViewShortcut);
+        _quickViewBox.Committed += OnQuickViewShortcutCommitted;
 
         _language = new ComboBox { MinWidth = 190, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center, FontSize = 13 };
         AutomationProperties.SetAutomationId(_language, "settings-language");
@@ -204,8 +209,15 @@ public sealed class SettingsWindow : Window
         // 主题/语言变化时（设置窗口自己触发的，或跟随系统变化）刷新说明文字与标题栏。
         ThemeManager.Changed += OnThemeChanged;
         StringsUi.Changed += OnLanguageChanged;
+        Activated += (_, _) =>
+        {
+            if (_screenshotBox.IsKeyboardFocusWithin || _pinBox.IsKeyboardFocusWithin || _quickViewBox.IsKeyboardFocusWithin)
+                (Application.Current as App)?.BeginShortcutCapture();
+        };
+        Deactivated += (_, _) => (Application.Current as App)?.EndShortcutCapture();
         Closed += (_, _) =>
         {
+            (Application.Current as App)?.EndShortcutCapture();
             ThemeManager.Changed -= OnThemeChanged;
             StringsUi.Changed -= OnLanguageChanged;
         };
@@ -330,7 +342,7 @@ public sealed class SettingsWindow : Window
         // "Specified element is already the logical child of another element"）。
         foreach (var element in new FrameworkElement[]
                  {
-                     _screenshotBox, _pinBox, _language, _theme, _captureMode, _startup,
+                     _screenshotBox, _pinBox, _quickViewBox, _language, _theme, _captureMode, _startup,
                      _dataPath, _dataCounts, _retentionRule,
                  })
         {
@@ -341,10 +353,16 @@ public sealed class SettingsWindow : Window
 
         // 快捷键
         _sections.Children.Add(Section(StringsUi.Get("S.Settings.Section.Shortcuts")));
+        var quickShortcut = new StackPanel { Orientation = Orientation.Horizontal };
+        quickShortcut.Children.Add(_quickViewBox);
+        var clearQuickShortcut = MakeButton(StringsUi.Get("S.QuickView.ClearShortcut"), "settings-clear-quick-view-shortcut",
+            () => ApplyShortcutChange(_store.Current.WithQuickViewShortcut(string.Empty), "快览", StringsUi.Get("S.QuickView.ShortcutDisabled")));
+        clearQuickShortcut.Margin = new Thickness(8, 0, 0, 0);
+        quickShortcut.Children.Add(clearQuickShortcut);
         _sections.Children.Add(Card(
             Row(StringsUi.Get("S.Settings.Shortcut.Screenshot"), null, _screenshotBox),
-            Row(StringsUi.Get("S.Settings.Shortcut.Pin"), null, _pinBox)));
-        _sections.Children.Add(Hint(StringsUi.Get("S.Settings.Shortcut.Hint")));
+            Row(StringsUi.Get("S.Settings.Shortcut.Pin"), null, _pinBox),
+            Row(StringsUi.Get("S.QuickView.Shortcut"), null, quickShortcut)));
 
         // 截图方式
         _sections.Children.Add(Section(StringsUi.Get("S.Settings.Section.Capture")));
@@ -493,16 +511,6 @@ public sealed class SettingsWindow : Window
         return block;
     }
 
-    /// <summary>卡片下方的小提示。</summary>
-    private static FrameworkElement Hint(string text)
-    {
-        var block = MakeText(text, 11.5, ThemeManager.BrushKeys.SecondaryForeground);
-        block.TextWrapping = TextWrapping.Wrap;
-        block.HorizontalAlignment = HorizontalAlignment.Left;
-        block.Margin = new Thickness(6, 8, 6, 0);
-        return block;
-    }
-
     /// <summary>圆角卡片：行与行之间用细线分隔。</summary>
     private static Border Card(params UIElement[] rows)
     {
@@ -636,6 +644,7 @@ public sealed class SettingsWindow : Window
             var settings = _store.Current;
             _screenshotBox.SetValue(settings.ScreenshotShortcut);
             _pinBox.SetValue(settings.PinShortcut);
+            _quickViewBox.SetValue(settings.QuickViewShortcut);
             SelectCombo(_language, settings.Language);
             _theme.Select(settings.Theme);
             _captureMode.Select(settings.CaptureMode);
@@ -697,6 +706,7 @@ public sealed class SettingsWindow : Window
             return;
         }
 
+        if (RejectQuickViewConflict(shortcut, _screenshotBox)) return;
         _store.Current.ShortcutPair(out _, out var pin);
         if (!AppSettings.ValidateShortcut(shortcut.Format(), pin, out var validated, out var conflict) || validated is null)
         {
@@ -726,6 +736,7 @@ public sealed class SettingsWindow : Window
             return;
         }
 
+        if (RejectQuickViewConflict(shortcut, _pinBox)) return;
         _store.Current.ShortcutPair(out var screenshot, out _);
         if (!AppSettings.ValidateShortcut(shortcut.Format(), screenshot, out var validated, out var conflict) || validated is null)
         {
@@ -738,6 +749,37 @@ public sealed class SettingsWindow : Window
 
         var next = _store.Current.WithPinShortcut(validated.Format());
         ApplyShortcutChange(next, "贴图", validated.Format());
+    }
+
+    private bool RejectQuickViewConflict(ShortcutSpec shortcut, ShortcutBox box)
+    {
+        if (!ShortcutSpec.TryParse(_store.Current.QuickViewShortcut, out var quick, out _) ||
+            quick is null || !shortcut.ConflictsWith(quick)) return false;
+        var message = DescribeShortcutRejection(shortcut, quick, "S.QuickView.Shortcut");
+        ShowStatus(message, error: true);
+        box.ShowError(message);
+        return true;
+    }
+
+    private void OnQuickViewShortcutCommitted(ShortcutSpec? shortcut, string error)
+    {
+        if (error.Length > 0 || shortcut is null)
+        {
+            var message = error.Length > 0 ? error : StringsUi.Get("S.Settings.Shortcut.NeedModifier");
+            ShowStatus(message, error: true);
+            _quickViewBox.ShowError(message);
+            return;
+        }
+        _store.Current.ShortcutPair(out var screenshot, out var pin);
+        foreach (var entry in new[] { (screenshot, "S.Settings.Shortcut.Screenshot"), (pin, "S.Settings.Shortcut.Pin") })
+        {
+            if (entry.Item1 is not { } other || !shortcut.ConflictsWith(other)) continue;
+            var message = DescribeShortcutRejection(shortcut, other, entry.Item2);
+            ShowStatus(message, error: true);
+            _quickViewBox.ShowError(message);
+            return;
+        }
+        ApplyShortcutChange(_store.Current.WithQuickViewShortcut(shortcut.Format()), "快览", shortcut.Format());
     }
 
     /// <summary>
@@ -780,6 +822,7 @@ public sealed class SettingsWindow : Window
         {
             _screenshotBox.ShowRegistered();
             _pinBox.ShowRegistered();
+            _quickViewBox.SetValue(_store.Current.QuickViewShortcut);
             AppLog.Info("Settings", $"{which}快捷键已生效：{formatted}");
             return;
         }
@@ -798,6 +841,7 @@ public sealed class SettingsWindow : Window
         ShowStatus(failure, error: true);
         _screenshotBox.SetValue(previous.ScreenshotShortcut);
         _pinBox.SetValue(previous.PinShortcut);
+        _quickViewBox.SetValue(previous.QuickViewShortcut);
         ApplyShortcuts?.Invoke(_store.Current);
         ChangeRequested?.Invoke(_store.Current, previous);
     }
@@ -968,6 +1012,21 @@ internal sealed class ShortcutBox : TextBox
 
         PreviewKeyDown += OnPreviewKeyDown;
         PreviewTextInput += (_, e) => e.Handled = true;
+        IsKeyboardFocusWithinChanged += (_, _) =>
+        {
+            if (Application.Current is not App app) return;
+            if (IsKeyboardFocusWithin) app.BeginShortcutCapture();
+            else
+            {
+                if (!_showingError && _pendingModifiers.Length > 0) ShowRegistered();
+                app.EndShortcutCapture();
+            }
+        };
+        PreviewKeyUp += (_, _) =>
+        {
+            if (_pendingModifiers.Length > 0 && Keyboard.Modifiers == ModifierKeys.None)
+                ShowRegistered();
+        };
 
         // 自动化辅助（只给验证脚本用，见 CommitForTesting）。
         AutomationProperties.SetHelpText(this, "shortcut-capture");
@@ -1049,29 +1108,23 @@ internal sealed class ShortcutBox : TextBox
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
         e.Handled = true;
+        if (e.IsRepeat) return;
+        var key = e.Key == Key.System ? e.SystemKey :
+            e.Key == Key.ImeProcessed ? e.ImeProcessedKey : e.Key;
 
         // Esc 放弃本次修改；Tab 交给焦点系统（否则键盘无法离开这个输入框）。
-        if (e.Key == Key.Escape)
+        if (key == Key.Escape)
         {
             _pendingModifiers = string.Empty;
             ShowRegistered();
             return;
         }
 
-        if (e.Key == Key.Tab)
+        if (key == Key.Tab)
         {
             e.Handled = false;
             return;
         }
-
-        var modifiers = Keyboard.Modifiers switch
-        {
-            ModifierKeys.Control => ShortcutModifiers.Control,
-            ModifierKeys.Alt => ShortcutModifiers.Alt,
-            ModifierKeys.Shift => ShortcutModifiers.Shift,
-            ModifierKeys.Windows => ShortcutModifiers.Win,
-            _ => ShortcutModifiers.None,
-        };
 
         var combined = ShortcutModifiers.None;
         if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
@@ -1094,11 +1147,10 @@ internal sealed class ShortcutBox : TextBox
             combined |= ShortcutModifiers.Win;
         }
 
-        _ = modifiers;
-        var virtualKey = KeyInterop.VirtualKeyFromKey(e.Key);
+        var virtualKey = KeyInterop.VirtualKeyFromKey(key);
 
         // 只按了修饰键：显示提示，等待主键（用户可以继续按住组合）。
-        if (e.Key is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt
+        if (key is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt
             or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin)
         {
             _pendingModifiers = Describe(combined);

@@ -72,6 +72,9 @@ public sealed record AppSettings
     /// <summary>从剪贴板贴图的快捷键（规范文本，例如 <c>Alt+S</c>）。</summary>
     public string PinShortcut { get; init; } = DefaultPinShortcut;
 
+    /// <summary>可选快览快捷键；空字符串表示不注册，仍可点击托盘打开。</summary>
+    public string QuickViewShortcut { get; init; } = string.Empty;
+
     /// <summary>界面语言（默认跟随系统）。</summary>
     public AppLanguage Language { get; init; } = AppLanguage.System;
 
@@ -121,6 +124,7 @@ public sealed record AppSettings
                 "截图快捷键",
                 warnings),
             PinShortcut = NormalizeShortcut(settings.PinShortcut, DefaultPinShortcut, "贴图快捷键", warnings),
+            QuickViewShortcut = NormalizeOptionalShortcut(settings.QuickViewShortcut, warnings),
             Language = NormalizeLanguage(settings.Language, warnings),
             Theme = NormalizeTheme(settings.Theme, warnings),
             CaptureMode = NormalizeCaptureMode(settings.CaptureMode, warnings),
@@ -171,6 +175,8 @@ public sealed record AppSettings
     /// <summary>修改贴图快捷键（返回新实例；不校验）。</summary>
     public AppSettings WithPinShortcut(string shortcut) => this with { PinShortcut = shortcut };
 
+    public AppSettings WithQuickViewShortcut(string shortcut) => this with { QuickViewShortcut = shortcut };
+
     /// <summary>修改语言。</summary>
     public AppSettings WithLanguage(AppLanguage language) => this with { Language = language };
 
@@ -213,6 +219,15 @@ public sealed record AppSettings
 
     public override string ToString() =>
         $"截图={ScreenshotShortcut} 贴图={PinShortcut} 语言={Language} 主题={Theme} 截图方式={CaptureMode} 开机启动={LaunchAtStartup}";
+
+    private static string NormalizeOptionalShortcut(string? value, List<string> warnings)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+        if (Shortcuts.ShortcutSpec.TryParse(value, out var shortcut, out _) && shortcut is not null)
+            return shortcut.Format();
+        warnings.Add("快览快捷键无效，已取消注册；仍可从托盘打开快览。");
+        return string.Empty;
+    }
 
     private static string NormalizeShortcut(
         string? value,

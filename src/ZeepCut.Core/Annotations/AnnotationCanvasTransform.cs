@@ -12,7 +12,7 @@ namespace ZeepCut.Core.Annotations;
 /// </para>
 /// <code>
 /// 图像像素 = 屏幕原点 + round(窗口 DIP × dpi/96) − 选区原点
-/// 窗口 DIP = (屏幕原点 − 选区原点 + 图像像素) × 96/dpi
+/// 窗口 DIP = (选区原点 − 屏幕原点 + 图像像素) × 96/dpi
 /// </code>
 /// <para>
 /// 主屏 125%（选区原点 300,300）与副屏 100%（屏幕原点 −1080,0）都在这一个类型里处理，
@@ -110,5 +110,10 @@ public readonly struct AnnotationCanvasTransform
     public double ToDipLength(int pixels) => new DpiTransform(Dpi).PixelToDip(pixels);
 
     /// <summary>把图像内的矩形换算成窗口 DIP 矩形。</summary>
-    public DipRect ToDipRect(PixelRect imageRect) => new DpiTransform(Dpi).ToDip(imageRect);
+    public DipRect ToDipRect(PixelRect imageRect)
+    {
+        var origin = ToDip(new PixelPoint(imageRect.Left, imageRect.Top));
+        return new DipRect(origin.X, origin.Y,
+            ToDipLength(imageRect.Width), ToDipLength(imageRect.Height));
+    }
 }

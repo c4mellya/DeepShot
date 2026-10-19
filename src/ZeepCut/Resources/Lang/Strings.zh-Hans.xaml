@@ -185,8 +185,6 @@
     <!-- ===== 历史：追加标注编辑窗口 ===== -->
     <sys:String x:Key="S.History.EditTitle">Zeep Cut 编辑历史 · {0}</sys:String>
     <sys:String x:Key="S.History.EditWindowName">Zeep Cut 编辑历史</sys:String>
-    <sys:String x:Key="S.History.EditHint">旧标注已合并进图片像素，只能继续追加（不可拆分修改）。</sys:String>
-    <sys:String x:Key="S.History.EditStatusHint">追加标注后点“保存并覆盖”。</sys:String>
     <sys:String x:Key="S.History.EditSave">保存并覆盖</sys:String>
     <sys:String x:Key="S.History.EditSaveHint">用追加标注后的新图替换这条记录原来的图片（不保留旧版本，不新增记录）</sys:String>
     <sys:String x:Key="S.History.EditCancel">取消</sys:String>
@@ -329,4 +327,20 @@
     <sys:String x:Key="S.Dialog.SaveTitle">另存为图片</sys:String>
     <sys:String x:Key="S.Dialog.SaveFilter">PNG 图片 (*.png)|*.png|JPEG 图片 (*.jpg;*.jpeg)|*.jpg;*.jpeg</sys:String>
 
+    <sys:String x:Key="S.History.DragAction">拖出图片</sys:String>
+    <sys:String x:Key="S.History.DragHint">拖出图片</sys:String>
+    <sys:String x:Key="S.History.DragMissing">原图文件已丢失。</sys:String>
+    <sys:String x:Key="S.History.DragDelivered">已拖出图片。</sys:String>
+    <sys:String x:Key="S.History.DragCancelled">已取消。</sys:String>
+    <sys:String x:Key="S.QuickView.Title">最近</sys:String>
+    <sys:String x:Key="S.QuickView.OpenHistory">完整历史</sys:String>
+    <sys:String x:Key="S.QuickView.Previous">上一张</sys:String>
+    <sys:String x:Key="S.QuickView.Next">下一张</sys:String>
+    <sys:String x:Key="S.QuickView.Empty">还没有截图</sys:String>
+    <sys:String x:Key="S.QuickView.LoadFailed">无法加载历史</sys:String>
+    <sys:String x:Key="S.QuickView.ActionFailed">操作失败：{0}</sys:String>
+    <sys:String x:Key="S.QuickView.RecordMissing">这张图片已不在历史中。</sys:String>
+    <sys:String x:Key="S.QuickView.Shortcut">快览快捷键</sys:String>
+    <sys:String x:Key="S.QuickView.ClearShortcut">清除</sys:String>
+    <sys:String x:Key="S.QuickView.ShortcutDisabled">未设置</sys:String>
 </ResourceDictionary>

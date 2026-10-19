@@ -18,7 +18,7 @@ public enum TrayMenuCommand
 }
 
 /// <summary>
-/// 纯 Win32 系统托盘图标：隐藏窗口接收 <c>WM_TRAYICON</c>，左/右键弹出 <c>TrackPopupMenu</c> 菜单。
+/// 纯 Win32 系统托盘图标：隐藏窗口接收 <c>WM_TRAYICON</c>，左键打开历史快览、右键弹出 <c>TrackPopupMenu</c> 菜单。
 /// 不引用 WinForms（WPF 中启用 UseWindowsForms 会导致 <see cref="System.Windows.Application"/> 类型冲突）。
 /// </summary>
 public sealed class TrayIcon : IDisposable
@@ -38,7 +38,6 @@ public sealed class TrayIcon : IDisposable
 
     private readonly NativeMethods.WndProc _wndProc;
     private readonly uint _taskbarCreatedMessage;
-    private readonly DispatcherTimer _singleClickTimer;
     private readonly Dispatcher _dispatcher;
 
     private IntPtr _window;
@@ -47,7 +46,7 @@ public sealed class TrayIcon : IDisposable
     private bool _ownsIcon;
     private bool _iconAdded;
     private bool _disposed;
-    private long _lastDoubleClickTick;
+    private long _lastLeftClickTick = -1000;
 
     public TrayIcon()
     {
@@ -56,19 +55,15 @@ public sealed class TrayIcon : IDisposable
         _dispatcher = Dispatcher.CurrentDispatcher;
         _taskbarCreatedMessage = NativeMethods.RegisterWindowMessage("TaskbarCreated");
 
-        // 单击延迟到双击时间之后再弹菜单；双击则取消，避免双击误触菜单项。
-        _singleClickTimer = new DispatcherTimer
-        {
-            Interval = TimeSpan.FromMilliseconds(Math.Max(200, NativeMethods.GetDoubleClickTime())),
-        };
-        _singleClickTimer.Tick += OnSingleClickTimerTick;
-
         CreateMessageWindow();
         LoadAppIcon();
     }
 
     /// <summary>用户在托盘菜单里选择了某个命令；回调在 UI 线程上执行。</summary>
     public event Action<TrayMenuCommand>? CommandInvoked;
+
+    /// <summary>左键/键盘选择托盘图标，打开或收起历史快览。</summary>
+    public event Action? QuickViewRequested;
 
     /// <summary>
     /// T20：“显示/隐藏全部贴图”菜单项的文案（例如“隐藏全部贴图 (2)”）。每次弹菜单时求值，
@@ -153,8 +148,6 @@ public sealed class TrayIcon : IDisposable
         }
 
         _disposed = true;
-        _singleClickTimer.Stop();
-        _singleClickTimer.Tick -= OnSingleClickTimerTick;
 
         if (_iconAdded)
         {
@@ -192,12 +185,6 @@ public sealed class TrayIcon : IDisposable
 
         _icon = IntPtr.Zero;
         _largeIcon = IntPtr.Zero;
-    }
-
-    private void OnSingleClickTimerTick(object? sender, EventArgs e)
-    {
-        _singleClickTimer.Stop();
-        ShowContextMenu();
     }
 
     private void CreateMessageWindow()
@@ -293,29 +280,21 @@ public sealed class TrayIcon : IDisposable
                 case NativeMethods.WM_LBUTTONUP:
                 case NativeMethods.NIN_SELECT:
                 case NativeMethods.NIN_KEYSELECT:
-                    // 双击的第二下 mouse-up 会紧跟在 WM_LBUTTONDBLCLK 之后到达，
-                    // 这里吞掉它，避免双击又弹出菜单。
-                    if (Environment.TickCount64 - _lastDoubleClickTick <
-                        Math.Max(200, NativeMethods.GetDoubleClickTime()))
+                    // Coalesce duplicate Shell notifications without delaying the popup.
+                    if (Environment.TickCount64 - _lastLeftClickTick < 150) return IntPtr.Zero;
+                    _lastLeftClickTick = Environment.TickCount64;
+                    NativeMethods.SetForegroundWindow(_window);
+                    _dispatcher.BeginInvoke(new Action(() =>
                     {
-                        return IntPtr.Zero;
-                    }
-
-                    // 延迟弹出，给双击留出判定时间。
-                    // 从溢出面板点击时，Shell 也可能以 NIN_SELECT 回调。
-                    _singleClickTimer.Stop();
-                    _singleClickTimer.Start();
+                        if (!_disposed) QuickViewRequested?.Invoke();
+                    }));
                     return IntPtr.Zero;
 
                 case NativeMethods.WM_LBUTTONDBLCLK:
-                    _singleClickTimer.Stop();
-                    _lastDoubleClickTick = Environment.TickCount64;
-                    AppLog.Info("Tray", "双击托盘图标（本轮未绑定动作）");
                     return IntPtr.Zero;
 
                 case NativeMethods.WM_RBUTTONUP:
                 case NativeMethods.WM_CONTEXTMENU:
-                    _singleClickTimer.Stop();
                     ShowContextMenu();
                     return IntPtr.Zero;
             }

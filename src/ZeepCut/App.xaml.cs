@@ -45,7 +45,10 @@ public partial class App : Application
     private bool _ownsSingleInstanceMutex;
     private TrayIcon? _trayIcon;
     private GlobalHotkey? _globalHotkey;
+    private bool _capturingShortcut;
     private CaptureOverlayWindow? _captureOverlay;
+    private HistoryQuickViewWindow? _historyQuickView;
+    private long _quickViewClosedAt = -1000;
 
     /// <summary>
     /// 历史写入器（T23/T24）：启动时初始化数据库，之后由 <see cref="HistoryCaptureSink"/>
@@ -102,6 +105,7 @@ public partial class App : Application
 
             _trayIcon = new TrayIcon();
             _trayIcon.CommandInvoked += OnTrayCommandInvoked;
+            _trayIcon.QuickViewRequested += OnTrayQuickViewRequested;
             _trayIcon.ToggleAllPinsTextProvider = DescribeToggleAllPinsText;
             _trayIcon.ToggleAllPinsDisabledProvider = () => PinWindows.Count == 0;
             if (!_trayIcon.Show())
@@ -261,16 +265,45 @@ public partial class App : Application
             () => PasteFromClipboard($"全局热键 {Settings.PinShortcut}"),
             errors);
 
+        if (!string.IsNullOrWhiteSpace(Settings.QuickViewShortcut))
+            RegisterHotkeyFor(Settings.QuickViewShortcut, () => ToggleHistoryQuickView(), errors);
+
         AppLog.Info(
             "Hotkey",
             $"快捷键应用：截图={screenshotText}（{(screenshotOk ? "成功" : "失败")}） " +
             $"贴图={pinText}（{(pinOk ? "成功" : "失败")}） 已注册={_hotkeyActions.Count} 个");
 
         PublishShortcutHints();
+        if (_capturingShortcut)
+        {
+            _globalHotkey.UnregisterAll();
+            _hotkeyActions.Clear();
+        }
 
         return errors.Count == 0
             ? null
             : string.Join(Environment.NewLine, errors);
+    }
+
+    internal void BeginShortcutCapture()
+    {
+        if (_capturingShortcut) return;
+        _capturingShortcut = true;
+        _globalHotkey?.UnregisterAll();
+        _hotkeyActions.Clear();
+    }
+
+    internal void EndShortcutCapture()
+    {
+        if (!_capturingShortcut) return;
+        _capturingShortcut = false;
+        if (_globalHotkey is null) return;
+        var failure = ApplyHotkeys();
+        if (!string.IsNullOrEmpty(failure))
+        {
+            AppLog.Warn("Hotkey", $"结束快捷键录入后恢复失败：{failure}");
+            ToastWindow.Show(failure);
+        }
     }
 
     /// <summary>注册一个热键并绑定动作，失败时写日志 + 记录原因（不抛异常）。</summary>
@@ -325,7 +358,7 @@ public partial class App : Application
         AppLog.Info("Settings", $"设置已变更：{previous} → {current}");
         AppLog.Info(
             "Settings",
-            $"SETTINGS_CHANGED shortcuts={(previous.ScreenshotShortcut != current.ScreenshotShortcut || previous.PinShortcut != current.PinShortcut)} " +
+            $"SETTINGS_CHANGED shortcuts={(previous.ScreenshotShortcut != current.ScreenshotShortcut || previous.PinShortcut != current.PinShortcut || previous.QuickViewShortcut != current.QuickViewShortcut)} " +
             $"language={previous.Language != current.Language} theme={previous.Theme != current.Theme} " +
             $"startup={previous.LaunchAtStartup != current.LaunchAtStartup}");
 
@@ -541,6 +574,8 @@ public partial class App : Application
     {
         AppLog.Info("History", $"30 天清理已删除 {deletedCount} 条记录：{result}");
 
+        _historyQuickView?.Reload();
+
         // 图库没打开时不需要任何提示（启动时清理是"静默的家务活"）。
         if (!HistoryGallery.IsOpen)
         {
@@ -668,6 +703,7 @@ public partial class App : Application
 
     private void OnGlobalHotkeyPressed(ShortcutSpec shortcut)
     {
+        if (_capturingShortcut) return;
         if (_hotkeyActions.TryGetValue(shortcut, out var action))
         {
             action();
@@ -689,6 +725,7 @@ public partial class App : Application
             return;
         }
 
+        CloseHistoryQuickView();
         AppLog.Info("Capture", $"截图触发：{trigger}");
         try
         {
@@ -888,6 +925,56 @@ public partial class App : Application
         }
     }
 
+    private void OnTrayQuickViewRequested() => ToggleHistoryQuickView(fromTray: true);
+
+    private void ToggleHistoryQuickView(bool fromTray = false)
+    {
+        if (_captureOverlay is not null) return;
+        if (_historyQuickView is not null)
+        {
+            CloseHistoryQuickView();
+            return;
+        }
+        // Clicking the tray first deactivates the popup. Do not immediately reopen it.
+        if (fromTray && Environment.TickCount64 - _quickViewClosedAt < 300) return;
+        if (_historyStore is null)
+        {
+            ShowHistoryGallery("快览");
+            return;
+        }
+        try
+        {
+            var window = new HistoryQuickViewWindow(
+                _historyStore,
+                (record, edit) =>
+                {
+                    ShowHistoryGallery("快览");
+                    if (record is not null) HistoryGallery.Current?.RevealRecord(record, edit);
+                },
+                () => ShowSettings("快览"));
+            _historyQuickView = window;
+            window.Closed += (_, _) =>
+            {
+                if (ReferenceEquals(_historyQuickView, window)) _historyQuickView = null;
+                _quickViewClosedAt = Environment.TickCount64;
+            };
+            window.Show();
+        }
+        catch (Exception ex)
+        {
+            CloseHistoryQuickView();
+            AppLog.Error("History", "打开历史快览失败", ex);
+            ToastWindow.Show(StringsUi.Get("S.QuickView.LoadFailed"));
+        }
+    }
+
+    private void CloseHistoryQuickView()
+    {
+        var window = _historyQuickView;
+        _historyQuickView = null;
+        window?.Close();
+    }
+
     // --- T25 历史图库 ---
 
     /// <summary>
@@ -960,7 +1047,11 @@ public partial class App : Application
     }
 
     /// <summary>退出时关闭历史图库窗口（历史数据留在磁盘上，关闭窗口不动数据库）。</summary>
-    private void DisposeHistoryGallery() => HistoryGallery.CloseIfOpen();
+    private void DisposeHistoryGallery()
+    {
+        CloseHistoryQuickView();
+        HistoryGallery.CloseIfOpen();
+    }
 
     /// <summary>退出时关闭设置窗口（设置已经即时写盘，关闭窗口不需要额外保存）。</summary>
     private void DisposeSettings() => SettingsWindowHost.CloseIfOpen();
@@ -990,6 +1081,7 @@ public partial class App : Application
         }
 
         _trayIcon.CommandInvoked -= OnTrayCommandInvoked;
+        _trayIcon.QuickViewRequested -= OnTrayQuickViewRequested;
         _trayIcon.Dispose();
         _trayIcon = null;
     }

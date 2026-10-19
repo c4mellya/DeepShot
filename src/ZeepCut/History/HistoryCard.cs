@@ -131,6 +131,11 @@ internal sealed class HistoryCard : Border
             Child = _picture,
         };
         _thumbnailFrame.SetResourceReference(BackgroundProperty, HistoryUi.Keys.SurfaceAlt);
+        if (callbacks.Drag is { } drag)
+        {
+            _thumbnailFrame.ToolTip = StringsUi.Get("S.History.DragHint");
+            HistoryImageDrag.Attach(_thumbnailFrame, source => drag(_record, source));
+        }
 
         // 圆角裁剪：Border 的 CornerRadius 不裁子元素，只能手动裁；矩形比控件高出一个半径，所以下边不被圆化。
         _thumbnailFrame.SizeChanged += (_, e) =>
@@ -559,6 +564,8 @@ internal sealed class HistoryCard : Border
 internal sealed class HistoryCardCallbacks
 {
     internal Action<HistoryRecord>? Copy { get; init; }
+
+    internal Action<HistoryRecord, DependencyObject>? Drag { get; init; }
 
     internal Action<HistoryRecord>? SaveAs { get; init; }
 

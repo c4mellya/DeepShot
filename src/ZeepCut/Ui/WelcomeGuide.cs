@@ -3,10 +3,11 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using ZeepCut.Platform;
+using Shapes = System.Windows.Shapes;
 
 namespace ZeepCut.Ui;
 
-/// <summary>First-run instructions; the marker is written only when the user dismisses the guide.</summary>
+/// <summary>首次启动的欢迎页：只列三件事；点“开始使用”后才写入已读标记。</summary>
 internal static class WelcomeGuide
 {
     public static void ShowIfNeeded(string screenshotShortcut, string pinShortcut)
@@ -15,43 +16,137 @@ internal static class WelcomeGuide
         if (File.Exists(marker)) return;
 
         var chinese = StringsUi.IsChinese;
-        var palette = ThemeManager.Palette;
         var window = new Window
         {
             Title = chinese ? "欢迎使用 Zeep Cut" : "Welcome to Zeep Cut",
-            Width = 520, Height = 470, MinHeight = 370, MinWidth = 440,
+            Width = 460,
+            SizeToContent = SizeToContent.Height,
+            ResizeMode = ResizeMode.NoResize,
             WindowStartupLocation = WindowStartupLocation.CenterScreen,
-            Background = palette.WindowBackgroundBrush,
-            Foreground = palette.ForegroundBrush,
-            FontFamily = new FontFamily(ThemeManager.FontFamilyName),
-            ShowInTaskbar = true
+            ShowInTaskbar = true,
         };
-        var panel = new StackPanel { Margin = new Thickness(26) };
-        panel.Children.Add(new TextBlock
-        {
-            Text = chinese ? "截图，标注，贴在桌面" : "Capture, annotate, and pin",
-            FontSize = 24, FontWeight = FontWeights.SemiBold,
-            TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 18)
-        });
-        var instructions = chinese
-            ? $"{screenshotShortcut}   冻结当前屏幕并截图\n{pinShortcut}   将剪贴板图片贴在桌面\n\n框选后可添加箭头、文字与马赛克；Enter 复制，Esc 取消。\n\n贴图：拖动移动，滚轮缩放，Ctrl + 滚轮调透明度；右键锁定或关闭。\n\n软件常驻系统托盘。通过托盘打开历史、设置，或退出。\n\n普通历史保留 30 天，收藏不自动清理。图片保存在本机。"
-            : $"{screenshotShortcut}   Freeze the current screen and capture\n{pinShortcut}   Pin an image from your clipboard\n\nSelect a region, then add arrows, text, or mosaic. Enter copies; Esc cancels.\n\nPins: drag to move, wheel to zoom, Ctrl + wheel for opacity. Right-click to lock or close.\n\nZeep Cut stays in the system tray. Open History or Settings, or exit from its tray menu.\n\nHistory is kept for 30 days; favorites are retained. Images stay on your computer.";
-        panel.Children.Add(new TextBlock { Text = instructions, FontSize = 14, TextWrapping = TextWrapping.Wrap, LineHeight = 22 });
+        window.SetResourceReference(Control.BackgroundProperty, ThemeManager.BrushKeys.WindowBackground);
+        window.SetResourceReference(Control.ForegroundProperty, ThemeManager.BrushKeys.Foreground);
+        window.SetResourceReference(Control.FontFamilyProperty, ThemeManager.FontFamilyKey);
+        window.SourceInitialized += (_, _) => DwmApi.TrySetDarkTitleBar(window, ThemeManager.Palette.IsDark);
+
+        var panel = new StackPanel { Margin = new Thickness(32, 30, 32, 26) };
+
+        // 标题：品牌徽标 + 一句话。
+        var header = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 24) };
+        header.Children.Add(Badge());
+        var titles = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(16, 0, 0, 0) };
+        titles.Children.Add(Text("Zeep Cut", 22, ThemeManager.BrushKeys.Foreground, FontWeights.SemiBold));
+        titles.Children.Add(Text(chinese ? "截图、标注、贴在桌面" : "Capture, annotate, pin", 13, ThemeManager.BrushKeys.SecondaryForeground));
+        header.Children.Add(titles);
+        panel.Children.Add(header);
+
+        // 三件事。
+        var card = new Border { CornerRadius = new CornerRadius(14), BorderThickness = new Thickness(1) };
+        card.SetResourceReference(Border.BackgroundProperty, ThemeManager.BrushKeys.Surface);
+        card.SetResourceReference(Border.BorderBrushProperty, ThemeManager.BrushKeys.Divider);
+        var rows = new StackPanel();
+        rows.Children.Add(Row(screenshotShortcut, chinese ? "截图" : "Capture", false));
+        rows.Children.Add(Row(pinShortcut, chinese ? "贴图" : "Pin from clipboard", true));
+        rows.Children.Add(Row(chinese ? "托盘图标" : "Tray icon", chinese ? "最近截图" : "Recent captures", true));
+        card.Child = rows;
+        panel.Children.Add(card);
+
         var button = new Button
         {
             Content = chinese ? "开始使用" : "Get started",
-            HorizontalAlignment = HorizontalAlignment.Right,
-            Margin = new Thickness(0, 20, 0, 0), Padding = new Thickness(20, 8, 20, 8),
-            Background = palette.AccentBrush, Foreground = palette.OnAccentBrush
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            Margin = new Thickness(0, 24, 0, 0),
+            Padding = new Thickness(20, 10, 20, 10),
+            FontSize = 14,
+            BorderThickness = new Thickness(0),
         };
+        button.SetResourceReference(Control.BackgroundProperty, ThemeManager.BrushKeys.Accent);
+        button.SetResourceReference(Control.ForegroundProperty, ThemeManager.BrushKeys.OnAccent);
         button.Click += (_, _) => window.Close();
         panel.Children.Add(button);
-        window.Content = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+
+        window.Content = panel;
         window.Closed += (_, _) =>
         {
             try { File.WriteAllText(marker, DateTimeOffset.UtcNow.ToString("O")); }
             catch (Exception ex) { AppLog.Warn("Welcome", $"Unable to save guide state: {ex.Message}"); }
         };
         window.Show();
+    }
+
+    private static FrameworkElement Row(string key, string label, bool divider)
+    {
+        var cap = new Border
+        {
+            CornerRadius = new CornerRadius(8),
+            BorderThickness = new Thickness(1),
+            Padding = new Thickness(12, 5, 12, 5),
+            MinWidth = 84,
+            Child = Text(key, 13, ThemeManager.BrushKeys.Foreground, FontWeights.SemiBold, center: true),
+        };
+        cap.SetResourceReference(Border.BackgroundProperty, ThemeManager.BrushKeys.SurfaceAlt);
+        cap.SetResourceReference(Border.BorderBrushProperty, ThemeManager.BrushKeys.Border);
+
+        var grid = new Grid { Margin = new Thickness(18, 14, 18, 14) };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        var text = Text(label, 14, ThemeManager.BrushKeys.Foreground);
+        text.Margin = new Thickness(16, 0, 0, 0);
+        Grid.SetColumn(text, 1);
+        grid.Children.Add(cap);
+        grid.Children.Add(text);
+
+        var host = new StackPanel();
+        if (divider)
+        {
+            var line = new Border { Height = 1, Margin = new Thickness(18, 0, 0, 0) };
+            line.SetResourceReference(Border.BackgroundProperty, ThemeManager.BrushKeys.Divider);
+            host.Children.Add(line);
+        }
+
+        host.Children.Add(grid);
+        return host;
+    }
+
+    private static TextBlock Text(string text, double size, string brushKey, FontWeight? weight = null, bool center = false)
+    {
+        var block = new TextBlock
+        {
+            Text = text,
+            FontSize = size,
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = center ? HorizontalAlignment.Center : HorizontalAlignment.Left,
+        };
+        block.SetResourceReference(TextBlock.ForegroundProperty, brushKey);
+        if (weight is { } value) block.FontWeight = value;
+        return block;
+    }
+
+    private static FrameworkElement Badge()
+    {
+        var icon = new Shapes.Path
+        {
+            Data = Geometry.Parse("M7,3 V17 H21 M3,7 H17 V21"),
+            StrokeThickness = 2.2,
+            StrokeStartLineCap = PenLineCap.Round,
+            StrokeEndLineCap = PenLineCap.Round,
+            StrokeLineJoin = PenLineJoin.Round,
+        };
+        icon.SetResourceReference(Shapes.Shape.StrokeProperty, ThemeManager.BrushKeys.OnAccent);
+        var canvas = new Canvas { Width = 24, Height = 24 };
+        canvas.Children.Add(icon);
+        var gloss = new Border
+        {
+            CornerRadius = new CornerRadius(14),
+            IsHitTestVisible = false,
+            Background = new LinearGradientBrush(Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF), Color.FromArgb(0x00, 0xFF, 0xFF, 0xFF), 90),
+        };
+        var grid = new Grid();
+        grid.Children.Add(gloss);
+        grid.Children.Add(new Viewbox { Width = 24, Height = 24, Child = canvas, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center });
+        var badge = new Border { Width = 52, Height = 52, CornerRadius = new CornerRadius(15), Child = grid };
+        badge.SetResourceReference(Border.BackgroundProperty, ThemeManager.BrushKeys.Accent);
+        return badge;
     }
 }

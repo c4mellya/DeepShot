@@ -182,8 +182,6 @@
     <!-- ===== History: append-annotation editor ===== -->
     <sys:String x:Key="S.History.EditTitle">Zeep Cut edit history · {0}</sys:String>
     <sys:String x:Key="S.History.EditWindowName">Zeep Cut edit history</sys:String>
-    <sys:String x:Key="S.History.EditHint">Old annotations are already part of the image pixels; you can only add more (they cannot be edited separately).</sys:String>
-    <sys:String x:Key="S.History.EditStatusHint">Add annotations, then click “Save and overwrite”.</sys:String>
     <sys:String x:Key="S.History.EditSave">Save and overwrite</sys:String>
     <sys:String x:Key="S.History.EditSaveHint">Replace the original image of this record with the newly annotated image (the old version is not kept, no new record is created)</sys:String>
     <sys:String x:Key="S.History.EditCancel">Cancel</sys:String>
@@ -326,4 +324,20 @@
     <sys:String x:Key="S.Dialog.SaveTitle">Save image as</sys:String>
     <sys:String x:Key="S.Dialog.SaveFilter">PNG image (*.png)|*.png|JPEG image (*.jpg;*.jpeg)|*.jpg;*.jpeg</sys:String>
 
+    <sys:String x:Key="S.History.DragAction">Drag image</sys:String>
+    <sys:String x:Key="S.History.DragHint">Drag out</sys:String>
+    <sys:String x:Key="S.History.DragMissing">The original file is missing.</sys:String>
+    <sys:String x:Key="S.History.DragDelivered">Image dragged out.</sys:String>
+    <sys:String x:Key="S.History.DragCancelled">Cancelled.</sys:String>
+    <sys:String x:Key="S.QuickView.Title">Recent</sys:String>
+    <sys:String x:Key="S.QuickView.OpenHistory">Full history</sys:String>
+    <sys:String x:Key="S.QuickView.Previous">Previous</sys:String>
+    <sys:String x:Key="S.QuickView.Next">Next</sys:String>
+    <sys:String x:Key="S.QuickView.Empty">No captures yet</sys:String>
+    <sys:String x:Key="S.QuickView.LoadFailed">Could not load history</sys:String>
+    <sys:String x:Key="S.QuickView.ActionFailed">Action failed: {0}</sys:String>
+    <sys:String x:Key="S.QuickView.RecordMissing">This image is no longer in history.</sys:String>
+    <sys:String x:Key="S.QuickView.Shortcut">Quick-view shortcut</sys:String>
+    <sys:String x:Key="S.QuickView.ClearShortcut">Clear</sys:String>
+    <sys:String x:Key="S.QuickView.ShortcutDisabled">Not set</sys:String>
 </ResourceDictionary>

@@ -668,12 +668,7 @@ internal sealed class HistoryEditWindow : Window
         }
 
         var dip = e.GetPosition(_canvasHost);
-        // Ignore image margins; only an existing captured drag may clamp to image edges.
-        if (dip.X < _origin.X || dip.Y < _origin.Y ||
-            dip.X >= _origin.X + _background.PixelWidth * _zoom ||
-            dip.Y >= _origin.Y + _background.PixelHeight * _zoom)
-            return;
-        var point = ToImage(dip);
+        var point = ToImage(dip, clamp: _activeTool.HasValue);
 
         // 1) 选择模式：先试手柄，再试命中已有**本次**标注。
         if (_activeTool is null && _session.Count > 0)
@@ -731,6 +726,12 @@ internal sealed class HistoryEditWindow : Window
         {
             return;
         }
+
+        // Blank margins are not drawing surfaces; captured drags may still reach the edges.
+        if (dip.X < _origin.X || dip.Y < _origin.Y ||
+            dip.X >= _origin.X + _background.PixelWidth * _zoom ||
+            dip.Y >= _origin.Y + _background.PixelHeight * _zoom)
+            return;
 
         if (_activeTool.Value == AnnotationTool.Text)
         {
