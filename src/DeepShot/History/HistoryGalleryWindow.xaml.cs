@@ -810,15 +810,14 @@ public sealed class HistoryGalleryWindow : Window
             : StringsUi.Format("S.History.DeleteSelectedConfirm", records.Count);
 
         AppLog.Info("History", $"批量删除确认框已打开：数量={records.Count} 其中收藏={favorites}");
-        var answer = MessageBox.Show(
+        var confirmed = AppDialog.Confirm(
             this,
             message,
             StringsUi.Get("S.History.DeleteDialogTitle"),
-            MessageBoxButton.OKCancel,
-            MessageBoxImage.Warning,
-            MessageBoxResult.Cancel);
+            AppDialogKind.Warning,
+            destructive: true);
 
-        if (answer != MessageBoxResult.OK)
+        if (!confirmed)
         {
             AppLog.Info("History", "批量删除已取消");
             return;
@@ -908,15 +907,14 @@ public sealed class HistoryGalleryWindow : Window
                     $"取消过期收藏确认框已打开：名称={record.Name} Id={record.Id} " +
                     $"创建={HistoryRecord.FormatUtc(record.CreatedAtUtc)} " +
                     $"已过期=True 剩余天数=0");
-                var answer = MessageBox.Show(
+                var confirmed = AppDialog.Confirm(
                     this,
                     warning,
                     StringsUi.Get("S.History.UnfavoriteDialogTitle"),
-                    MessageBoxButton.OKCancel,
-                    MessageBoxImage.Warning,
-                    MessageBoxResult.Cancel);
+                    AppDialogKind.Warning,
+                    destructive: true);
 
-                if (answer != MessageBoxResult.OK)
+                if (!confirmed)
                 {
                     AppLog.Info("History", $"取消过期收藏已放弃：用户选择保留收藏 名称={record.Name}");
                     LogResult(StringsUi.Format("S.History.KeptFavorite", record.Name));
@@ -1079,15 +1077,14 @@ public sealed class HistoryGalleryWindow : Window
             "History",
             $"历史删除确认框已打开：名称={record.Name} Id={record.Id} 收藏={record.IsFavorite}");
 
-        var answer = MessageBox.Show(
+        var confirmed = AppDialog.Confirm(
             this,
             message,
             StringsUi.Get("S.History.DeleteDialogTitle"),
-            MessageBoxButton.OKCancel,
-            MessageBoxImage.Warning,
-            MessageBoxResult.Cancel);
+            AppDialogKind.Warning,
+            destructive: true);
 
-        if (answer != MessageBoxResult.OK)
+        if (!confirmed)
         {
             AppLog.Info("History", $"历史删除已取消：名称={record.Name} Id={record.Id}");
             return;

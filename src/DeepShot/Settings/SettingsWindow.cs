@@ -42,6 +42,7 @@ public sealed class SettingsWindow : Window
 {
     private readonly SettingsStore _store;
     private readonly ShortcutBox _screenshotBox;
+    private readonly ShortcutBox _quickScreenshotBox;
     private readonly ShortcutBox _pinBox;
     private readonly ShortcutBox _quickViewBox;
     private readonly ComboBox _language;
@@ -91,6 +92,10 @@ public sealed class SettingsWindow : Window
         _screenshotBox = new ShortcutBox("settings-shortcut-screenshot");
         _screenshotBox.SetValue(settings.ScreenshotShortcut);
         _screenshotBox.Committed += OnScreenshotShortcutCommitted;
+
+        _quickScreenshotBox = new ShortcutBox("settings-shortcut-quick-screenshot");
+        _quickScreenshotBox.SetValue(settings.QuickScreenshotShortcut);
+        _quickScreenshotBox.Committed += OnQuickScreenshotShortcutCommitted;
 
         _pinBox = new ShortcutBox("settings-shortcut-pin");
         _pinBox.SetValue(settings.PinShortcut);
@@ -213,7 +218,8 @@ public sealed class SettingsWindow : Window
         StringsUi.Changed += OnLanguageChanged;
         Activated += (_, _) =>
         {
-            if (_screenshotBox.IsKeyboardFocusWithin || _pinBox.IsKeyboardFocusWithin || _quickViewBox.IsKeyboardFocusWithin)
+            if (_screenshotBox.IsKeyboardFocusWithin || _quickScreenshotBox.IsKeyboardFocusWithin ||
+                _pinBox.IsKeyboardFocusWithin || _quickViewBox.IsKeyboardFocusWithin)
                 (Application.Current as App)?.BeginShortcutCapture();
         };
         Deactivated += (_, _) => (Application.Current as App)?.EndShortcutCapture();
@@ -303,7 +309,7 @@ public sealed class SettingsWindow : Window
         // "Specified element is already the logical child of another element"）。
         foreach (var element in new FrameworkElement[]
                  {
-                     _screenshotBox, _pinBox, _quickViewBox, _language, _theme, _captureMode, _startup,
+                     _screenshotBox, _quickScreenshotBox, _pinBox, _quickViewBox, _language, _theme, _captureMode, _startup,
                      _dataPath, _dataCounts, _retentionRule,
                  })
         {
@@ -322,6 +328,8 @@ public sealed class SettingsWindow : Window
         quickShortcut.Children.Add(clearQuickShortcut);
         _sections.Children.Add(Card(
             Row(StringsUi.Get("S.Settings.Shortcut.Screenshot"), null, _screenshotBox),
+            Row(StringsUi.Get("S.Settings.Shortcut.QuickScreenshot"),
+                StringsUi.Get("S.Settings.Shortcut.QuickScreenshotHint"), _quickScreenshotBox),
             Row(StringsUi.Get("S.Settings.Shortcut.Pin"), null, _pinBox),
             Row(StringsUi.Get("S.QuickView.Shortcut"), null, quickShortcut)));
 
@@ -604,6 +612,7 @@ public sealed class SettingsWindow : Window
         {
             var settings = _store.Current;
             _screenshotBox.SetValue(settings.ScreenshotShortcut);
+            _quickScreenshotBox.SetValue(settings.QuickScreenshotShortcut);
             _pinBox.SetValue(settings.PinShortcut);
             _quickViewBox.SetValue(settings.QuickViewShortcut);
             SelectCombo(_language, settings.Language);
@@ -652,118 +661,55 @@ public sealed class SettingsWindow : Window
 
     // --- 快捷键 ---
 
-    private void OnScreenshotShortcutCommitted(ShortcutSpec? shortcut, string error)
-    {
-        if (error.Length > 0)
-        {
-            ShowStatus(error, error: true);
-            _screenshotBox.ShowError(error);
-            return;
-        }
+    private void OnScreenshotShortcutCommitted(ShortcutSpec? shortcut, string error) =>
+        CommitShortcut(_screenshotBox, shortcut, error, "S.Settings.Shortcut.Screenshot",
+            value => _store.Current.WithScreenshotShortcut(value));
 
-        if (shortcut is null)
-        {
-            ShowStatus(StringsUi.Get("S.Settings.Shortcut.NeedModifier"), error: true);
-            return;
-        }
+    private void OnQuickScreenshotShortcutCommitted(ShortcutSpec? shortcut, string error) =>
+        CommitShortcut(_quickScreenshotBox, shortcut, error, "S.Settings.Shortcut.QuickScreenshot",
+            value => _store.Current.WithQuickScreenshotShortcut(value));
 
-        if (RejectQuickViewConflict(shortcut, _screenshotBox)) return;
-        _store.Current.ShortcutPair(out _, out var pin);
-        if (!AppSettings.ValidateShortcut(shortcut.Format(), pin, out var validated, out var conflict) || validated is null)
-        {
-            var text = DescribeShortcutRejection(shortcut, pin, "S.Settings.Shortcut.Pin");
-            ShowStatus(text, error: true);
-            _screenshotBox.ShowError(text);
-            AppLog.Warn("Settings", $"截图快捷键被拒绝：{shortcut.Format()}（{text}）");
-            return;
-        }
+    private void OnPinShortcutCommitted(ShortcutSpec? shortcut, string error) =>
+        CommitShortcut(_pinBox, shortcut, error, "S.Settings.Shortcut.Pin",
+            value => _store.Current.WithPinShortcut(value));
 
-        var next = _store.Current.WithScreenshotShortcut(validated.Format());
-        ApplyShortcutChange(next, "截图", validated.Format());
-    }
+    private void OnQuickViewShortcutCommitted(ShortcutSpec? shortcut, string error) =>
+        CommitShortcut(_quickViewBox, shortcut, error, "S.QuickView.Shortcut",
+            value => _store.Current.WithQuickViewShortcut(value));
 
-    private void OnPinShortcutCommitted(ShortcutSpec? shortcut, string error)
-    {
-        if (error.Length > 0)
-        {
-            ShowStatus(error, error: true);
-            _pinBox.ShowError(error);
-            return;
-        }
-
-        if (shortcut is null)
-        {
-            ShowStatus(StringsUi.Get("S.Settings.Shortcut.NeedModifier"), error: true);
-            return;
-        }
-
-        if (RejectQuickViewConflict(shortcut, _pinBox)) return;
-        _store.Current.ShortcutPair(out var screenshot, out _);
-        if (!AppSettings.ValidateShortcut(shortcut.Format(), screenshot, out var validated, out var conflict) || validated is null)
-        {
-            var text = DescribeShortcutRejection(shortcut, screenshot, "S.Settings.Shortcut.Screenshot");
-            ShowStatus(text, error: true);
-            _pinBox.ShowError(text);
-            AppLog.Warn("Settings", $"贴图快捷键被拒绝：{shortcut.Format()}（{text}）");
-            return;
-        }
-
-        var next = _store.Current.WithPinShortcut(validated.Format());
-        ApplyShortcutChange(next, "贴图", validated.Format());
-    }
-
-    private bool RejectQuickViewConflict(ShortcutSpec shortcut, ShortcutBox box)
-    {
-        if (!ShortcutSpec.TryParse(_store.Current.QuickViewShortcut, out var quick, out _) ||
-            quick is null || !shortcut.ConflictsWith(quick)) return false;
-        var message = DescribeShortcutRejection(shortcut, quick, "S.QuickView.Shortcut");
-        ShowStatus(message, error: true);
-        box.ShowError(message);
-        return true;
-    }
-
-    private void OnQuickViewShortcutCommitted(ShortcutSpec? shortcut, string error)
+    private void CommitShortcut(ShortcutBox box, ShortcutSpec? shortcut, string error,
+        string labelKey, Func<string, AppSettings> update)
     {
         if (error.Length > 0 || shortcut is null)
         {
             var message = error.Length > 0 ? error : StringsUi.Get("S.Settings.Shortcut.NeedModifier");
             ShowStatus(message, error: true);
-            _quickViewBox.ShowError(message);
+            box.ShowError(message);
             return;
         }
-        _store.Current.ShortcutPair(out var screenshot, out var pin);
-        foreach (var entry in new[] { (screenshot, "S.Settings.Shortcut.Screenshot"), (pin, "S.Settings.Shortcut.Pin") })
+
+        var current = _store.Current;
+        var entries = new[]
         {
-            if (entry.Item1 is not { } other || !shortcut.ConflictsWith(other)) continue;
-            var message = DescribeShortcutRejection(shortcut, other, entry.Item2);
+            (_screenshotBox, current.ScreenshotShortcut, "S.Settings.Shortcut.Screenshot"),
+            (_quickScreenshotBox, current.QuickScreenshotShortcut, "S.Settings.Shortcut.QuickScreenshot"),
+            (_pinBox, current.PinShortcut, "S.Settings.Shortcut.Pin"),
+            (_quickViewBox, current.QuickViewShortcut, "S.QuickView.Shortcut"),
+        };
+        foreach (var (otherBox, text, otherLabelKey) in entries)
+        {
+            if (ReferenceEquals(box, otherBox) ||
+                !ShortcutSpec.TryParse(text, out var other, out _) || !shortcut.ConflictsWith(other))
+                continue;
+
+            var message = StringsUi.Format("S.Settings.Shortcut.ConflictLocal",
+                StringsUi.Get(otherLabelKey), other.Format());
             ShowStatus(message, error: true);
-            _quickViewBox.ShowError(message);
+            box.ShowError(message);
             return;
         }
-        ApplyShortcutChange(_store.Current.WithQuickViewShortcut(shortcut.Format()), "快览", shortcut.Format());
-    }
 
-    /// <summary>
-    /// 把"快捷键被拒"的原因整理成面向用户的本地化文案（T31）。
-    /// </summary>
-    /// <remarks>
-    /// 与另一个功能重复时用 <c>ConflictLocal</c>（指明撞的是哪个功能、它的当前组合）；
-    /// 其它原因（缺修饰键、主键不支持）直接用设置窗口自己的文案，**不再去猜 Core 的中文错误串**。
-    /// </remarks>
-    private static string DescribeShortcutRejection(
-        ShortcutSpec shortcut,
-        ShortcutSpec? other,
-        string otherLabelKey)
-    {
-        if (other is not null && shortcut.ConflictsWith(other))
-        {
-            return StringsUi.Format(
-                "S.Settings.Shortcut.ConflictLocal",
-                StringsUi.Get(otherLabelKey),
-                other.Format());
-        }
-
-        return StringsUi.Get("S.Settings.Shortcut.NeedModifier");
+        ApplyShortcutChange(update(shortcut.Format()), StringsUi.Get(labelKey), shortcut.Format());
     }
 
     /// <summary>
@@ -781,9 +727,11 @@ public sealed class SettingsWindow : Window
         var failure = ApplyShortcuts?.Invoke(_store.Current);
         if (string.IsNullOrEmpty(failure))
         {
+            SyncControlsFromSettings();
             _screenshotBox.ShowRegistered();
+            _quickScreenshotBox.ShowRegistered();
             _pinBox.ShowRegistered();
-            _quickViewBox.SetValue(_store.Current.QuickViewShortcut);
+            _quickViewBox.ShowRegistered();
             AppLog.Info("Settings", $"{which}快捷键已生效：{formatted}");
             return;
         }
@@ -801,6 +749,7 @@ public sealed class SettingsWindow : Window
 
         ShowStatus(failure, error: true);
         _screenshotBox.SetValue(previous.ScreenshotShortcut);
+        _quickScreenshotBox.SetValue(previous.QuickScreenshotShortcut);
         _pinBox.SetValue(previous.PinShortcut);
         _quickViewBox.SetValue(previous.QuickViewShortcut);
         ApplyShortcuts?.Invoke(_store.Current);
@@ -1073,15 +1022,15 @@ internal sealed class ShortcutBox : TextBox
         var key = e.Key == Key.System ? e.SystemKey :
             e.Key == Key.ImeProcessed ? e.ImeProcessedKey : e.Key;
 
-        // Esc 放弃本次修改；Tab 交给焦点系统（否则键盘无法离开这个输入框）。
-        if (key == Key.Escape)
+        // 单独 Esc 取消录入，单独 Tab 移动焦点；带修饰键时可作为快捷键主键。
+        if (key == Key.Escape && Keyboard.Modifiers == ModifierKeys.None)
         {
             _pendingModifiers = string.Empty;
             ShowRegistered();
             return;
         }
 
-        if (key == Key.Tab)
+        if (key == Key.Tab && Keyboard.Modifiers == ModifierKeys.None)
         {
             e.Handled = false;
             return;

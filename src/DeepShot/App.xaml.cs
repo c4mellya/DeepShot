@@ -112,11 +112,11 @@ public partial class App : Application
             if (!_trayIcon.Show())
             {
                 AppLog.Error("App", "托盘图标加入通知区域失败，程序无法驻留");
-                MessageBox.Show(
+                AppDialog.Alert(
+                    null,
                     StringsUi.Get("S.Message.TrayFailed"),
                     AppInfo.Name,
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
+                    AppDialogKind.Error);
                 Shutdown(1);
                 return;
             }
@@ -134,11 +134,11 @@ public partial class App : Application
             AppLog.Error("App", "启动失败", ex);
             try
             {
-                MessageBox.Show(
+                AppDialog.Alert(
+                    null,
                     StringsUi.Format("S.Message.StartupFailed", AppLog.CurrentLogPath, ex.Message),
                     AppInfo.Name,
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
+                    AppDialogKind.Error);
             }
             catch (Exception dialogFailure)
             {
@@ -261,6 +261,10 @@ public partial class App : Application
             screenshotText,
             () => StartCapture($"全局热键 {Settings.ScreenshotShortcut}"),
             errors);
+        RegisterHotkeyFor(
+            Settings.QuickScreenshotShortcut,
+            () => StartCapture($"全局热键 {Settings.QuickScreenshotShortcut}", quickCopy: true),
+            errors);
         var pinOk = RegisterHotkeyFor(
             pinText,
             () => PasteFromClipboard($"全局热键 {Settings.PinShortcut}"),
@@ -359,7 +363,7 @@ public partial class App : Application
         AppLog.Info("Settings", $"设置已变更：{previous} → {current}");
         AppLog.Info(
             "Settings",
-            $"SETTINGS_CHANGED shortcuts={(previous.ScreenshotShortcut != current.ScreenshotShortcut || previous.PinShortcut != current.PinShortcut || previous.QuickViewShortcut != current.QuickViewShortcut)} " +
+            $"SETTINGS_CHANGED shortcuts={(previous.ScreenshotShortcut != current.ScreenshotShortcut || previous.PinShortcut != current.PinShortcut || previous.QuickScreenshotShortcut != current.QuickScreenshotShortcut || previous.QuickViewShortcut != current.QuickViewShortcut)} " +
             $"language={previous.Language != current.Language} theme={previous.Theme != current.Theme} " +
             $"startup={previous.LaunchAtStartup != current.LaunchAtStartup}");
 
@@ -622,11 +626,22 @@ public partial class App : Application
         }
 
         AppLog.Info("App", "检测到已有实例，提示后退出");
-        MessageBox.Show(
-            "DeepShot 已在运行。\n\n请使用任务栏通知区域（如未显示，请点击“显示隐藏的图标”）中的托盘图标。",
-            AppInfo.Name,
-            MessageBoxButton.OK,
-            MessageBoxImage.Information);
+
+        // 此时设置尚未加载：先用“跟随系统”的主题与语言，让提示框也是自绘样式且语言正确。
+        string message;
+        try
+        {
+            ThemeManager.Initialize(this, AppTheme.System);
+            StringsUi.Initialize(this, AppLanguage.System);
+            message = StringsUi.Get("S.Message.AlreadyRunning");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn("App", $"单实例提示的主题/语言初始化失败，使用默认文案：{ex.Message}");
+            message = "DeepShot 已在运行。\n\n请使用任务栏通知区域（如未显示，请点击“显示隐藏的图标”）中的托盘图标。";
+        }
+
+        AppDialog.Alert(null, message, AppInfo.Name, AppDialogKind.Information);
         return false;
     }
 
@@ -695,11 +710,11 @@ public partial class App : Application
 
         // 托盘气球可能被系统通知设置抑制；再弹一次启动提示，确保用户知道快捷键不可用。
         AppLog.Warn("Hotkey", $"启动时热键注册失败：{failure}");
-        MessageBox.Show(
+        AppDialog.Alert(
+            null,
             failure,
             AppInfo.Name,
-            MessageBoxButton.OK,
-            MessageBoxImage.Warning);
+            AppDialogKind.Warning);
     }
 
     private void OnGlobalHotkeyPressed(ShortcutSpec shortcut)
@@ -718,7 +733,7 @@ public partial class App : Application
     /// 截图入口：先捕获鼠标所在屏幕、枚举窗口候选，再显示冻结遮罩。
     /// 捕获与枚举都发生在遮罩显示之前，因此遮罩不会进入画面，也不会成为候选。
     /// </summary>
-    private void StartCapture(string trigger)
+    private void StartCapture(string trigger, bool quickCopy = false)
     {
         if (_captureOverlay is not null)
         {
@@ -736,7 +751,7 @@ public partial class App : Application
             IReadOnlyList<WindowCandidate> candidates;
             try
             {
-                candidates = Settings.CaptureMode == CaptureSelectionMode.Window
+                candidates = !quickCopy && Settings.CaptureMode == CaptureSelectionMode.Window
                     ? WindowEnumerator.Enumerate(capture.Bounds)
                     : Array.Empty<WindowCandidate>();
             }
@@ -752,9 +767,9 @@ public partial class App : Application
                 $"冻结遮罩：屏幕={capture.DeviceName} 主屏={capture.IsPrimary} 物理={capture.Bounds} " +
                 $"图像={capture.PixelWidth}x{capture.PixelHeight} DPI={capture.Dpi} " +
                 $"→ DIP=({dip.Left:0.##},{dip.Top:0.##}) {dip.Width:0.##}x{dip.Height:0.##}，" +
-                $"截图方式={Settings.CaptureMode} 窗口候选={candidates.Count}");
+                $"截图方式={Settings.CaptureMode} 快速复制={quickCopy} 窗口候选={candidates.Count}");
 
-            var overlay = new CaptureOverlayWindow(capture, candidates, _captureSink);
+            var overlay = new CaptureOverlayWindow(capture, candidates, _captureSink, quickCopy);
             overlay.Closed += OnCaptureOverlayClosed;
             _captureOverlay = overlay;
 
@@ -914,11 +929,11 @@ public partial class App : Application
 
         try
         {
-            MessageBox.Show(
+            AppDialog.Alert(
+                null,
                 message,
                 AppInfo.Name,
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
+                AppDialogKind.Warning);
         }
         catch (Exception ex)
         {
@@ -993,22 +1008,22 @@ public partial class App : Application
         if (_historyStore is null)
         {
             AppLog.Warn("History", "历史图库不可用：本次启动历史库初始化失败");
-            MessageBox.Show(
+            AppDialog.Alert(
+                null,
                 StringsUi.Format("S.Message.HistoryGalleryUnavailable", AppLog.CurrentLogPath),
                 AppInfo.Name,
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
+                AppDialogKind.Warning);
             return;
         }
 
         var window = HistoryGallery.Show(_historyStore);
         if (window is null)
         {
-            MessageBox.Show(
+            AppDialog.Alert(
+                null,
                 StringsUi.Format("S.Message.HistoryGalleryOpenFailed", AppLog.CurrentLogPath),
                 AppInfo.Name,
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
+                AppDialogKind.Error);
             return;
         }
 
@@ -1127,11 +1142,11 @@ public partial class App : Application
         e.Handled = true;
         try
         {
-            MessageBox.Show(
+            AppDialog.Alert(
+                null,
                 StringsUi.Format("S.Message.Unhandled", AppLog.CurrentLogPath, e.Exception.Message),
                 AppInfo.Name,
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
+                AppDialogKind.Error);
         }
         catch (Exception dialogFailure)
         {

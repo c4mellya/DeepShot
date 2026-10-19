@@ -60,6 +60,9 @@ public sealed record AppSettings
     /// <summary>默认截图快捷键。</summary>
     public const string DefaultScreenshotShortcut = "Alt+A";
 
+    /// <summary>默认快速截图快捷键：框选结束直接复制。</summary>
+    public const string DefaultQuickScreenshotShortcut = "Alt+Shift+A";
+
     /// <summary>默认剪贴板贴图快捷键。</summary>
     public const string DefaultPinShortcut = "Alt+S";
 
@@ -71,6 +74,9 @@ public sealed record AppSettings
 
     /// <summary>截图快捷键（规范文本，例如 <c>Alt+A</c>；由 <see cref="Shortcuts.ShortcutSpec"/> 解析）。</summary>
     public string ScreenshotShortcut { get; init; } = DefaultScreenshotShortcut;
+
+    /// <summary>快速截图快捷键：选区完成后直接复制到剪贴板。</summary>
+    public string QuickScreenshotShortcut { get; init; } = DefaultQuickScreenshotShortcut;
 
     /// <summary>从剪贴板贴图的快捷键（规范文本，例如 <c>Alt+S</c>）。</summary>
     public string PinShortcut { get; init; } = DefaultPinShortcut;
@@ -126,6 +132,8 @@ public sealed record AppSettings
                 DefaultScreenshotShortcut,
                 "截图快捷键",
                 warnings),
+            QuickScreenshotShortcut = NormalizeShortcut(
+                settings.QuickScreenshotShortcut, DefaultQuickScreenshotShortcut, "快速截图快捷键", warnings),
             PinShortcut = NormalizeShortcut(settings.PinShortcut, DefaultPinShortcut, "贴图快捷键", warnings),
             QuickViewShortcut = NormalizeOptionalShortcut(
                 settings.Version < CurrentSettingsVersion && string.IsNullOrWhiteSpace(settings.QuickViewShortcut)
@@ -140,8 +148,17 @@ public sealed record AppSettings
         return new SanitizeResult(normalized, warnings);
     }
 
-    /// <summary>两个快捷键是否冲突（相同组合）。</summary>
-    public bool HasShortcutConflict() => ShortcutPair(out _, out _).Outcome == ShortcutNamesOutcome.Conflict;
+    /// <summary>任意两个功能是否使用相同快捷键；空的可选快捷键不参与检测。</summary>
+    public bool HasShortcutConflict()
+    {
+        var shortcuts = new HashSet<Shortcuts.ShortcutSpec>();
+        foreach (var text in new[] { ScreenshotShortcut, QuickScreenshotShortcut, PinShortcut, QuickViewShortcut })
+        {
+            if (Shortcuts.ShortcutSpec.TryParse(text, out var shortcut, out _) && !shortcuts.Add(shortcut))
+                return true;
+        }
+        return false;
+    }
 
     /// <summary>
     /// 解析两个快捷键（截图 / 贴图），并判断它们是否重复。
@@ -176,6 +193,9 @@ public sealed record AppSettings
 
     /// <summary>修改截图快捷键（返回新实例；不校验，校验见 <see cref="ValidateShortcut"/>）。</summary>
     public AppSettings WithScreenshotShortcut(string shortcut) => this with { ScreenshotShortcut = shortcut };
+
+    /// <summary>修改快速截图快捷键（返回新实例；不校验）。</summary>
+    public AppSettings WithQuickScreenshotShortcut(string shortcut) => this with { QuickScreenshotShortcut = shortcut };
 
     /// <summary>修改贴图快捷键（返回新实例；不校验）。</summary>
     public AppSettings WithPinShortcut(string shortcut) => this with { PinShortcut = shortcut };
@@ -223,7 +243,7 @@ public sealed record AppSettings
     }
 
     public override string ToString() =>
-        $"截图={ScreenshotShortcut} 贴图={PinShortcut} 语言={Language} 主题={Theme} 截图方式={CaptureMode} 开机启动={LaunchAtStartup}";
+        $"截图={ScreenshotShortcut} 快速截图={QuickScreenshotShortcut} 贴图={PinShortcut} 语言={Language} 主题={Theme} 截图方式={CaptureMode} 开机启动={LaunchAtStartup}";
 
     private static string NormalizeOptionalShortcut(string? value, List<string> warnings)
     {

@@ -23,7 +23,7 @@ public enum ShortcutModifiers
 /// <para>支持的文本格式为 <c>修饰键+主键</c>，例如 <c>Alt+A</c>、<c>Ctrl+Alt+Shift+Win+F12</c>。</para>
 /// <list type="bullet">
 /// <item>修饰键：<c>Ctrl</c>（等价 <c>Control</c>）、<c>Alt</c>、<c>Shift</c>、<c>Win</c>（等价 <c>Windows</c>），不区分大小写，顺序任意，不可重复；</item>
-/// <item>主键：<c>A</c>–<c>Z</c>、<c>0</c>–<c>9</c>、<c>F1</c>–<c>F12</c>；</item>
+/// <item>主键：字母、数字、F1–F24、小键盘、标点和常用功能键；</item>
 /// <item>至少需要一个修饰键（无修饰键的全局热键会吞掉普通打字，视为非法）；</item>
 /// <item>规范化格式固定按 <c>Ctrl+Alt+Shift+Win+主键</c> 的顺序输出。</item>
 /// </list>
@@ -43,7 +43,24 @@ public sealed record ShortcutSpec
     private const int VirtualKeyA = 0x41;
     private const int VirtualKeyZ = 0x5A;
     private const int VirtualKeyF1 = 0x70;
-    private const int VirtualKeyF12 = 0x7B;
+    private const int VirtualKeyF24 = 0x87;
+
+    // 使用稳定名称保存，避免不同键盘布局下标点字符与“+”分隔符产生歧义。
+    private static readonly IReadOnlyDictionary<int, string> NamedKeys = new Dictionary<int, string>
+    {
+        [0x08] = "Backspace", [0x09] = "Tab", [0x0D] = "Enter",
+        [0x13] = "Pause", [0x14] = "CapsLock", [0x1B] = "Escape", [0x20] = "Space",
+        [0x21] = "PageUp", [0x22] = "PageDown", [0x23] = "End", [0x24] = "Home",
+        [0x25] = "Left", [0x26] = "Up", [0x27] = "Right", [0x28] = "Down",
+        [0x2C] = "PrintScreen", [0x2D] = "Insert", [0x2E] = "Delete",
+        [0x6A] = "Multiply", [0x6B] = "Add", [0x6C] = "Separator",
+        [0x6D] = "Subtract", [0x6E] = "Decimal", [0x6F] = "Divide",
+        [0x90] = "NumLock", [0x91] = "ScrollLock",
+        [0xBA] = "OemSemicolon", [0xBB] = "OemPlus", [0xBC] = "OemComma",
+        [0xBD] = "OemMinus", [0xBE] = "OemPeriod", [0xBF] = "OemQuestion",
+        [0xC0] = "OemTilde", [0xDB] = "OemOpenBrackets", [0xDC] = "OemPipe",
+        [0xDD] = "OemCloseBrackets", [0xDE] = "OemQuotes", [0xE2] = "OemBackslash",
+    };
 
     private ShortcutSpec(ShortcutModifiers modifiers, int virtualKey)
     {
@@ -70,11 +87,13 @@ public sealed record ShortcutSpec
     /// <summary>主键的规范名称，例如 <c>A</c>、<c>7</c>、<c>F12</c>。</summary>
     public string KeyName => GetKeyName(VirtualKey);
 
-    /// <summary>是否为受支持的主键虚拟键码（A–Z、0–9、F1–F12）。</summary>
+    /// <summary>是否为受支持的主键虚拟键码。</summary>
     public static bool IsSupportedVirtualKey(int virtualKey) =>
         (virtualKey >= VirtualKeyA && virtualKey <= VirtualKeyZ) ||
         (virtualKey >= VirtualKey0 && virtualKey <= VirtualKey9) ||
-        (virtualKey >= VirtualKeyF1 && virtualKey <= VirtualKeyF12);
+        (virtualKey >= VirtualKeyF1 && virtualKey <= VirtualKeyF24) ||
+        (virtualKey >= 0x60 && virtualKey <= 0x69) ||
+        NamedKeys.ContainsKey(virtualKey);
 
     /// <summary>虚拟键码 → 规范主键名；不受支持时抛 <see cref="ArgumentOutOfRangeException"/>。</summary>
     public static string GetKeyName(int virtualKey)
@@ -89,10 +108,16 @@ public sealed record ShortcutSpec
             return ((char)virtualKey).ToString();
         }
 
-        if (virtualKey >= VirtualKeyF1 && virtualKey <= VirtualKeyF12)
+        if (virtualKey >= VirtualKeyF1 && virtualKey <= VirtualKeyF24)
         {
             return $"F{virtualKey - VirtualKeyF1 + 1}";
         }
+
+        if (virtualKey is >= 0x60 and <= 0x69)
+            return $"NumPad{virtualKey - 0x60}";
+
+        if (NamedKeys.TryGetValue(virtualKey, out var name))
+            return name;
 
         throw new ArgumentOutOfRangeException(nameof(virtualKey), virtualKey, "主键虚拟键码不受支持。");
     }
@@ -150,7 +175,7 @@ public sealed record ShortcutSpec
                 continue;
             }
 
-            error = $"无法识别“{token}”。修饰键支持 Ctrl、Alt、Shift、Win；主键支持 A–Z、0–9、F1–F12。";
+            error = $"无法识别“{token}”。修饰键支持 Ctrl、Alt、Shift、Win；主键支持字母、数字、F1–F24、小键盘、标点和常用功能键。";
             return false;
         }
 
@@ -162,7 +187,7 @@ public sealed record ShortcutSpec
 
         if (virtualKey is null)
         {
-            error = "快捷键缺少主键（A–Z、0–9、F1–F12）。";
+            error = "快捷键缺少主键（字母、数字、功能键等）。";
             return false;
         }
 
@@ -272,9 +297,23 @@ public sealed record ShortcutSpec
             (token[0] == 'F' || token[0] == 'f') &&
             token[1] != '0' &&
             int.TryParse(token.AsSpan(1), out var number) &&
-            number is >= 1 and <= 12)
+            number is >= 1 and <= 24)
         {
             virtualKey = VirtualKeyF1 + number - 1;
+            return true;
+        }
+
+        if (token.Length == 7 && token.StartsWith("NumPad", StringComparison.OrdinalIgnoreCase) &&
+            token[6] is >= '0' and <= '9')
+        {
+            virtualKey = 0x60 + token[6] - '0';
+            return true;
+        }
+
+        foreach (var (key, name) in NamedKeys)
+        {
+            if (!token.Equals(name, StringComparison.OrdinalIgnoreCase)) continue;
+            virtualKey = key;
             return true;
         }
 

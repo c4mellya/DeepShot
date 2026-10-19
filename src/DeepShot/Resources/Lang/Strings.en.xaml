@@ -232,11 +232,14 @@
     <sys:String x:Key="S.Settings.Subtitle">Changes are saved automatically</sys:String>
     <sys:String x:Key="S.Settings.Section.Shortcuts">Shortcuts</sys:String>
     <sys:String x:Key="S.Settings.Shortcut.Screenshot">Capture shortcut</sys:String>
+    <sys:String x:Key="S.Settings.Shortcut.QuickScreenshot">Quick capture shortcut</sys:String>
+    <sys:String x:Key="S.Settings.Shortcut.QuickScreenshotHint">Release after selecting to copy directly to the clipboard.</sys:String>
+    <sys:String x:Key="S.Toast.QuickScreenshotCopied">Screenshot copied</sys:String>
     <sys:String x:Key="S.Settings.Shortcut.Pin">Pin shortcut</sys:String>
-    <sys:String x:Key="S.Settings.Shortcut.Hint">Click a box, then press the combination (include Ctrl / Alt / Shift / Win).</sys:String>
+    <sys:String x:Key="S.Settings.Shortcut.Hint">Press a two- or three-key combination, such as Alt+A or Alt+Shift+A, including Ctrl / Alt / Shift / Win.</sys:String>
     <sys:String x:Key="S.Settings.Shortcut.Waiting">Press the combination…</sys:String>
-    <sys:String x:Key="S.Settings.Shortcut.NeedModifier">Needs at least one modifier (Ctrl / Alt / Shift / Win); main keys are A–Z, 0–9, F1–F12.</sys:String>
-    <sys:String x:Key="S.Settings.Shortcut.SecondKey">Only one main key is allowed.</sys:String>
+    <sys:String x:Key="S.Settings.Shortcut.NeedModifier">Needs at least one modifier (Ctrl / Alt / Shift / Win) plus a letter, digit, function, arrow, numpad or punctuation key.</sys:String>
+    <sys:String x:Key="S.Settings.Shortcut.SecondKey">Choose a supported main key: a letter, digit, function, arrow, numpad or punctuation key.</sys:String>
     <sys:String x:Key="S.Settings.Shortcut.ConflictLocal">Conflicts with {0} ({1}); choose another combination.</sys:String>
     <sys:String x:Key="S.Settings.Shortcut.ConflictOther">Shortcut {0} is already taken by another program; choose another combination.</sys:String>
     <sys:String x:Key="S.Settings.Shortcut.RegisteredHint">Active now: {0}</sys:String>
@@ -306,6 +309,8 @@
     <sys:String x:Key="S.Toast.PinsHidden">Hid {0} pin(s) (use the tray menu again to show them)</sys:String>
     <sys:String x:Key="S.Toast.PinsShown">Showed {0} pin(s)</sys:String>
     <sys:String x:Key="S.Toast.HistoryFailed">{0} succeeded, but saving the history record failed (see log).</sys:String>
+    <sys:String x:Key="S.Dialog.Ok">OK</sys:String>
+    <sys:String x:Key="S.Dialog.Cancel">Cancel</sys:String>
     <sys:String x:Key="S.Message.AlreadyRunning">DeepShot is already running.\n\nUse the tray icon in the notification area (click “Show hidden icons” if needed).</sys:String>
     <sys:String x:Key="S.Message.TrayFailed">DeepShot could not create its tray icon and will exit.</sys:String>
     <sys:String x:Key="S.Message.StartupFailed">DeepShot failed to start. Log written to:\n{0}\n\n{1}</sys:String>

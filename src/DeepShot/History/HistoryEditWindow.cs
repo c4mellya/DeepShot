@@ -1258,7 +1258,7 @@ internal sealed class HistoryEditWindow : Window
             var message = HistoryOverwritePlan.DescribeDeleted(_record);
             AppLog.Warn("History", $"编辑窗口保存失败（{source}）：记录已被删除 Id={_record.Id} 名称={_record.Name}，不写任何文件");
             SetStatus(message, isError: true);
-            MessageBox.Show(this, message, SaveButtonText, MessageBoxButton.OK, MessageBoxImage.Warning);
+            AppDialog.Alert(this, message, SaveButtonText, AppDialogKind.Warning);
             return;
         }
 
@@ -1266,15 +1266,13 @@ internal sealed class HistoryEditWindow : Window
         if (!_overwriteExplained)
         {
             AppLog.Info("History", "首次使用覆盖编辑，显示覆盖语义说明");
-            var answer = MessageBox.Show(
+            var confirmed = AppDialog.Confirm(
                 this,
                 HistoryOverwritePlan.DescribeOverwriteExplanation(latest.Name),
                 SaveButtonText,
-                MessageBoxButton.OKCancel,
-                MessageBoxImage.Information,
-                MessageBoxResult.OK);
+                AppDialogKind.Information);
 
-            if (answer != MessageBoxResult.OK)
+            if (!confirmed)
             {
                 AppLog.Info("History", "覆盖语义说明被取消，本次不保存（留在编辑窗口）");
                 ClearStatus();
@@ -1319,7 +1317,7 @@ internal sealed class HistoryEditWindow : Window
                 var message = HistoryOverwritePlan.DescribeDeleted(_record);
                 AppLog.Warn("History", $"编辑窗口保存失败：覆盖时记录已不存在 Id={_record.Id}");
                 SetStatus(message, isError: true);
-                MessageBox.Show(this, message, SaveButtonText, MessageBoxButton.OK, MessageBoxImage.Warning);
+                AppDialog.Alert(this, message, SaveButtonText, AppDialogKind.Warning);
                 return;
             }
 
@@ -1345,12 +1343,11 @@ internal sealed class HistoryEditWindow : Window
             // 覆盖先写 tmp 再替换，失败时原图还在（PLAN：保存失败不先销毁原图）。
             AppLog.Error("History", $"编辑窗口保存并覆盖失败（原图未改动）：Id={_record.Id}", ex);
             SetStatus(StringsUi.Format("S.History.EditSaveFailed", ex.Message), isError: true);
-            MessageBox.Show(
+            AppDialog.Alert(
                 this,
                 StringsUi.Format("S.History.EditSaveFailedBody", ex.Message),
                 SaveButtonText,
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
+                AppDialogKind.Error);
         }
     }
 
@@ -1403,15 +1400,14 @@ internal sealed class HistoryEditWindow : Window
 
         if (_dirty && confirm)
         {
-            var answer = MessageBox.Show(
+            var discard = AppDialog.Confirm(
                 this,
                 StringsUi.Format("S.History.EditCancelConfirm", _session.Count),
                 StringsUi.Get("S.History.EditCancelDialogTitle"),
-                MessageBoxButton.OKCancel,
-                MessageBoxImage.Question,
-                MessageBoxResult.Cancel);
+                AppDialogKind.Question,
+                destructive: true);
 
-            if (answer != MessageBoxResult.OK)
+            if (!discard)
             {
                 ClearStatus();
                 return;

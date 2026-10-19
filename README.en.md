@@ -6,13 +6,14 @@ Repository: [c4mellya/DeepShot](https://github.com/c4mellya/DeepShot) · [简体
 
 ## Install
 
-Run `DeepShot-0.1.13-Setup-x64.exe` for a per-user installation, or extract `DeepShot-0.1.13-win-x64.zip`, open the `DeepShot` folder, and run `DeepShot.exe`. Both releases include the .NET runtime. Keep all files and the Resources folder together. The installer is unsigned.
+Run `DeepShot-0.1.14-Setup-x64.exe` for a per-user installation, or extract `DeepShot-0.1.14-win-x64.zip`, open the `DeepShot` folder, and run `DeepShot.exe`. Both releases include the .NET runtime. Keep all files and the Resources folder together. The installer is unsigned.
 
 DeepShot lives in the system tray, possibly inside the hidden icons panel. Closing History or Settings keeps the application running; select Exit from the tray menu to stop it. Startup at sign-in is optional and disabled by default. A short guide appears on first launch.
 
 ## Capture and annotate
 
 - **Alt+A** freezes the monitor under your pointer. Hover and click to capture a window, or drag to select a region.
+- **Alt+Shift+A** starts quick capture. Drag to select a rectangle, then release to copy and close immediately. Esc or right-click cancels; no Enter confirmation is needed.
 - Resize or move the selection before drawing. Tools include rectangle, ellipse, arrow, line, pen, text, and mosaic.
 - The capture region locks once annotation begins; undoing all annotations unlocks it.
 - **Enter** copies; **Esc or right-click** cancels the entire capture. In a text editor, Enter commits the text and Shift+Enter adds a new line.
@@ -40,21 +41,4 @@ Drag a history thumbnail or the full preview image into another application or f
 
 “Save and overwrite” replaces the same history image without keeping older versions. Existing annotations are flattened pixels. Canceling leaves the image unchanged. Already-open pins keep their original snapshot.
 
-Settings provides configurable shortcuts, default capture mode, language, theme, and startup at sign-in. Choose “Draw a rectangle” for manual selection without window detection, or “Detect windows” to select windows on hover/click while retaining manual dragging. The choice is saved automatically and applies to the next capture. Images stay in `%LOCALAPPDATA%\DeepShot`. Automatic cleanup does not delete manually exported files. Uninstall keeps data by default, with an explicit optional deletion prompt. The update channel has not been configured; update checks report that state.
-
-## Build
-
-Requires Windows and .NET 10 SDK.
-
-```powershell
-dotnet build "DeepShot.slnx" -c Release
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/publish.ps1
-# Optional explicit installer compiler:
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/publish.ps1 -InnoCompiler 'C:\Path\To\ISCC.exe'
-```
-
-Test projects, validation scripts, and temporary development records have been removed. `scripts/build.ps1` builds only; `scripts/publish.ps1` produces release files. Latest packages are in `artifacts/release/`; the complete self-contained application is in `artifacts/publish/DeepShot/`. Publishing compiles and packages only; it does not run tests or launch the application.
-
-Retained directories: `src/` (application sources), `installer/` (installer definition), `scripts/` (build and publish), and `artifacts/` (latest outputs).
-
-Scrolling capture, OCR, recording, cloud sync and cross-monitor selections are outside this release.
+Settings provides configurable shortcuts for capture, quick capture, pins and quick view, plus default capture mode, language, theme and startup at sign-in. Two- and three-key combinations support Ctrl / Alt / Shift / Win plus a letter, digit, function, arrow, space, numpad or punctuation key. Shortcut conflicts are reported. Choose “Draw a rectangle” for manual selection without window detection, or “Detect windows” to select windows on hover/click while retaining manual dragging. The choice is saved automatically and applies to the next capture. Images stay in `%LOCALAPPDATA%\DeepShot`. Automatic cleanup does not delete manually exported files. Uninstall keeps data by default, with an explicit optional deletion prompt. The update channel has not been configured; update checks report that state.

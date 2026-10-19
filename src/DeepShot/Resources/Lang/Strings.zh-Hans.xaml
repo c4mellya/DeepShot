@@ -235,11 +235,14 @@
     <sys:String x:Key="S.Settings.Subtitle">更改会自动保存</sys:String>
     <sys:String x:Key="S.Settings.Section.Shortcuts">快捷键</sys:String>
     <sys:String x:Key="S.Settings.Shortcut.Screenshot">截图快捷键</sys:String>
+    <sys:String x:Key="S.Settings.Shortcut.QuickScreenshot">快速截图快捷键</sys:String>
+    <sys:String x:Key="S.Settings.Shortcut.QuickScreenshotHint">框选后松开鼠标，直接复制到剪贴板。</sys:String>
+    <sys:String x:Key="S.Toast.QuickScreenshotCopied">截图已复制</sys:String>
     <sys:String x:Key="S.Settings.Shortcut.Pin">贴图快捷键</sys:String>
-    <sys:String x:Key="S.Settings.Shortcut.Hint">点击后直接按下组合键，需包含 Ctrl / Alt / Shift / Win 之一。</sys:String>
+    <sys:String x:Key="S.Settings.Shortcut.Hint">点击后按下两到三个键的组合，例如 Alt+A、Alt+Shift+A；需包含 Ctrl / Alt / Shift / Win。</sys:String>
     <sys:String x:Key="S.Settings.Shortcut.Waiting">请按下组合键…</sys:String>
-    <sys:String x:Key="S.Settings.Shortcut.NeedModifier">需要至少一个修饰键（Ctrl / Alt / Shift / Win），主键支持 A–Z、0–9、F1–F12。</sys:String>
-    <sys:String x:Key="S.Settings.Shortcut.SecondKey">一次只能设一个主键。</sys:String>
+    <sys:String x:Key="S.Settings.Shortcut.NeedModifier">需要至少一个修饰键（Ctrl / Alt / Shift / Win），可搭配字母、数字、功能键、方向键、小键盘或标点。</sys:String>
+    <sys:String x:Key="S.Settings.Shortcut.SecondKey">请选择一个受支持的主键，如字母、数字、功能键、方向键、小键盘或标点。</sys:String>
     <sys:String x:Key="S.Settings.Shortcut.ConflictLocal">与{0}（{1}）冲突，请换一个组合。</sys:String>
     <sys:String x:Key="S.Settings.Shortcut.ConflictOther">快捷键 {0} 已被其他程序占用，请换一个组合。</sys:String>
     <sys:String x:Key="S.Settings.Shortcut.RegisteredHint">当前生效：{0}</sys:String>
@@ -309,6 +312,8 @@
     <sys:String x:Key="S.Toast.PinsHidden">已隐藏 {0} 张贴图（再次点击托盘菜单可显示）</sys:String>
     <sys:String x:Key="S.Toast.PinsShown">已显示 {0} 张贴图</sys:String>
     <sys:String x:Key="S.Toast.HistoryFailed">{0}已成功，但历史保存失败（详见日志）。</sys:String>
+    <sys:String x:Key="S.Dialog.Ok">确定</sys:String>
+    <sys:String x:Key="S.Dialog.Cancel">取消</sys:String>
     <sys:String x:Key="S.Message.AlreadyRunning">DeepShot 已在运行。\n\n请使用任务栏通知区域（如未显示，请点击“显示隐藏的图标”）中的托盘图标。</sys:String>
     <sys:String x:Key="S.Message.TrayFailed">DeepShot 无法创建托盘图标，程序将退出。</sys:String>
     <sys:String x:Key="S.Message.StartupFailed">DeepShot 启动失败，已记录日志：\n{0}\n\n{1}</sys:String>

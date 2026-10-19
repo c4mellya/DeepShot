@@ -86,6 +86,7 @@ public sealed class CaptureOverlayWindow : Window
     private readonly DpiTransform _transform;
     private readonly SelectionController _selection;
     private readonly ICaptureSink _sink;
+    private readonly bool _quickCopy;
 
     /// <summary>
     /// 标注会话：文档 + 撤销历史 + 工具设置 + 草稿/文字输入状态（T14/T15）
@@ -163,7 +164,8 @@ public sealed class CaptureOverlayWindow : Window
     public CaptureOverlayWindow(
         ScreenCaptureResult capture,
         IReadOnlyList<WindowCandidate> candidates,
-        ICaptureSink sink)
+        ICaptureSink sink,
+        bool quickCopy = false)
     {
         ArgumentNullException.ThrowIfNull(capture);
         ArgumentNullException.ThrowIfNull(candidates);
@@ -172,6 +174,7 @@ public sealed class CaptureOverlayWindow : Window
         _capture = capture;
         _candidates = candidates;
         _sink = sink;
+        _quickCopy = quickCopy;
 
         // 标注坐标是图像内物理像素，图像范围就是冻结图尺寸（T16 缩放/移动的夹取边界）。
         _session = new AnnotationSession(
@@ -812,6 +815,12 @@ public sealed class CaptureOverlayWindow : Window
         {
             var label = previousState == SelectionState.Adjusting ? "调整完成" : "框选定稿";
             LogSelectionFinalized(label, physicalX, physicalY);
+            if (_quickCopy)
+            {
+                e.Handled = true;
+                TriggerCopy("快速截图框选完成");
+                return;
+            }
         }
         else if (previousState == SelectionState.Dragging)
         {
@@ -2141,6 +2150,8 @@ public sealed class CaptureOverlayWindow : Window
         }
 
         Close();
+        if (_quickCopy && action == CaptureAction.Copy)
+            ToastWindow.Show(StringsUi.Get("S.Toast.QuickScreenshotCopied"));
     }
 
     /// <summary>失败提示：写日志 + 工具栏内联提示，并留在截图状态。</summary>

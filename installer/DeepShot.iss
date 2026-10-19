@@ -1,6 +1,6 @@
 #define AppName "DeepShot"
 #ifndef AppVersion
-  #define AppVersion "0.1.13"
+  #define AppVersion "0.1.14"
 #endif
 #ifndef SourceDir
   #define SourceDir "..\artifacts\publish\DeepShot"

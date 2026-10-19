@@ -252,7 +252,22 @@ internal sealed class HistoryQuickViewWindow : Window
         };
         PreviewMouseWheel += OnMouseWheel;
         PreviewKeyDown += OnKeyDown;
+        // 按钮会自行处理按下事件，因此只有点在标题栏空白处的左键才会冒泡到这里。
+        MouseLeftButtonDown += (_, e) => OnHeaderMouseDown(header, e);
         Reload();
+    }
+
+    /// <summary>左键按住顶部（标题栏及其上下留白）即可拖动窗口。</summary>
+    private void OnHeaderMouseDown(FrameworkElement header, MouseButtonEventArgs e)
+    {
+        if (e.Handled || e.ButtonState != MouseButtonState.Pressed) return;
+        var y = e.GetPosition(header).Y;
+        if (y < -16 || y > header.ActualHeight + 12) return;
+        e.Handled = true;
+        _interactionDepth++;
+        try { DragMove(); }
+        catch (InvalidOperationException) { /* 按键已在拖动开始前释放 */ }
+        finally { _interactionDepth--; }
     }
 
     private static void Add(Grid root, UIElement element, int row)
