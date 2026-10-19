@@ -62,7 +62,7 @@ internal static class HistoryActions
 
         try
         {
-            Clipboard.SetImage(image);
+            ClipboardWriter.Write(image);
             AppLog.Info(
                 "History",
                 $"历史复制成功：名称={record.Name} 尺寸={image.PixelWidth}x{image.PixelHeight} " +

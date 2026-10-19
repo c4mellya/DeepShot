@@ -729,7 +729,7 @@ public sealed class PinWindow : Window
     {
         try
         {
-            Clipboard.SetImage(_image);
+            ClipboardWriter.Write(_image);
             AppLog.Info(
                 "Pins",
                 $"右键“复制”：已复制 {_image.PixelWidth}x{_image.PixelHeight} 到剪贴板");
@@ -737,10 +737,12 @@ public sealed class PinWindow : Window
         catch (COMException ex)
         {
             AppLog.Warn("Pins", $"右键“复制”失败（剪贴板被占用）：COMException: {ex.Message}");
+            ToastWindow.Show(StringsUi.Get("S.Message.ClipboardBusy"));
         }
         catch (Exception ex)
         {
             AppLog.Error("Pins", "右键“复制”失败", ex);
+            ToastWindow.Show(ex.Message);
         }
     }
 

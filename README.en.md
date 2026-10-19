@@ -4,7 +4,7 @@ A screenshot and desktop pin tool for Windows 10 22H2 / Windows 11 x64, built wi
 
 ## Install
 
-Run `ZeepCut-0.1.1-Setup-x64.exe` for a per-user installation, or extract `ZeepCut-0.1.1-win-x64.zip` and run `ZeepCut.exe`. Both releases include the .NET runtime. Keep all files and the Resources folder together. The installer is unsigned.
+Run `ZeepCut-0.1.2-Setup-x64.exe` for a per-user installation, or extract `ZeepCut-0.1.2-win-x64.zip` and run `ZeepCut.exe`. Both releases include the .NET runtime. Keep all files and the Resources folder together. The installer is unsigned.
 
 Zeep Cut lives in the system tray, possibly inside the hidden icons panel. Closing History or Settings keeps the application running; select Exit from the tray menu to stop it. Startup at sign-in is optional and disabled by default. A short guide appears on first launch.
 
@@ -43,7 +43,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/publish.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/publish.ps1 -InnoCompiler 'C:\Path\To\ISCC.exe'
 ```
 
-Test projects, validation scripts, and temporary development records have been removed. `scripts/build.ps1` builds only; `scripts/publish.ps1` produces release files. Latest packages are in `artifacts/release/`; the complete self-contained application is in `artifacts/publish/win-x64/`. This cleanup does not rebuild or launch the application.
+Test projects, validation scripts, and temporary development records have been removed. `scripts/build.ps1` builds only; `scripts/publish.ps1` produces release files. Latest packages are in `artifacts/release/`; the complete self-contained application is in `artifacts/publish/win-x64/`. Publishing compiles and packages only; it does not run tests or launch the application.
 
 Retained directories: `src/` (application sources), `installer/` (installer definition), `scripts/` (build and publish), and `artifacts/` (latest outputs).
 

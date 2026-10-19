@@ -161,6 +161,7 @@ public sealed class CaptureOverlayWindow : Window
     private HwndSource? _escapeSource;
     private bool _escapeRegistered;
     private bool _saveDialogOpen;
+    private IntPtr _captureHwnd;
 
     private PixelRect? _lastHoverLogged;
     private SelectionState _lastLoggedState = SelectionState.None;
@@ -358,6 +359,8 @@ public sealed class CaptureOverlayWindow : Window
         SourceInitialized += OnSourceInitialized;
         Loaded += OnLoaded;
         ContentRendered += OnContentRendered;
+        Activated += (_, _) => RefreshCaptureLayer();
+        Deactivated += (_, _) => Dispatcher.BeginInvoke(new Action(RefreshCaptureLayer));
         SizeChanged += OnSizeChanged;
         PreviewKeyDown += OnPreviewKeyDown;
         PreviewMouseRightButtonDown += (_, e) =>
@@ -424,6 +427,7 @@ public sealed class CaptureOverlayWindow : Window
     private void OnSourceInitialized(object? sender, EventArgs e)
     {
         var hwnd = new WindowInteropHelper(this).Handle;
+        _captureHwnd = hwnd;
 
         // 工具窗口样式：不出现在 Alt+Tab / 任务栏，也从窗口枚举中被排除。
         var extendedStyle = NativeMethods.GetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE);
@@ -485,8 +489,16 @@ public sealed class CaptureOverlayWindow : Window
         UpdateVisuals();
     }
 
+    private void RefreshCaptureLayer()
+    {
+        if (!_closed && !_saveDialogOpen && IsVisible && IsEnabled && Topmost)
+            CaptureWindowLayer.Raise(_captureHwnd);
+    }
+
     private void OnContentRendered(object? sender, EventArgs e)
     {
+        CaptureWindowLayer.MarkFullscreen(_captureHwnd, true);
+        RefreshCaptureLayer();
         NativeMethods.SetForegroundWindow(new WindowInteropHelper(this).Handle);
         Activate();
         Focus();
@@ -1908,6 +1920,8 @@ public sealed class CaptureOverlayWindow : Window
     private void OnClosed(object? sender, EventArgs e)
     {
         _closed = true;
+        CaptureWindowLayer.MarkFullscreen(_captureHwnd, false);
+        _captureHwnd = IntPtr.Zero;
         UnregisterEscape();
         _escapeSource?.RemoveHook(OnEscapeMessage);
         _escapeSource = null;
@@ -1931,7 +1945,7 @@ public sealed class CaptureOverlayWindow : Window
         try
         {
             var image = RenderSelection(CaptureAction.Copy);
-            Clipboard.SetImage(image);
+            ClipboardWriter.Write(image);
             stopwatch.Stop();
             CompleteCapture(CaptureAction.Copy, image, stopwatch.Elapsed, filePath: null);
         }
@@ -1977,6 +1991,7 @@ public sealed class CaptureOverlayWindow : Window
             // 对话框会被所有者的置顶状态干扰（本机实测会自行返回/关闭）。
             // 显示期间临时取消置顶，关闭后恢复并重新激活遮罩。
             _saveDialogOpen = true;
+            CaptureWindowLayer.MarkFullscreen(_captureHwnd, false);
             UnregisterEscape();
             Topmost = false;
             AppLog.Info("Output", $"保存对话框已打开：默认名称={dialog.FileName} 目录={dialog.InitialDirectory}");
@@ -1993,6 +2008,8 @@ public sealed class CaptureOverlayWindow : Window
             _saveDialogOpen = false;
             Topmost = wasTopmost;
             RegisterEscape();
+            CaptureWindowLayer.MarkFullscreen(_captureHwnd, wasTopmost);
+            RefreshCaptureLayer();
         }
 
         if (result != true)
