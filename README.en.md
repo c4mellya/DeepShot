@@ -6,7 +6,7 @@ Repository: [c4mellya/DeepShot](https://github.com/c4mellya/DeepShot) · [简体
 
 ## Install
 
-Run `DeepShot-0.1.14-Setup-x64.exe` for a per-user installation, or extract `DeepShot-0.1.14-win-x64.zip`, open the `DeepShot` folder, and run `DeepShot.exe`. Both releases include the .NET runtime. Keep all files and the Resources folder together. The installer is unsigned.
+Run `DeepShot-0.1.15-Setup-x64.exe` for a per-user installation, or extract `DeepShot-0.1.15-win-x64.zip`, open the `DeepShot` folder, and run `DeepShot.exe`. Both releases include the .NET runtime. Keep all files and the Resources folder together. The installer is unsigned.
 
 DeepShot lives in the system tray, possibly inside the hidden icons panel. Closing History or Settings keeps the application running; select Exit from the tray menu to stop it. Startup at sign-in is optional and disabled by default. A short guide appears on first launch.
 

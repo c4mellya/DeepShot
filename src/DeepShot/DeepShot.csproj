@@ -12,7 +12,7 @@
     <AssemblyName>DeepShot</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
-    <Version>0.1.14</Version>
+    <Version>0.1.15</Version>
     <AssemblyTitle>DeepShot</AssemblyTitle>
     <Product>DeepShot</Product>
     <Company>DeepShot</Company>
