@@ -167,7 +167,7 @@ public sealed class PinWindow : Window
             Focusable = false,
             IsTabStop = false,
             Cursor = Cursors.Hand,
-            ToolTip = "关闭贴图（Esc）",
+            ToolTip = StringsUi.Get("S.Pin.Close"),
         };
         _closeButton.Click += (_, _) =>
         {

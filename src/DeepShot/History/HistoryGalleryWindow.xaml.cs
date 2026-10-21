@@ -48,6 +48,9 @@ public sealed class HistoryGalleryWindow : Window
     /// <summary>搜索框输入后的合并刷新延迟（毫秒）：避免每敲一个字符就查一次库。</summary>
     private const int SearchDebounceMs = 250;
 
+    /// <summary>后台读缩略图的并发数：解码是 CPU + 磁盘活，3 路足够铺满一屏又不挤占其它线程。</summary>
+    private const int PreviewWorkers = 3;
+
     private readonly HistoryStore _store;
     private readonly TextBox _search;
     private readonly HistoryTabStrip _filter;
@@ -113,7 +116,8 @@ public sealed class HistoryGalleryWindow : Window
 
     private DateOnly? _currentDate;
 
-    /// <summary>T27：自动清理后写进状态栏的说明（下次有其它操作时会被覆盖）。</summary>
+    /// <summary>后台读缩略图的取消源：重建列表或关闭窗口时作废还没读完的那批。</summary>
+    private CancellationTokenSource _previewLoadCts = new();
 
     /// <summary>
     /// 创建图库窗口。外部必须走 <see cref="HistoryGallery.Show"/>（单实例），
@@ -508,6 +512,7 @@ public sealed class HistoryGalleryWindow : Window
     /// <summary>重建卡片：按查询顺序编号（AutomationId 与"第 N 条"日志都用它），每个日期一个带标题的分区。</summary>
     private void RebuildCards(IReadOnlyList<HistoryRecord> records)
     {
+        CancelPreviewLoad();
         _cards.Children.Clear();
         _loaded.Clear();
         _selected = null;
@@ -526,6 +531,8 @@ public sealed class HistoryGalleryWindow : Window
     /// <summary>把若干日期分组追加到列表末尾；与当前最后一个分区同一天的接着放进去（加载更多时用）。</summary>
     private void AppendGroups(IReadOnlyList<HistoryDayGroup> groups)
     {
+        // 命中内存缓存的卡片当场带图；其余先放空底色，缩略图交给后台读完再填，滚动和输入不被解码卡住。
+        var pending = new List<HistoryCard>();
         foreach (var group in groups)
         {
             if (_currentWrap is null || _currentDate != group.Date)
@@ -543,19 +550,91 @@ public sealed class HistoryGalleryWindow : Window
 
             foreach (var record in group.Items)
             {
-                var card = CreateCard(record, _loaded.Count, _store.TryLoadPreview(record));
+                var cached = _store.TryGetCachedPreview(record);
+                var card = CreateCard(record, _loaded.Count, cached, loadingPreview: cached is null);
                 card.IsChecked = _checkedIds.Contains(record.Id);
                 card.SetSelectionMode(_selectionMode);
                 _currentWrap.Children.Add(card);
                 _loaded.Add(card);
                 _currentSection?.Cards.Add(card);
+                if (cached is null)
+                {
+                    pending.Add(card);
+                }
             }
+        }
+
+        if (pending.Count > 0)
+        {
+            _ = LoadPreviewsAsync(pending, _previewLoadCts.Token);
         }
     }
 
-    private HistoryCard CreateCard(HistoryRecord record, int index, System.Windows.Media.Imaging.BitmapSource? preview)
+    /// <summary>
+    /// 后台读取这批卡片的缩略图：最多 <see cref="PreviewWorkers"/> 路并发，按卡片顺序（先上后下）逐张填入。
+    /// 解码在线程池，填图回到 UI 线程；列表重建或窗口关闭时取消，晚到的结果直接丢弃。
+    /// </summary>
+    private async Task LoadPreviewsAsync(IReadOnlyList<HistoryCard> cards, CancellationToken token)
     {
-        var card = new HistoryCard(record, index, preview, BuildCallbacks());
+        var stopwatch = Stopwatch.StartNew();
+        var next = 0;
+
+        async Task Worker()
+        {
+            while (!token.IsCancellationRequested)
+            {
+                // 每个 Worker 都在 UI 线程续接，next 不需要原子操作。
+                var index = next++;
+                if (index >= cards.Count)
+                {
+                    return;
+                }
+
+                System.Windows.Media.Imaging.BitmapSource? preview;
+                try
+                {
+                    preview = await _store.LoadPreviewAsync(cards[index].Record, token);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+
+                if (!token.IsCancellationRequested)
+                {
+                    cards[index].SetPreview(preview);
+                }
+            }
+        }
+
+        try
+        {
+            await Task.WhenAll(Enumerable.Range(0, Math.Min(PreviewWorkers, cards.Count)).Select(_ => Worker()));
+            if (!token.IsCancellationRequested)
+            {
+                AppLog.Info("History", $"历史图库缩略图后台加载完成：{cards.Count} 张 用时={stopwatch.ElapsedMilliseconds}ms");
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn("History", $"历史图库缩略图后台加载失败：{ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    /// <summary>作废还在后台读的缩略图（列表重建 / 窗口关闭）。</summary>
+    private void CancelPreviewLoad()
+    {
+        _previewLoadCts.Cancel();
+        _previewLoadCts = new CancellationTokenSource();
+    }
+
+    private HistoryCard CreateCard(
+        HistoryRecord record,
+        int index,
+        System.Windows.Media.Imaging.BitmapSource? preview,
+        bool loadingPreview = false)
+    {
+        var card = new HistoryCard(record, index, preview, BuildCallbacks(), loadingPreview);
         card.SetDoubleClickPreview(OpenPreview);
         card.SetClickSelect(SelectCard);
         card.SetCheckedChanged(OnCardCheckedChanged);
@@ -1453,6 +1532,10 @@ public sealed class HistoryGalleryWindow : Window
         _searchTimer.Stop();
         ThemeManager.Changed -= OnThemeChanged;
         StringsUi.Changed -= OnLanguageChanged;
+
+        // 托盘常驻期间不留缩略图：作废后台读取并清空内存缓存。
+        CancelPreviewLoad();
+        _store.ClearPreviewCache();
 
         // T28：图库关闭时一并关闭编辑窗口（未保存就等于取消，原图不动）。
         if (Edit is { } edit)

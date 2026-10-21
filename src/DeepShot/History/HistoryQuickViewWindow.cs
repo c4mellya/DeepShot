@@ -364,19 +364,22 @@ internal sealed class HistoryQuickViewWindow : Window
     {
         _thumbnails.Children.Clear();
         _thumbnailBorders.Clear();
+        // Cached previews show immediately; the rest decode off the UI thread so the flyout opens without waiting.
+        var pending = new List<(HistoryRecord Record, Image Picture)>();
         for (var i = 0; i < _records.Count; i++)
         {
             var index = i;
             var record = _records[i];
-            var preview = _store.TryLoadPreview(record);
+            var picture = new Image { Source = _store.TryGetCachedPreview(record), Stretch = Stretch.UniformToFill, IsHitTestVisible = false, Clip = new RectangleGeometry(new Rect(0, 0, 54, 40), 6, 6) };
+            if (picture.Source is null) pending.Add((record, picture));
             var border = new Border
             {
                 Width = 62, Height = 48, Padding = new Thickness(2), CornerRadius = new CornerRadius(9),
                 Margin = new Thickness(0, 0, 6, 0), BorderThickness = new Thickness(2),
                 Cursor = Cursors.Hand, ToolTip = record.Name,
-                Child = new Image { Source = preview, Stretch = Stretch.UniformToFill, IsHitTestVisible = false, Clip = new RectangleGeometry(new Rect(0, 0, 54, 40), 6, 6) }
+                Child = picture
             };
-            RenderOptions.SetBitmapScalingMode((Image)border.Child, BitmapScalingMode.HighQuality);
+            RenderOptions.SetBitmapScalingMode(picture, BitmapScalingMode.HighQuality);
             border.SetResourceReference(Border.BackgroundProperty, HistoryUi.Keys.SurfaceAlt);
             AutomationProperties.SetName(border, record.Name);
             AutomationProperties.SetAutomationId(border, $"quick-view-thumbnail-{i}");
@@ -384,6 +387,24 @@ internal sealed class HistoryQuickViewWindow : Window
             border.MouseLeftButtonUp += (_, e) => { Select(index); e.Handled = true; };
             _thumbnailBorders.Add(border);
             _thumbnails.Children.Add(border);
+        }
+
+        if (pending.Count > 0) _ = FillThumbnailsAsync(pending);
+    }
+
+    private async Task FillThumbnailsAsync(List<(HistoryRecord Record, Image Picture)> pending)
+    {
+        try
+        {
+            await Task.WhenAll(pending.Select(async item =>
+            {
+                var preview = await _store.LoadPreviewAsync(item.Record);
+                if (!_closed) item.Picture.Source = preview;
+            }));
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn("History", $"快览缩略图后台加载失败：{ex.GetType().Name}: {ex.Message}");
         }
     }
 

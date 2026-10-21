@@ -71,8 +71,8 @@ internal static class HistoryUi
     /// <summary>字体（与 Toast/贴图一致）。</summary>
     internal const string FontFamilyName = ThemeManager.FontFamilyName;
 
-    /// <summary>字体族实例（每次新建，WPF 会做内部缓存）。</summary>
-    internal static FontFamily Font => new(FontFamilyName);
+    /// <summary>字体族实例（共用一个，避免每个控件都解析一遍字体名）。</summary>
+    internal static FontFamily Font { get; } = new(FontFamilyName);
 
     internal static SolidColorBrush Frozen(Color color)
     {

@@ -28,7 +28,16 @@ namespace DeepShot.History;
 /// </remarks>
 public sealed class HistoryStore
 {
+    /// <summary>预览缓存容量：约一页卡片（每张缩略图最长边 ≤ 640px，约 1MB）。</summary>
+    private const int PreviewCacheCapacity = 96;
+
     private readonly HistoryRepository _repository;
+    private readonly object _previewCacheLock = new();
+    private readonly object _upgradeLock = new();
+    private readonly Dictionary<Guid, LinkedListNode<PreviewCacheEntry>> _previewCache = new();
+    private readonly LinkedList<PreviewCacheEntry> _previewLru = new();
+
+    private sealed record PreviewCacheEntry(Guid Id, DateTime UpdatedAtUtc, BitmapSource Image);
 
     public HistoryStore(HistoryRepository repository)
     {
@@ -135,11 +144,103 @@ public sealed class HistoryStore
 
     /// <summary>
     /// 一条记录的预览图：优先缩略图，读不到时回退原图（缩略图可能为空或丢失）。
+    /// 命中内存缓存时不碰磁盘；会阻塞调用线程，图库列表请用 <see cref="LoadPreviewAsync"/>。
     /// </summary>
     public BitmapSource? TryLoadPreview(HistoryRecord record)
     {
         ArgumentNullException.ThrowIfNull(record);
 
+        if (TryGetCachedPreview(record) is { } cached)
+        {
+            return cached;
+        }
+
+        var preview = LoadPreviewUncached(record);
+        if (preview is not null)
+        {
+            CachePreview(record, preview);
+        }
+
+        return preview;
+    }
+
+    /// <summary>
+    /// 在线程池里读预览图并返回已冻结的位图：解码和（旧缩略图的）升级都不占 UI 线程。
+    /// 取消只影响还没开始解码的读取。
+    /// </summary>
+    public Task<BitmapSource?> LoadPreviewAsync(HistoryRecord record, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+
+        return TryGetCachedPreview(record) is { } cached
+            ? Task.FromResult<BitmapSource?>(cached)
+            : Task.Run(() => TryLoadPreview(record), cancellationToken);
+    }
+
+    /// <summary>
+    /// 只查内存缓存（不读磁盘）。键是 Id + 修改时间：覆盖编辑 / 改名 / 收藏都会刷新修改时间，旧图自然失效。
+    /// </summary>
+    public BitmapSource? TryGetCachedPreview(HistoryRecord record)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+
+        lock (_previewCacheLock)
+        {
+            if (!_previewCache.TryGetValue(record.Id, out var node))
+            {
+                return null;
+            }
+
+            if (node.Value.UpdatedAtUtc != record.UpdatedAtUtc)
+            {
+                _previewLru.Remove(node);
+                _previewCache.Remove(record.Id);
+                return null;
+            }
+
+            _previewLru.Remove(node);
+            _previewLru.AddFirst(node);
+            return node.Value.Image;
+        }
+    }
+
+    /// <summary>清空预览缓存（图库关闭时调用，托盘常驻期间不占内存）。</summary>
+    public void ClearPreviewCache()
+    {
+        lock (_previewCacheLock)
+        {
+            _previewCache.Clear();
+            _previewLru.Clear();
+        }
+    }
+
+    private void CachePreview(HistoryRecord record, BitmapSource image)
+    {
+        // 缩略图兜底回退到原图时可能是整张 4K 位图，不进缓存。
+        if (Math.Max(image.PixelWidth, image.PixelHeight) > HistoryThumbnail.MaxEdge)
+        {
+            return;
+        }
+
+        lock (_previewCacheLock)
+        {
+            if (_previewCache.Remove(record.Id, out var old))
+            {
+                _previewLru.Remove(old);
+            }
+
+            _previewCache[record.Id] = _previewLru.AddFirst(new PreviewCacheEntry(record.Id, record.UpdatedAtUtc, image));
+
+            while (_previewLru.Count > PreviewCacheCapacity && _previewLru.Last is { } last)
+            {
+                _previewLru.RemoveLast();
+                _previewCache.Remove(last.Value.Id);
+            }
+        }
+    }
+
+    private BitmapSource? LoadPreviewUncached(HistoryRecord record)
+    {
         var thumbnail = TryLoad(record.RelativeThumbnailPath);
         if (thumbnail is not null && !NeedsSharperThumbnail(record, thumbnail))
         {
@@ -147,7 +248,17 @@ public sealed class HistoryStore
         }
 
         // 旧版本只存 320px 的缩略图，卡片里被放大就发糊：按需用原图重做一份（每条记录只做一次）。
-        return TryUpgradeThumbnail(record) ?? thumbnail ?? TryLoad(record.RelativeImagePath);
+        // 图库并发读取时同一条记录可能被两个线程同时撞到这里：串行化，并在拿到锁后重读一次，避免重复升级和 .tmp 争用。
+        lock (_upgradeLock)
+        {
+            var current = TryLoad(record.RelativeThumbnailPath);
+            if (current is not null && !NeedsSharperThumbnail(record, current))
+            {
+                return current;
+            }
+
+            return TryUpgradeThumbnail(record) ?? current ?? thumbnail ?? TryLoad(record.RelativeImagePath);
+        }
     }
 
     private static bool NeedsSharperThumbnail(HistoryRecord record, BitmapSource thumbnail)

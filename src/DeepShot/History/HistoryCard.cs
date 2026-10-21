@@ -93,11 +93,13 @@ internal sealed class HistoryCard : Border
     /// <param name="index">本页序号（用于 AutomationId 与"第 N 条"日志）。</param>
     /// <param name="preview">缩略图（可能为 null：缩略图文件丢失时显示占位）。</param>
     /// <param name="callbacks">各类操作回调。</param>
+    /// <param name="loadingPreview">缩略图正在后台读取：为 true 且 <paramref name="preview"/> 为 null 时先不显示"丢失"占位，等 <see cref="SetPreview"/>。</param>
     internal HistoryCard(
         HistoryRecord record,
         int index,
         BitmapSource? preview,
-        HistoryCardCallbacks callbacks)
+        HistoryCardCallbacks callbacks,
+        bool loadingPreview = false)
     {
         _record = record ?? throw new ArgumentNullException(nameof(record));
         _favorite = record.IsFavorite;
@@ -128,22 +130,7 @@ internal sealed class HistoryCard : Border
         };
         RenderOptions.SetBitmapScalingMode(_picture, BitmapScalingMode.HighQuality);
 
-        // 缩略图像素不够铺满卡片时，放大会发糊：改为不放大、居中显示原始像素；够用时才裁切铺满。
-        if (preview is not null)
-        {
-            Loaded += (_, _) =>
-            {
-                var scale = VisualTreeHelper.GetDpi(this).DpiScaleX;
-                var needed = Math.Max(
-                    (CardWidth - 2) * scale / preview.PixelWidth,
-                    ThumbnailHeight * scale / preview.PixelHeight);
-                if (needed > 1.15)
-                {
-                    _picture.Stretch = Stretch.Uniform;
-                    _picture.StretchDirection = StretchDirection.DownOnly;
-                }
-            };
-        }
+        Loaded += (_, _) => FitPicture();
 
         _thumbnailFrame = new Border
         {
@@ -165,21 +152,14 @@ internal sealed class HistoryCard : Border
                 Radius - 1,
                 Radius - 1);
 
-        if (preview is null)
+        if (preview is null && !loadingPreview)
         {
-            var icon = HistoryIcons.Create(HistoryIcons.Image, 28, HistoryUi.Keys.Secondary, 1.5);
-            icon.Margin = new Thickness(0, 0, 0, 6);
-            var holder = new StackPanel
-            {
-                VerticalAlignment = VerticalAlignment.Center,
-                HorizontalAlignment = HorizontalAlignment.Center,
-            };
-            holder.Children.Add(icon);
-            holder.Children.Add(HistoryUi.Text(
-                StringsUi.Get("S.History.ThumbnailMissing"),
-                12,
-                brushKey: HistoryUi.Keys.Secondary));
-            _thumbnailFrame.Child = holder;
+            _thumbnailFrame.Child = BuildMissingPlaceholder();
+        }
+        else if (preview is null)
+        {
+            // 等后台解码：先露出底色，不显示"缩略图丢失"；SetPreview 到了再淡入。
+            _picture.Opacity = 0;
         }
 
         // --- 左上角：多选复选框 + 紧随其后的来源标签（悬停浮现） ---
@@ -354,6 +334,61 @@ internal sealed class HistoryCard : Border
 
         _selectionMode = on;
         UpdateChrome();
+    }
+
+    /// <summary>
+    /// 后台读完缩略图后填进来；<paramref name="preview"/> 为 null 表示读取失败，显示"缩略图丢失"占位。
+    /// 只能在 UI 线程调用，位图必须已冻结。
+    /// </summary>
+    internal void SetPreview(BitmapSource? preview)
+    {
+        if (preview is null)
+        {
+            _thumbnailFrame.Child = BuildMissingPlaceholder();
+            return;
+        }
+
+        _picture.Source = preview;
+        _thumbnailFrame.Child = _picture;
+        FitPicture();
+        HistoryUi.Fade(_picture, OpacityProperty, 1);
+    }
+
+    /// <summary>
+    /// 缩略图像素不够铺满卡片时，放大会发糊：改为不放大、居中显示原始像素；够用时才裁切铺满。
+    /// 需要已经在可视树里（要读 DPI）；没有图时什么也不做。
+    /// </summary>
+    private void FitPicture()
+    {
+        if (_picture.Source is not BitmapSource preview || !IsLoaded)
+        {
+            return;
+        }
+
+        var scale = VisualTreeHelper.GetDpi(this).DpiScaleX;
+        var needed = Math.Max(
+            (CardWidth - 2) * scale / preview.PixelWidth,
+            ThumbnailHeight * scale / preview.PixelHeight);
+        var upscaled = needed > 1.15;
+        _picture.Stretch = upscaled ? Stretch.Uniform : Stretch.UniformToFill;
+        _picture.StretchDirection = upscaled ? StretchDirection.DownOnly : StretchDirection.Both;
+    }
+
+    private static StackPanel BuildMissingPlaceholder()
+    {
+        var icon = HistoryIcons.Create(HistoryIcons.Image, 28, HistoryUi.Keys.Secondary, 1.5);
+        icon.Margin = new Thickness(0, 0, 0, 6);
+        var holder = new StackPanel
+        {
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
+        holder.Children.Add(icon);
+        holder.Children.Add(HistoryUi.Text(
+            StringsUi.Get("S.History.ThumbnailMissing"),
+            12,
+            brushKey: HistoryUi.Keys.Secondary));
+        return holder;
     }
 
     /// <summary>收藏状态变化后更新星标（不重建控件，避免丢失焦点）。</summary>

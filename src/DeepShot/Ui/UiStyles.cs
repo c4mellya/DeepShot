@@ -98,6 +98,8 @@ internal static class UiStyles
               <Border x:Name="Track" CornerRadius="12" BorderThickness="1"
                       Background="{DynamicResource Theme.SurfaceAlt}"
                       BorderBrush="{DynamicResource Theme.Border}" />
+              <Border x:Name="FocusRing" CornerRadius="15" Margin="-3" BorderThickness="2" Opacity="0"
+                      IsHitTestVisible="False" BorderBrush="{DynamicResource Theme.Accent}" />
               <Ellipse x:Name="Thumb" Width="16" Height="16" HorizontalAlignment="Left" Margin="4,0,0,0"
                        Fill="{DynamicResource Theme.SecondaryForeground}">
                 <Ellipse.RenderTransform>
@@ -139,6 +141,9 @@ internal static class UiStyles
             </Trigger>
             <Trigger Property="IsMouseOver" Value="True">
               <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource Theme.Accent}" />
+            </Trigger>
+            <Trigger Property="IsKeyboardFocused" Value="True">
+              <Setter TargetName="FocusRing" Property="Opacity" Value="0.55" />
             </Trigger>
             <Trigger Property="IsEnabled" Value="False">
               <Setter Property="Opacity" Value="0.45" />
@@ -249,6 +254,8 @@ internal static class UiStyles
                 </ControlTemplate>
               </ToggleButton.Template>
             </ToggleButton>
+            <Border x:Name="FocusRing" CornerRadius="8" BorderThickness="2" Opacity="0" IsHitTestVisible="False"
+                    BorderBrush="{DynamicResource Theme.Accent}" />
             <ContentPresenter Margin="{TemplateBinding Padding}" IsHitTestVisible="False"
                               HorizontalAlignment="Left" VerticalAlignment="Center"
                               Content="{TemplateBinding SelectionBoxItem}"
@@ -269,6 +276,9 @@ internal static class UiStyles
             </Popup>
           </Grid>
           <ControlTemplate.Triggers>
+            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+              <Setter TargetName="FocusRing" Property="Opacity" Value="0.55" />
+            </Trigger>
             <Trigger Property="IsEnabled" Value="False">
               <Setter Property="Opacity" Value="0.5" />
             </Trigger>
