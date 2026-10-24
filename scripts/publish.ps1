@@ -33,7 +33,5 @@ if ($InnoCompiler) {
     Write-Warning 'Inno Setup was not found. ZIP is available; pass -InnoCompiler to build the installer.'
 }
 Get-ChildItem -LiteralPath $release -File | Where-Object { $_.Extension -in @('.zip', '.exe') } | ForEach-Object {
-    $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-    "$hash  $($_.Name)" | Set-Content -LiteralPath ($_.FullName + '.sha256') -Encoding ASCII
     Write-Host "RELEASE: $($_.FullName) ($($_.Length) bytes)"
 }

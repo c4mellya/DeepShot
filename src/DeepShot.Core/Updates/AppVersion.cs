@@ -14,8 +14,8 @@ namespace DeepShot.Core.Updates;
 /// </para>
 /// <para>
 /// <b>接受的写法</b>：可选前缀 <c>v</c>/<c>V</c>；1–4 段数字（<c>0.2</c> = <c>0.2.0.0</c>）；
-/// 可选的预发布后缀 <c>-beta</c>、<c>-beta.2</c>（点/连字符分隔的字母数字段）。空段、非数字、
-/// 负数、超过 4 段都视为非法。
+/// 可选的预发布后缀 <c>-beta</c>、<c>-beta.2</c>（点分隔的字母数字/连字符段），以及不参与比较的
+/// 构建元数据 <c>+build.1</c>。空段、非数字的版本主体、负数、超过 4 段都视为非法。
 /// </para>
 /// <para>
 /// <b>比较规则</b>：先逐段比较数字（缺的段按 0，所以 <c>0.2</c> == <c>0.2.0.0</c>）；
@@ -78,6 +78,21 @@ public readonly record struct AppVersion : IComparable<AppVersion>, IComparable
             raw = raw[1..].TrimStart();
         }
 
+        // SemVer 构建元数据（例如 +commit）不参与版本优先级比较。
+        var plus = raw.IndexOf('+', StringComparison.Ordinal);
+        if (plus >= 0)
+        {
+            var metadata = raw[(plus + 1)..];
+            if (metadata.Split('.').Any(part => part.Length == 0 ||
+                    !part.All(c => char.IsAsciiLetterOrDigit(c) || c == '-')))
+            {
+                error = $"版本号“{text}”的构建元数据无效。";
+                return false;
+            }
+
+            raw = raw[..plus];
+        }
+
         // 预发布后缀：第一个 '-' 之后的部分（'0.2.0-beta.2' → core='0.2.0', pre='beta.2'）。
         string? preRelease = null;
         var dash = raw.IndexOf('-', StringComparison.Ordinal);
@@ -93,9 +108,9 @@ public readonly record struct AppVersion : IComparable<AppVersion>, IComparable
 
             foreach (var part in preRelease.Split('.', StringSplitOptions.None))
             {
-                if (part.Length == 0 || !part.All(char.IsAsciiLetterOrDigit))
+                if (part.Length == 0 || !part.All(c => char.IsAsciiLetterOrDigit(c) || c == '-'))
                 {
-                    error = $"版本号“{text}”的预发布标识“{preRelease}”无效（只允许字母、数字与点）。";
+                    error = $"版本号“{text}”的预发布标识“{preRelease}”无效（只允许字母、数字、连字符与点）。";
                     return false;
                 }
             }
@@ -231,8 +246,8 @@ public readonly record struct AppVersion : IComparable<AppVersion>, IComparable
     /// <summary>比较两个预发布标识（都非空）：按分隔段逐位比，数字段按数值、字母段按序数。</summary>
     private static int ComparePreRelease(string left, string right)
     {
-        var leftParts = left.Split('.', '-', '_');
-        var rightParts = right.Split('.', '-', '_');
+        var leftParts = left.Split('.');
+        var rightParts = right.Split('.');
         var count = Math.Min(leftParts.Length, rightParts.Length);
 
         for (var i = 0; i < count; i++)

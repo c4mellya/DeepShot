@@ -171,6 +171,8 @@ public static class ThemeManager
         public const string Accent = "Theme.Accent";
         public const string OnAccent = "Theme.OnAccent";
         public const string HoverBackground = "Theme.HoverBackground";
+        public const string AccentHover = "Theme.AccentHover";
+        public const string AccentSoft = "Theme.AccentSoft";
         public const string Error = "Theme.Error";
         public const string Success = "Theme.Success";
         public const string Warning = "Theme.Warning";
@@ -198,9 +200,6 @@ public static class ThemeManager
 
     /// <summary>字体族资源键（<see cref="System.Windows.Media.FontFamily"/>）。</summary>
     public const string FontFamilyKey = "Theme.FontFamily";
-
-    /// <summary>全应用统一的字体族（中英文都用它；缺中文字形时 WPF 会自动回退）。</summary>
-    public const string FontFamilyName = "Segoe UI";
 
     private static readonly object Gate = new();
     private static ResourceDictionary? _dynamic;
@@ -243,7 +242,7 @@ public static class ThemeManager
                 _dynamic[RadiusKeys.Large] = ThemePalette.Light.RadiusLarge;
                 _dynamic[RadiusKeys.Medium] = ThemePalette.Light.RadiusMedium;
                 _dynamic[RadiusKeys.Small] = ThemePalette.Light.RadiusSmall;
-                _dynamic[FontFamilyKey] = new System.Windows.Media.FontFamily(FontFamilyName);
+                _dynamic[FontFamilyKey] = AppFonts.Family;
 
                 if (application is not null)
                 {
@@ -318,6 +317,8 @@ public static class ThemeManager
         BrushKeys.Accent => nameof(ThemePalette.Accent),
         BrushKeys.OnAccent => nameof(ThemePalette.OnAccent),
         BrushKeys.HoverBackground => nameof(ThemePalette.HoverBackground),
+        BrushKeys.AccentHover => nameof(ThemePalette.AccentHover),
+        BrushKeys.AccentSoft => nameof(ThemePalette.AccentSoft),
         BrushKeys.Error => nameof(ThemePalette.Error),
         BrushKeys.Success => nameof(ThemePalette.Success),
         BrushKeys.Warning => nameof(ThemePalette.Warning),
@@ -348,6 +349,8 @@ public static class ThemeManager
         BrushKeys.Accent,
         BrushKeys.OnAccent,
         BrushKeys.HoverBackground,
+        BrushKeys.AccentHover,
+        BrushKeys.AccentSoft,
         BrushKeys.Error,
         BrushKeys.Success,
         BrushKeys.Warning,

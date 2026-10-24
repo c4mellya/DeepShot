@@ -1,0 +1,16 @@
+MiSans 字体声明 / MiSans Font Notice
+====================================
+
+DeepShot 界面内嵌小米 MiSans 字体（MiSans-Regular.ttf、MiSans-Semibold.ttf），
+文件未经任何修改，仅作为程序界面显示字体使用，不单独分发、出售或再授权。
+
+DeepShot embeds the MiSans typeface by Xiaomi (MiSans-Regular.ttf, MiSans-Semibold.ttf).
+The font files are unmodified and are used solely to render the application's user
+interface; they are not distributed, sold or sublicensed as standalone fonts.
+
+Copyright (c) 2020-2025 Beijing Xiaomi Mobile Software Co.,Ltd. All rights reserved.
+MiSans is a trademark of Xiaomi. 字体的全部知识产权归北京小米移动软件有限公司所有。
+
+使用依据 / License: 《MiSans 字体知识产权许可协议》（MiSans Font Intellectual Property
+License Agreement），允许免费商用。协议全文与字体官方下载见 / Full license text and the
+official download: https://hyperos.mi.com/font/

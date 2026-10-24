@@ -21,8 +21,8 @@ namespace DeepShot.Updates;
 /// </para>
 /// <para>
 /// <b>绝不说"已是最新版"</b>：四种结论各自有独立的标题与说明键，未配置渠道与网络失败
-/// 分别显示"尚未配置更新渠道"/"检查更新失败"，并且**只有** <see cref="UpdateStatus.UpdateAvailable"/>
-/// 才会出现"打开发布页"按钮。图标也按结论区分（信息/警告/错误），不会让失败看起来像成功。
+/// 分别显示"尚未配置更新渠道"/"检查更新失败"；成功获得发布页地址时显示"打开发布页"按钮。
+/// 图标也按结论区分（信息/警告/错误），不会让失败看起来像成功。
 /// </para>
 /// </remarks>
 internal sealed class UpdateCheckWindow : Window
@@ -52,39 +52,21 @@ internal sealed class UpdateCheckWindow : Window
         AutomationProperties.SetAutomationId(this, WindowAutomationId);
         AutomationProperties.SetName(this, Title);
 
-        // 状态徽标：淡色圆底 + 矢量图标。
+        // 状态徽标（统一走 UiKit.StatusBadge）。
         var (iconData, toneKey) = ToneFor(result.Status);
-        var tint = new Border { Width = 48, Height = 48, CornerRadius = new CornerRadius(24), Opacity = 0.16 };
-        tint.SetResourceReference(Border.BackgroundProperty, toneKey);
-        var glyph = HistoryIcons.Create(iconData, 24, toneKey, 2.0);
-        glyph.HorizontalAlignment = HorizontalAlignment.Center;
-        glyph.VerticalAlignment = VerticalAlignment.Center;
-        var badge = new Grid { Width = 48, Height = 48, VerticalAlignment = VerticalAlignment.Center };
-        badge.Children.Add(tint);
-        badge.Children.Add(glyph);
+        var badge = UiKit.StatusBadge(iconData, toneKey, 44);
+        badge.VerticalAlignment = VerticalAlignment.Center;
 
-        _title = new TextBlock
-        {
-            Text = TitleFor(result),
-            FontSize = 17,
-            FontWeight = FontWeights.SemiBold,
-            TextWrapping = TextWrapping.Wrap,
-        };
-        _title.SetResourceReference(TextBlock.ForegroundProperty, ThemeManager.BrushKeys.Foreground);
+        _title = UiKit.Text(TitleFor(result), TextRole.Title, wrap: true);
         AutomationProperties.SetAutomationId(_title, "update-check-title");
         AutomationProperties.SetName(_title, _title.Text);
 
         // 当前版本单独一行（任何结论下都要看得到"我是什么版本"）。
-        var version = new TextBlock
-        {
-            Text = StringsUi.Format("S.Update.CurrentVersion", result.CurrentVersion),
-            FontSize = 12.5,
-            Margin = new Thickness(0, 3, 0, 0),
-        };
-        version.SetResourceReference(TextBlock.ForegroundProperty, ThemeManager.BrushKeys.SecondaryForeground);
+        var version = UiKit.Text(StringsUi.Format("S.Update.CurrentVersion", result.CurrentVersion), TextRole.Caption);
+        version.Margin = new Thickness(0, Tokens.Space.XS, 0, 0);
         AutomationProperties.SetAutomationId(version, "update-check-current-version");
 
-        var titleStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(16, 0, 0, 0) };
+        var titleStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(Tokens.Space.L, 0, 0, 0) };
         titleStack.Children.Add(_title);
         titleStack.Children.Add(version);
 
@@ -96,54 +78,66 @@ internal sealed class UpdateCheckWindow : Window
         header.Children.Add(titleStack);
 
         // 只有“失败原因 / 更新说明”才有正文；其余结论标题已经说清楚，不再重复。
-        _body = new TextBlock
-        {
-            Text = BodyFor(result),
-            FontSize = 12.5,
-            TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 18, 0, 0),
-            Visibility = string.IsNullOrWhiteSpace(BodyFor(result)) ? Visibility.Collapsed : Visibility.Visible,
-        };
-        _body.SetResourceReference(TextBlock.ForegroundProperty, ThemeManager.BrushKeys.SecondaryForeground);
+        // 正文放进一块浅底圆角面板里，和标题区明确分层（更新说明可能很长，面板内滚动）。
+        var bodyText = BodyFor(result);
+        // 更新说明里的 Markdown 列表（"- " / "* "）显示成圆点；自动化名称仍是原文。
+        var displayText = result.Status == UpdateStatus.UpdateAvailable ? AsBullets(bodyText) : bodyText;
+        _body = UiKit.Text(displayText, TextRole.Body, result.Status == UpdateStatus.Failed ? ThemeManager.BrushKeys.SecondaryForeground : null, wrap: true);
+        _body.LineHeight = 21;
+        _body.Visibility = string.IsNullOrWhiteSpace(bodyText) ? Visibility.Collapsed : Visibility.Visible;
         AutomationProperties.SetAutomationId(_body, "update-check-body");
-        AutomationProperties.SetName(_body, _body.Text);
+        AutomationProperties.SetName(_body, bodyText);
+
+        var bodyScroll = new ScrollViewer
+        {
+            Content = _body,
+            MaxHeight = Math.Min(300, SystemParameters.WorkArea.Height * 0.42),
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+        };
+        var bodyPanel = new Border
+        {
+            Child = bodyScroll,
+            Padding = new Thickness(Tokens.Space.L, Tokens.Space.M, Tokens.Space.L, Tokens.Space.M),
+            CornerRadius = new CornerRadius(Tokens.Radius.Popup),
+            BorderThickness = new Thickness(1),
+            Margin = new Thickness(0, Tokens.Space.L + 2, 0, 0),
+            Visibility = _body.Visibility,
+        };
+        bodyPanel.SetResourceReference(Border.BackgroundProperty, ThemeManager.BrushKeys.SurfaceAlt);
+        bodyPanel.SetResourceReference(Border.BorderBrushProperty, ThemeManager.BrushKeys.Divider);
 
         // 仅在打开发布页失败时才出现。
-        _channel = new TextBlock
-        {
-            FontSize = 12,
-            TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 10, 0, 0),
-            Visibility = Visibility.Collapsed,
-        };
-        _channel.SetResourceReference(TextBlock.ForegroundProperty, ThemeManager.BrushKeys.Error);
+        _channel = UiKit.Text(string.Empty, TextRole.Caption, ThemeManager.BrushKeys.Error, wrap: true);
+        _channel.Margin = new Thickness(0, Tokens.Space.S + 2, 0, 0);
+        _channel.Visibility = Visibility.Collapsed;
         AutomationProperties.SetAutomationId(_channel, "update-check-channel");
 
-        _download = MakeButton(
-            StringsUi.Get("S.Update.Download"),
-            "update-check-download",
-            OpenDownloadPage,
-            primary: true);
+        var downloadText = StringsUi.Get("S.Update.Download");
+        _download = UiKit.Button(downloadText, downloadText, OpenDownloadPage, ButtonKind.Primary, "update-check-download");
+        _download.MinWidth = 88;
         _download.Visibility = result.DownloadUrl is null ? Visibility.Collapsed : Visibility.Visible;
 
-        _ok = MakeButton(StringsUi.Get("S.Update.Ok"), "update-check-ok", Close, primary: _download.Visibility != Visibility.Visible);
+        // 有"打开发布页"时它是主按钮，"知道了"退为次按钮；否则"知道了"就是主按钮。
+        var okText = StringsUi.Get("S.Update.Ok");
+        _ok = UiKit.Button(okText, okText, Close,
+            _download.Visibility == Visibility.Visible ? ButtonKind.Secondary : ButtonKind.Primary, "update-check-ok");
+        _ok.MinWidth = 88;
 
-        var buttons = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            HorizontalAlignment = HorizontalAlignment.Right,
-            Margin = new Thickness(0, 22, 0, 0),
-        };
-        buttons.Children.Add(_ok);
-        buttons.Children.Add(_download);
+        // 内容区 + 底部操作栏（与设置窗口、提示框的底栏同款）。
+        var buttons = UiKit.ButtonBar(_ok, _download);
 
-        var stack = new StackPanel { Margin = new Thickness(28, 12, 28, 24) };
-        stack.Children.Add(header);
-        stack.Children.Add(_body);
-        stack.Children.Add(_channel);
-        stack.Children.Add(buttons);
+        var body = new StackPanel { Margin = new Thickness(Tokens.DialogPadding.Left, Tokens.DialogPadding.Top + 4, Tokens.DialogPadding.Right, Tokens.DialogPadding.Bottom) };
+        body.Children.Add(header);
+        body.Children.Add(bodyPanel);
+        body.Children.Add(_channel);
+
+        var stack = new StackPanel();
+        stack.Children.Add(body);
+        stack.Children.Add(UiKit.FooterBar(buttons));
         Content = stack;
         AppChrome.Apply(this, allowMaximize: false, allowMinimize: false);
+        AppChrome.SyncDarkTitleBar(this);
 
         // 结果不依赖语言/主题重建：对话框是一次性的，切换语言后下次检查就是新语言。
         PreviewKeyDown += (_, e) =>
@@ -205,6 +199,21 @@ internal sealed class UpdateCheckWindow : Window
         _ => StringsUi.Get("S.Update.Title"),
     };
 
+    private static string AsBullets(string text)
+    {
+        var lines = text.ReplaceLineEndings("\n").Split('\n');
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var trimmed = lines[i].TrimStart();
+            if (trimmed.StartsWith("- ", StringComparison.Ordinal) || trimmed.StartsWith("* ", StringComparison.Ordinal))
+            {
+                lines[i] = "•  " + trimmed[2..].TrimStart();
+            }
+        }
+
+        return string.Join("\n", lines);
+    }
+
     private static string BodyFor(UpdateCheckResult result) => result.Status switch
     {
         UpdateStatus.Failed => result.Detail,
@@ -214,37 +223,10 @@ internal sealed class UpdateCheckWindow : Window
 
     private static (string Icon, string ToneKey) ToneFor(UpdateStatus status) => status switch
     {
-        UpdateStatus.NotConfigured => (HistoryIcons.Settings, ThemeManager.BrushKeys.Warning),
-        UpdateStatus.Failed => ("M12,3 L22,20 H2 Z M12,10 V14 M12,17 V17.5", ThemeManager.BrushKeys.Error),
-        UpdateStatus.UpToDate => ("M5,13 L10,18 L19,7", ThemeManager.BrushKeys.Success),
-        UpdateStatus.UpdateAvailable => (HistoryIcons.SaveAs, ThemeManager.BrushKeys.Accent),
-        _ => (HistoryIcons.Image, ThemeManager.BrushKeys.Accent),
+        UpdateStatus.NotConfigured => (AppIcons.Settings, ThemeManager.BrushKeys.Warning),
+        UpdateStatus.Failed => (AppIcons.Warning, ThemeManager.BrushKeys.Error),
+        UpdateStatus.UpToDate => (AppIcons.Check, ThemeManager.BrushKeys.Success),
+        UpdateStatus.UpdateAvailable => (AppIcons.SaveAs, ThemeManager.BrushKeys.Accent),
+        _ => (AppIcons.Image, ThemeManager.BrushKeys.Accent),
     };
-
-    private static Button MakeButton(string text, string automationId, Action onClick, bool primary)
-    {
-        var button = new Button
-        {
-            Content = text,
-            Padding = new Thickness(18, 8, 18, 8),
-            Margin = new Thickness(8, 0, 0, 0),
-            MinWidth = 88,
-            FontSize = 13,
-        };
-        if (primary)
-        {
-            button.BorderThickness = new Thickness(0);
-            button.SetResourceReference(Control.BackgroundProperty, ThemeManager.BrushKeys.Accent);
-            button.SetResourceReference(Control.ForegroundProperty, ThemeManager.BrushKeys.OnAccent);
-        }
-        else
-        {
-            button.SetResourceReference(Control.BackgroundProperty, ThemeManager.BrushKeys.SurfaceAlt);
-        }
-
-        AutomationProperties.SetAutomationId(button, automationId);
-        AutomationProperties.SetName(button, text);
-        button.Click += (_, _) => onClick();
-        return button;
-    }
 }

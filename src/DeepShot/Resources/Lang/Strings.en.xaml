@@ -154,6 +154,7 @@
     <sys:String x:Key="S.History.RenameLabel">Name</sys:String>
     <sys:String x:Key="S.History.RenameInputName">History record name</sys:String>
     <sys:String x:Key="S.History.RenameHint">Cannot contain \ / : * ? " &lt; &gt; | (replaced with _).</sys:String>
+    <sys:String x:Key="S.History.RenameEmpty">Name can’t be empty.</sys:String>
     <sys:String x:Key="S.History.RenameOk">OK</sys:String>
     <sys:String x:Key="S.History.RenameCancel">Cancel</sys:String>
     <sys:String x:Key="S.History.RenameCancelled">Rename cancelled.</sys:String>
@@ -277,12 +278,19 @@
     <sys:String x:Key="S.Settings.Data.History">History DB: {0}</sys:String>
     <sys:String x:Key="S.Settings.Data.Counts">{0} records · {1} images</sys:String>
     <sys:String x:Key="S.Settings.Section.Retention">History retention</sys:String>
+    <sys:String x:Key="S.Settings.Retention.Days">History retention days</sys:String>
+    <sys:String x:Key="S.Settings.Retention.Hint">{0}–{1} days. Press Enter or leave the field to save. Used at next startup or daily cleanup.</sys:String>
+    <sys:String x:Key="S.Settings.Retention.Invalid">Enter a whole number from {0} to {1}. The current retention rule has not changed.</sys:String>
+    <sys:String x:Key="S.Settings.Retention.Saved">Retention set to {0} days. The new rule will be used at next startup or daily cleanup.</sys:String>
     <sys:String x:Key="S.Settings.Section.Update">Check for updates</sys:String>
     <sys:String x:Key="S.Settings.Saved">Settings saved.</sys:String>
     <sys:String x:Key="S.Settings.SaveFailed">Saving settings failed: {0}</sys:String>
     <sys:String x:Key="S.Settings.SavePath">Settings file: {0}</sys:String>
     <sys:String x:Key="S.Settings.Close">Close</sys:String>
     <sys:String x:Key="S.Settings.Version">Version {0}</sys:String>
+    <sys:String x:Key="S.Settings.Section.About">About</sys:String>
+    <sys:String x:Key="S.Settings.About.Font">Chinese font: MiSans by Xiaomi</sys:String>
+    <sys:String x:Key="S.Settings.About.FontLicense">Used under the MiSans free commercial license</sys:String>
 
     <!-- ===== Check for updates ===== -->
     <sys:String x:Key="S.Update.Title">Check for updates</sys:String>
@@ -355,4 +363,8 @@
     <sys:String x:Key="S.QuickView.Shortcut">Quick-view shortcut</sys:String>
     <sys:String x:Key="S.QuickView.ClearShortcut">Clear</sys:String>
     <sys:String x:Key="S.QuickView.ShortcutDisabled">Not set</sys:String>
+    <sys:String x:Key="S.QuickView.EmptyHint">Captures you take will show up here.</sys:String>
+    <sys:String x:Key="S.History.ZoomIn">Zoom in</sys:String>
+    <sys:String x:Key="S.History.ZoomOut">Zoom out</sys:String>
+    <sys:String x:Key="S.History.PreviewDetails">{0}×{1} px · {2} · {3}</sys:String>
 </ResourceDictionary>

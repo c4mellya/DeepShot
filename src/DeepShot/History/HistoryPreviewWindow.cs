@@ -32,10 +32,14 @@ internal sealed class HistoryPreviewWindow : Window
     private const double MinZoom = 0.1;
     private const double MaxZoom = 4.0;
 
+    /// <summary>图片四周留白；底部额外让出悬浮工具条（约 42px）+ 间距。</summary>
+    private static readonly Thickness StagePadding = new(32, 28, 32, 88);
+
     private readonly BitmapSource _image;
     private readonly HistoryRecord _record;
     private readonly Image _picture;
     private readonly ScrollViewer _scroll;
+    private readonly TextBlock _title;
     private readonly TextBlock _status;
     private readonly Dictionary<string, Button> _buttons = new();
     private double _zoom = 1.0;
@@ -63,8 +67,8 @@ internal sealed class HistoryPreviewWindow : Window
         MinHeight = 320;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         ShowInTaskbar = false;
-        SetResourceReference(BackgroundProperty, HistoryUi.Keys.Window);
-        FontFamily = new FontFamily(HistoryUi.FontFamilyName);
+        SetResourceReference(BackgroundProperty, UiKit.Keys.Window);
+        SetResourceReference(FontFamilyProperty, ThemeManager.FontFamilyKey);
         AutomationProperties.SetAutomationId(this, "history-preview-window");
 
         _picture = new Image
@@ -81,75 +85,58 @@ internal sealed class HistoryPreviewWindow : Window
         _picture.ToolTip = StringsUi.Get("S.History.DragHint");
         HistoryImageDrag.Attach(_picture, source => onDrag(_record, source));
 
+        // 图片垫一块带投影的底板 + 1px 细描边：像一张"放在桌面上的照片"，深色截图在深色底上也有边界。
+        var stage = UiKit.Elevated(_picture, cornerRadius: 2, outline: true, blur: 28, depth: 8, opacity: 0.18);
+        // 留白放在内容的 Margin 上而不是 ScrollViewer.Padding：后者在视口外圈，放大后图片会被提前裁掉。
+        stage.Margin = StagePadding;
+
         // 滚轮 = 缩放（"适应窗口/实际大小"是按钮，不抢滚轮）；ESC 关窗。
+        // 底部多留出悬浮工具条的高度，图片居中时不会被工具条压住。
         _scroll = new ScrollViewer
         {
-            Content = _picture,
+            Content = stage,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            Padding = new Thickness(16),
         };
-        _scroll.SetResourceReference(Control.BackgroundProperty, HistoryUi.Keys.SurfaceAlt);
+        _scroll.SetResourceReference(Control.BackgroundProperty, UiKit.Keys.SurfaceAlt);
+        UiKit.QuietScrollCorner(_scroll);
         _scroll.PreviewMouseWheel += OnPreviewMouseWheel;
 
-        // --- 顶部：记录信息条 ---
-        _status = HistoryUi.Text(DescribeRecord(), 12.5, brushKey: HistoryUi.Keys.Secondary);
-        _status.HorizontalAlignment = HorizontalAlignment.Left;
+        // --- 顶部：记录名称（强调）+ 尺寸 / 时间 / 来源（次要） ---
+        _title = UiKit.Text(_record.Name, TextRole.BodyStrong);
+        _title.ToolTip = _record.Name;
+        _status = UiKit.Text(DescribeRecord(), TextRole.Caption);
         AutomationProperties.SetAutomationId(_status, "history-preview-meta");
 
-        var infoBar = new Border
-        {
-            Padding = new Thickness(20, 12, 20, 12),
-            BorderThickness = new Thickness(0, 0, 0, 1),
-            Child = _status,
-        };
-        infoBar.SetResourceReference(Border.BackgroundProperty, HistoryUi.Keys.Surface);
-        infoBar.SetResourceReference(Border.BorderBrushProperty, HistoryUi.Keys.Divider);
+        // 与标注编辑窗口同一套顶栏（徽标 + 标题 + 说明行）。
+        var infoBar = UiKit.ViewerHeader(AppIcons.Image, _title, _status);
 
-        // --- 底部：居中的幽灵按钮工具条（缩放 | 尺寸 | 复制/贴图） ---
-        var copy = Track("copy", HistoryUi.GhostButton(StringsUi.Get("S.Common.Copy"), HistoryIcons.Copy, "预览复制", () => onCopy(_record)));
-        var pin = Track("pin", HistoryUi.GhostButton(StringsUi.Get("S.Common.Pin"), HistoryIcons.Pin, "预览贴图", () => onPin(_record)));
-        var fit = Track("fit", HistoryUi.GhostButton(StringsUi.Get("S.History.PreviewFit"), HistoryIcons.Fit, "预览适应窗口", FitToWindow));
+        // --- 底部：浮在图片上的工具条（缩小 · 百分比=1:1 · 放大 · 适应 | 复制 · 贴图） ---
+        var zoomOut = Track("zoom-out", UiKit.IconButton(AppIcons.ZoomOut, "预览缩小", StringsUi.Get("S.History.ZoomOut"), () => SetZoom(_zoom / 1.2)));
         var actual = Track(
             "actual",
-            HistoryUi.GhostButton(StringsUi.Get("S.History.PreviewActualSize"), HistoryIcons.ActualSize, "预览实际大小", () => SetZoom(1.0)));
+            UiKit.ZoomButton("预览实际大小", StringsUi.Get("S.History.PreviewActualSize"), () => SetZoom(1.0), _zoom));
+        var zoomIn = Track("zoom-in", UiKit.IconButton(AppIcons.ZoomIn, "预览放大", StringsUi.Get("S.History.ZoomIn"), () => SetZoom(_zoom * 1.2)));
+        var fit = Track("fit", UiKit.IconButton(AppIcons.Fit, "预览适应窗口", StringsUi.Get("S.History.PreviewFit"), FitToWindow));
+        var copy = Track("copy", UiKit.GhostButton(StringsUi.Get("S.Common.Copy"), AppIcons.Copy, "预览复制", () => onCopy(_record)));
+        var pin = Track("pin", UiKit.GhostButton(StringsUi.Get("S.Common.Pin"), AppIcons.Pin, "预览贴图", () => onPin(_record)));
+        copy.Height = pin.Height = Tokens.Height.Compact + Tokens.Space.XS;
 
-        var zoomOut = Track("zoom-out", HistoryUi.IconButton(HistoryIcons.ZoomOut, "预览缩小", "－", () => SetZoom(_zoom / 1.2), 30));
-        var zoomIn = Track("zoom-in", HistoryUi.IconButton(HistoryIcons.ZoomIn, "预览放大", "＋", () => SetZoom(_zoom * 1.2), 30));
+        var toolbar = UiKit.FloatingBar(zoomOut, actual, zoomIn, fit, UiKit.ToolbarSeparator(), copy, pin);
+        toolbar.Margin = new Thickness(Tokens.Space.L, 0, Tokens.Space.L, Tokens.Space.L + 4);
+        AutomationProperties.SetAutomationId(toolbar, "history-preview-toolbar");
 
-        var bar = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            HorizontalAlignment = HorizontalAlignment.Center,
-        };
-        bar.Children.Add(zoomOut);
-        bar.Children.Add(zoomIn);
-        bar.Children.Add(HistoryUi.VerticalSeparator());
-        bar.Children.Add(actual);
-        bar.Children.Add(fit);
-        bar.Children.Add(HistoryUi.VerticalSeparator());
-        bar.Children.Add(copy);
-        bar.Children.Add(pin);
-
-        var toolbar = new Border
-        {
-            Padding = new Thickness(16, 10, 16, 10),
-            BorderThickness = new Thickness(0, 1, 0, 0),
-            Child = bar,
-        };
-        toolbar.SetResourceReference(Border.BackgroundProperty, HistoryUi.Keys.Surface);
-        toolbar.SetResourceReference(Border.BorderBrushProperty, HistoryUi.Keys.Divider);
+        var stageHost = new Grid();
+        stageHost.Children.Add(_scroll);
+        stageHost.Children.Add(toolbar);
 
         var grid = new Grid();
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         Grid.SetRow(infoBar, 0);
-        Grid.SetRow(_scroll, 1);
-        Grid.SetRow(toolbar, 2);
+        Grid.SetRow(stageHost, 1);
         grid.Children.Add(infoBar);
-        grid.Children.Add(_scroll);
-        grid.Children.Add(toolbar);
+        grid.Children.Add(stageHost);
         Content = grid;
         AppChrome.Apply(this);
 
@@ -190,13 +177,11 @@ internal sealed class HistoryPreviewWindow : Window
     internal double Zoom => _zoom;
 
     private string DescribeRecord() => StringsUi.Format(
-        "S.History.PreviewMeta",
-        _record.Name,
+        "S.History.PreviewDetails",
         _record.Width,
         _record.Height,
         _record.CreatedAtLocal.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
-        HistoryCard.DescribeSource(_record.Source),
-        Math.Round(_zoom * 100, 0).ToString(CultureInfo.InvariantCulture));
+        HistoryCard.DescribeSource(_record.Source));
 
     private Button Track(string key, Button button)
     {
@@ -211,14 +196,16 @@ internal sealed class HistoryPreviewWindow : Window
         AppLog.Info("History", $"历史预览已按新主题刷新：{effective}");
     }
 
-    /// <summary>语言切换：换标题、按钮与元数据行（缩放比例保持）。</summary>
+    /// <summary>语言切换：换标题、按钮文字/提示与元数据行（缩放比例保持）。</summary>
     private void OnLanguageChanged(AppLanguage language)
     {
         Title = StringsUi.Format("S.History.PreviewTitle", _record.Name);
-        HistoryUi.SetButtonText(_buttons["copy"], StringsUi.Get("S.Common.Copy"));
-        HistoryUi.SetButtonText(_buttons["pin"], StringsUi.Get("S.Common.Pin"));
-        HistoryUi.SetButtonText(_buttons["fit"], StringsUi.Get("S.History.PreviewFit"));
-        HistoryUi.SetButtonText(_buttons["actual"], StringsUi.Get("S.History.PreviewActualSize"));
+        UiKit.SetButtonText(_buttons["copy"], StringsUi.Get("S.Common.Copy"));
+        UiKit.SetButtonText(_buttons["pin"], StringsUi.Get("S.Common.Pin"));
+        _buttons["fit"].ToolTip = StringsUi.Get("S.History.PreviewFit");
+        _buttons["actual"].ToolTip = StringsUi.Get("S.History.PreviewActualSize");
+        _buttons["zoom-out"].ToolTip = StringsUi.Get("S.History.ZoomOut");
+        _buttons["zoom-in"].ToolTip = StringsUi.Get("S.History.ZoomIn");
         _status.Text = DescribeRecord();
         AppLog.Info("History", $"历史预览已按新语言刷新：{language}");
     }
@@ -233,7 +220,7 @@ internal sealed class HistoryPreviewWindow : Window
     {
         _zoom = Math.Clamp(zoom, MinZoom, MaxZoom);
         _picture.LayoutTransform = new ScaleTransform(_zoom, _zoom);
-        _status.Text = DescribeRecord();
+        UiKit.SetButtonText(_buttons["actual"], UiKit.FormatZoom(_zoom));
         AppLog.Info(
             "History",
             $"历史预览缩放：名称={_record.Name} 缩放={Math.Round(_zoom, 3)} （{_image.PixelWidth}×{_image.PixelHeight}）");
@@ -242,8 +229,9 @@ internal sealed class HistoryPreviewWindow : Window
     /// <summary>缩放到刚好看得下整张图（预览窗口很小或图很大时用）。</summary>
     private void FitToWindow()
     {
-        var available = _scroll.ActualWidth - 24;
-        var availableHeight = _scroll.ActualHeight - 24;
+        // 可用区域 = 滚动区减去四周留白（含给悬浮工具条让出的底部空间）。
+        var available = _scroll.ActualWidth - StagePadding.Left - StagePadding.Right;
+        var availableHeight = _scroll.ActualHeight - StagePadding.Top - StagePadding.Bottom;
         if (available <= 0 || availableHeight <= 0)
         {
             return;

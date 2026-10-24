@@ -4,6 +4,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using DeepShot.Core.Annotations;
 using DeepShot.Core.Geometry;
+using DeepShot.Ui;
 
 namespace DeepShot.Editor;
 
@@ -191,7 +192,7 @@ internal static class AnnotationRenderer
             annotation.Text,
             CultureInfo.CurrentUICulture,
             FlowDirection.LeftToRight,
-            new Typeface("Segoe UI"),
+            AppFonts.Typeface,
             annotation.FontSize,
             CreateBrush(annotation.Color),
             Math.Max(0.1, pixelsPerDip));

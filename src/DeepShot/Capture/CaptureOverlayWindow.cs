@@ -53,22 +53,26 @@ public sealed class CaptureOverlayWindow : Window
 {
     private const double HighlightStrokeThickness = 3;
     private const double SelectionStrokeThickness = 1;
-    private const double HandleSize = 8;
+    private const double HandleSize = 10;
     private const double HandleStrokeThickness = 1;
     private const double LayoutGap = 8;
-    private const double BadgeGap = 6;
+    private const double BadgeGap = 8;
     private const int SelectionMinimumSize = 4;
     private const int SelectionHandleTolerance = 6;
 
+    /// <summary>
+    /// 选区手柄命中容差（物理像素）：至少盖住画出来的手柄半径（HandleSize/2 DIP 按 DPI 换算）再留 2px 余量，
+    /// 高 DPI 下手柄的内侧外圈也能抓到；不低于 <see cref="SelectionHandleTolerance"/>。
+    /// </summary>
+    private static int SelectionHandleToleranceFor(int dpi) =>
+        Math.Max(SelectionHandleTolerance, (int)Math.Ceiling(HandleSize / 2 * dpi / 96.0) + 2);
+
+    /// <summary>选区外压暗（45% 黑）：任何背景上都能看清选区边界，又不至于看不清被压暗的内容。</summary>
     private static readonly Color DimColor = Color.FromArgb(0x73, 0x00, 0x00, 0x00);
-    private static readonly Color HoverStrokeColor = Color.FromRgb(0x00, 0xA2, 0xFF);
-    private static readonly Color StatusErrorColor = Color.FromRgb(0xFF, 0xA0, 0x80);
-    private static readonly Color StatusInfoColor = Color.FromRgb(0xB8, 0xD8, 0xB8);
-    private static readonly Color EditorOutlineColor = Color.FromRgb(0x00, 0xC8, 0xFF);
 
     /// <summary>选中态虚线框线宽（DIP）与手柄边长（DIP）。</summary>
     private const double EditorOutlineThickness = 1.5;
-    private const double EditorHandleSize = 7;
+    private const double EditorHandleSize = 8;
 
     /// <summary>手柄命中半径与文档命中容差（物理像素）。</summary>
     private const int EditorHandleRadius = 8;
@@ -120,10 +124,6 @@ public sealed class CaptureOverlayWindow : Window
     private Border? _textEditorHost;
     private TextBox? _textEditor;
 
-    private readonly SolidColorBrush _selectionStroke = CreateFrozenBrush(Color.FromRgb(0x4A, 0x90, 0xF8));
-    private readonly SolidColorBrush _hoverStroke = CreateFrozenBrush(HoverStrokeColor);
-    private readonly SolidColorBrush _statusErrorBrush = CreateFrozenBrush(StatusErrorColor);
-    private readonly SolidColorBrush _statusInfoBrush = CreateFrozenBrush(StatusInfoColor);
 
     private bool _annotationPointerDown;
 
@@ -183,7 +183,7 @@ public sealed class CaptureOverlayWindow : Window
         _selection = new SelectionController(
             capture.Bounds,
             SelectionMinimumSize,
-            SelectionHandleTolerance);
+            SelectionHandleToleranceFor(capture.Dpi));
         _selection.SetWindowCandidates(candidates.Select(candidate => candidate.Bounds));
 
         Title = StringsUi.Get("S.Overlay.WindowTitle");
@@ -209,41 +209,25 @@ public sealed class CaptureOverlayWindow : Window
         // --- 视觉层：压暗、边框、手柄、尺寸标签，全部不参与命中测试。 ---
         _dim = new Path
         {
-            Fill = CreateFrozenBrush(DimColor),
+            Fill = UiKit.Frozen(DimColor),
             IsHitTestVisible = false,
             Stretch = Stretch.None,
         };
 
+        // 选区框与手柄用主题强调色（资源引用只设一次；悬停窗口与选区只换线宽，逐帧路径上不换画刷）。
         _border = new Rectangle
         {
-            Stroke = _selectionStroke,
             StrokeThickness = SelectionStrokeThickness,
             Visibility = Visibility.Collapsed,
             IsHitTestVisible = false,
         };
+        _border.SetResourceReference(Shape.StrokeProperty, UiKit.Keys.Accent);
 
         var visualLayer = new Canvas { IsHitTestVisible = false };
 
-        _sizeBadgeText = new TextBlock
-        {
-            Foreground = Brushes.White,
-            FontSize = 12,
-            FontWeight = FontWeights.Medium,
-            FontFamily = new FontFamily("Segoe UI"),
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-
-        _sizeBadge = new Border
-        {
-            Background = CreateFrozenBrush(Color.FromArgb(0xE6, 0x1B, 0x1C, 0x21)),
-            BorderBrush = CreateFrozenBrush(Color.FromArgb(0x2E, 0xFF, 0xFF, 0xFF)),
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(7),
-            Padding = new Thickness(8, 3, 8, 3),
-            Child = _sizeBadgeText,
-            Visibility = Visibility.Collapsed,
-            IsHitTestVisible = false,
-        };
+        _sizeBadgeText = OverlayChrome.BadgeText();
+        _sizeBadge = OverlayChrome.Badge(_sizeBadgeText);
+        _sizeBadge.Visibility = Visibility.Collapsed;
 
         visualLayer.Children.Add(_border);
         visualLayer.Children.Add(_sizeBadge);
@@ -261,37 +245,27 @@ public sealed class CaptureOverlayWindow : Window
         };
 
         // --- 交互层：工具栏按钮必须能被点到。 ---
+        // 字号/颜色/字重由 OverlayChrome.StyleSizeText 统一（CreateToolbar 里套用）。
         _toolbarSizeText = new TextBlock
         {
-            Foreground = Brushes.White,
-            FontSize = 13,
-            FontWeight = FontWeights.SemiBold,
-            FontFamily = new FontFamily("Segoe UI"),
             VerticalAlignment = VerticalAlignment.Center,
-            MinWidth = 76,
         };
 
         // 输出动作的内联提示（成功不提示，失败/取消保存时显示），不抢键盘焦点。
         _statusText = new TextBlock
         {
-            Foreground = _statusErrorBrush,
-            FontSize = 12,
-            FontFamily = new FontFamily("Segoe UI"),
+            Foreground = OverlayChrome.StatusErrorBrush,
+            FontSize = Tokens.Text.Caption,
+            FontWeight = AppFonts.Regular,
             VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(10, 0, 0, 0),
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            Margin = new Thickness(Tokens.Space.S, 0, 0, 0),
             Visibility = Visibility.Collapsed,
         };
+        _statusText.SetResourceReference(TextBlock.FontFamilyProperty, ThemeManager.FontFamilyKey);
 
         // --- T16 选中态层：虚线框 + 手柄，画在标注之上、工具栏之下，不参与命中测试。 ---
-        _editorOutline = new Path
-        {
-            Stroke = CreateFrozenBrush(EditorOutlineColor),
-            StrokeThickness = EditorOutlineThickness,
-            StrokeDashArray = new DoubleCollection { 4, 3 },
-            StrokeDashCap = PenLineCap.Flat,
-            IsHitTestVisible = false,
-            Visibility = Visibility.Collapsed,
-        };
+        _editorOutline = OverlayChrome.EditorOutline(EditorOutlineThickness);
 
         _editorCanvas = new Canvas { IsHitTestVisible = false, ClipToBounds = true };
         _editorCanvas.Children.Add(_editorOutline);
@@ -302,17 +276,8 @@ public sealed class CaptureOverlayWindow : Window
                 continue;
             }
 
-            var element = new Rectangle
-            {
-                Width = EditorHandleSize,
-                Height = EditorHandleSize,
-                Fill = Brushes.White,
-                Stroke = CreateFrozenBrush(Color.FromArgb(0xCC, 0x10, 0x3A, 0x50)),
-                StrokeThickness = 1,
-                IsHitTestVisible = false,
-                Visibility = Visibility.Collapsed,
-            };
-
+            // 标注手柄：白底 + 强调色描边的小圆角方块（与选区的圆形手柄区分开）。
+            var element = OverlayChrome.EditorHandle(EditorHandleSize);
             _editorHandles.Add((handle, element));
             _editorCanvas.Children.Add(element);
         }
@@ -1619,7 +1584,6 @@ public sealed class CaptureOverlayWindow : Window
         var thickness = isHover ? HighlightStrokeThickness : SelectionStrokeThickness;
         var inset = thickness / 2;
 
-        _border.Stroke = isHover ? _hoverStroke : _selectionStroke;
         _border.StrokeThickness = thickness;
         _border.Width = Math.Max(0, rect.Width - thickness);
         _border.Height = Math.Max(0, rect.Height - thickness);
@@ -2180,7 +2144,7 @@ public sealed class CaptureOverlayWindow : Window
         else
         {
             _statusText.Text = message;
-            _statusText.Foreground = isError ? _statusErrorBrush : _statusInfoBrush;
+            _statusText.Foreground = isError ? OverlayChrome.StatusErrorBrush : OverlayChrome.StatusInfoBrush;
             _statusText.Visibility = Visibility.Visible;
         }
 
@@ -2253,20 +2217,23 @@ public sealed class CaptureOverlayWindow : Window
             CreateToolButton("S.Annotation.Tool.Text", AnnotationTool.Text, "text", OverlayChrome.IconText),
             CreateToolButton("S.Annotation.Tool.Mosaic", AnnotationTool.Mosaic, "mosaic", OverlayChrome.IconMosaic, filled: true));
 
-        var colorRow = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-        foreach (var color in AnnotationPalette.Colors)
-        {
-            colorRow.Children.Add(CreateColorSwatch(color));
-        }
+        // 颜色圆点也放进同一种分组底托，每个圆点占 32×32 的格子，与工具、粗细按钮同一节奏。
+        var colorGroup = OverlayChrome.Group(
+            AnnotationPalette.Colors.Select(color =>
+            {
+                var swatch = CreateColorSwatch(color);
+                swatch.Margin = new Thickness(Tokens.Space.XS);
+                return (UIElement)swatch;
+            }).ToArray());
 
         var thicknessGroup = OverlayChrome.Group(
             AnnotationPalette.Thicknesses.Select(thickness => (UIElement)CreateThicknessButton(thickness)).ToArray());
 
+        // 三个分组之间只留间距：底托本身已经划清边界，不再叠分隔线。
+        colorGroup.Margin = new Thickness(Tokens.Space.S, 0, Tokens.Space.S, 0);
         var topRow = new StackPanel { Orientation = Orientation.Horizontal };
         topRow.Children.Add(toolGroup);
-        topRow.Children.Add(OverlayChrome.Divider());
-        topRow.Children.Add(colorRow);
-        topRow.Children.Add(OverlayChrome.Divider());
+        topRow.Children.Add(colorGroup);
         topRow.Children.Add(thicknessGroup);
 
         OverlayChrome.StyleSizeText(_toolbarSizeText);
@@ -2283,12 +2250,12 @@ public sealed class CaptureOverlayWindow : Window
         actions.Children.Add(CreateToolbarButton("S.Overlay.Pin", "pin", OverlayChrome.IconPin, () => TriggerPin("工具栏按钮“贴图”")));
         actions.Children.Add(CreateToolbarButton("S.Overlay.Cancel", "cancel", OverlayChrome.IconCancel, () => Cancel("工具栏取消按钮"), danger: true));
         var copy = CreateToolbarButton("S.Overlay.Copy", "copy", OverlayChrome.IconCopy, () => TriggerCopy("工具栏按钮“复制”"), primary: true);
-        copy.Margin = new Thickness(4, 0, 0, 0);
+        copy.Margin = new Thickness(Tokens.Space.XS, 0, 0, 0);
         actions.Children.Add(copy);
 
-        var bottomRow = new Grid { Margin = new Thickness(0, 8, 0, 0) };
+        var bottomRow = new Grid { Margin = new Thickness(0, Tokens.Space.S, 0, 0) };
         bottomRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        bottomRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 12 });
+        bottomRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = Tokens.Space.M });
         bottomRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         Grid.SetColumn(info, 0);
         Grid.SetColumn(actions, 2);
@@ -2397,17 +2364,17 @@ public sealed class CaptureOverlayWindow : Window
     {
         _textEditor = new TextBox
         {
-            Foreground = Brushes.White,
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
-            FontSize = 14,
-            FontFamily = new FontFamily("Segoe UI"),
-            CaretBrush = Brushes.White,
+            FontSize = Tokens.Text.BodyLarge,
+            FontFamily = AppFonts.Family,
             Padding = new Thickness(0),
             AcceptsReturn = true,
             TextWrapping = TextWrapping.NoWrap,
             VerticalScrollBarVisibility = ScrollBarVisibility.Hidden,
         };
+        // 不套全局主题输入框样式：圆角框与聚焦光晕会盖住选区里的画面。
+        UiKit.UsePlainTextBox(_textEditor);
 
         _textEditor.TextChanged += (_, _) =>
         {
@@ -2433,16 +2400,22 @@ public sealed class CaptureOverlayWindow : Window
             }
         };
 
+        // 前景 / 光标走浮层前景色资源；选中文字用强调色高亮。
+        _textEditor.SetResourceReference(Control.ForegroundProperty, ThemeManager.BrushKeys.OverlayForeground);
+        _textEditor.SetResourceReference(System.Windows.Controls.Primitives.TextBoxBase.CaretBrushProperty, ThemeManager.BrushKeys.OverlayForeground);
+        _textEditor.SetResourceReference(System.Windows.Controls.Primitives.TextBoxBase.SelectionBrushProperty, UiKit.Keys.Accent);
+
+        // 深色玻璃 + 强调色细边：与工具栏同一材质，一眼能看出是“正在输入”。
         var host = new Border
         {
-            Background = CreateFrozenBrush(Color.FromArgb(0xE6, 0x1B, 0x1C, 0x21)),
-            BorderBrush = CreateFrozenBrush(Color.FromRgb(0x4A, 0x90, 0xF8)),
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(6),
-            Padding = new Thickness(4, 2, 4, 2),
+            CornerRadius = new CornerRadius(Tokens.Radius.Small),
+            Padding = new Thickness(6, 3, 6, 3),
             Child = _textEditor,
             Visibility = Visibility.Collapsed,
         };
+        host.SetResourceReference(Border.BackgroundProperty, ThemeManager.BrushKeys.OverlayBar);
+        host.SetResourceReference(Border.BorderBrushProperty, UiKit.Keys.Accent);
 
         AutomationProperties.SetName(host, "标注文字输入框");
         return host;
@@ -2451,26 +2424,11 @@ public sealed class CaptureOverlayWindow : Window
     /// <summary>选区锁定的可视化提示（选区右上方小标签），一开始标注就显示。</summary>
     private Border CreateLockIndicator()
     {
-        _lockText = new TextBlock
-        {
-            Foreground = Brushes.White,
-            FontSize = 11,
-            FontFamily = new FontFamily("Segoe UI"),
-            Visibility = Visibility.Visible,
-        };
-
-        _lockBadge = new Border
-        {
-            Background = CreateFrozenBrush(Color.FromArgb(0xE6, 0x1B, 0x1C, 0x21)),
-            BorderBrush = CreateFrozenBrush(Color.FromArgb(0x2E, 0xFF, 0xFF, 0xFF)),
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(7),
-            Padding = new Thickness(8, 3, 8, 3),
-            Child = _lockText,
-            Visibility = Visibility.Collapsed,
-            IsHitTestVisible = false,
-        };
-
+        // 与尺寸徽标同一材质：深色玻璃胶囊 + 挂锁图标。图标跟随徽标前景（白）：
+        // 浅色主题的强调色是深蓝，压在深色玻璃上几乎看不见。
+        _lockText = OverlayChrome.BadgeText();
+        _lockBadge = OverlayChrome.LockBadge(_lockText);
+        _lockBadge.Visibility = Visibility.Collapsed;
         return _lockBadge;
     }
 
@@ -2495,11 +2453,47 @@ public sealed class CaptureOverlayWindow : Window
 
         var left = Math.Clamp(rect.Right - size.Width, client.Left, Math.Max(client.Left, client.Right - size.Width));
         var above = rect.Top - size.Height - BadgeGap;
-        var top = above >= client.Top ? above : rect.Bottom + BadgeGap;
+        var below = rect.Bottom + BadgeGap;
+        var top = above >= client.Top ? above : below;
         top = Math.Clamp(top, client.Top, Math.Max(client.Top, client.Bottom - size.Height));
+
+        // 工具栏也可能摆在选区上方（下方放不下时）：徽标别压在工具栏上，
+        // 先换到选区另一侧，两侧都不行就收进选区右上角内侧。
+        if (OverlapsToolbar(left, top, size))
+        {
+            var fitsBelow = below + size.Height <= client.Bottom;
+            if (fitsBelow && !OverlapsToolbar(left, below, size))
+            {
+                top = below;
+            }
+            else
+            {
+                left = Math.Max(rect.Left, rect.Right - size.Width - BadgeGap);
+                top = rect.Top + BadgeGap;
+            }
+        }
 
         Canvas.SetLeft(_lockBadge, left);
         Canvas.SetTop(_lockBadge, top);
+    }
+
+    /// <summary>某个浮件矩形（DIP）是否与当前显示的工具栏重叠。</summary>
+    private bool OverlapsToolbar(double left, double top, Size size)
+    {
+        if (_toolbar.Visibility != Visibility.Visible)
+        {
+            return false;
+        }
+
+        var toolbarLeft = Canvas.GetLeft(_toolbar);
+        var toolbarTop = Canvas.GetTop(_toolbar);
+        if (double.IsNaN(toolbarLeft) || double.IsNaN(toolbarTop))
+        {
+            return false;
+        }
+
+        var toolbar = new Rect(toolbarLeft, toolbarTop, _toolbar.DesiredSize.Width, _toolbar.DesiredSize.Height);
+        return toolbar.IntersectsWith(new Rect(left, top, size.Width, size.Height));
     }
 
     /// <summary>下行方形图标按钮（撤销/重做）。</summary>
@@ -2545,21 +2539,14 @@ public sealed class CaptureOverlayWindow : Window
                 RadiusX = HandleSize / 2,
                 RadiusY = HandleSize / 2,
                 Fill = Brushes.White,
-                Stroke = _selectionStroke,
-                StrokeThickness = 1.5,
+                StrokeThickness = 2,
                 Visibility = Visibility.Collapsed,
                 IsHitTestVisible = false,
             };
+            element.SetResourceReference(Shape.StrokeProperty, UiKit.Keys.Accent);
 
             _handles[handle] = element;
             yield return new KeyValuePair<SelectionHandle, Rectangle>(handle, element);
         }
-    }
-
-    private static SolidColorBrush CreateFrozenBrush(Color color)
-    {
-        var brush = new SolidColorBrush(color);
-        brush.Freeze();
-        return brush;
     }
 }

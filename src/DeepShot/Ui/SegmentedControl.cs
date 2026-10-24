@@ -33,8 +33,24 @@ internal sealed class SegmentedControl<T> : Border where T : struct, Enum
             <Trigger Property="IsMouseOver" Value="True">
               <Setter TargetName="Ov" Property="Opacity" Value="0.06" />
             </Trigger>
+            <Trigger Property="IsKeyboardFocused" Value="True">
+              <Setter TargetName="Ov" Property="Opacity" Value="0.1" />
+            </Trigger>
             <Trigger Property="IsChecked" Value="True">
-              <Setter TargetName="Pill" Property="Opacity" Value="1" />
+              <Trigger.EnterActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName="Pill" Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.14" />
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.EnterActions>
+              <Trigger.ExitActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName="Pill" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.1" />
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.ExitActions>
               <Setter TargetName="Ov" Property="Opacity" Value="0" />
               <Setter TargetName="Cp" Property="TextElement.Foreground" Value="{DynamicResource Theme.OnAccent}" />
             </Trigger>
@@ -49,8 +65,10 @@ internal sealed class SegmentedControl<T> : Border where T : struct, Enum
 
     internal SegmentedControl()
     {
-        CornerRadius = new CornerRadius(10);
+        // 外框圆角 10、内边距 3、选中胶囊圆角 7：三者同心；整体高度对齐 34px 控件高。
+        CornerRadius = new CornerRadius(Tokens.Radius.Popup);
         Padding = new Thickness(3);
+        MinHeight = Tokens.Height.Control;
         BorderThickness = new Thickness(1);
         HorizontalAlignment = HorizontalAlignment.Left;
         VerticalAlignment = VerticalAlignment.Center;
@@ -71,8 +89,10 @@ internal sealed class SegmentedControl<T> : Border where T : struct, Enum
             GroupName = _group,
             Content = StringsUi.Get(textKey),
             Template = Template.Value,
-            Padding = new Thickness(14, 5, 14, 5),
-            FontSize = 12.5,
+            Padding = new Thickness(14, 0, 14, 1),
+            MinHeight = Tokens.Height.Control - 8,
+            MinWidth = 56,
+            FontSize = Tokens.Text.Body,
             Cursor = Cursors.Hand,
             Focusable = true,
             FocusVisualStyle = null,

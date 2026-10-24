@@ -157,6 +157,7 @@
     <sys:String x:Key="S.History.RenameLabel">名称</sys:String>
     <sys:String x:Key="S.History.RenameInputName">历史记录名称</sys:String>
     <sys:String x:Key="S.History.RenameHint">不能包含 \ / : * ? " &lt; &gt; |（会被替换为 _）。</sys:String>
+    <sys:String x:Key="S.History.RenameEmpty">名称不能为空。</sys:String>
     <sys:String x:Key="S.History.RenameOk">确定</sys:String>
     <sys:String x:Key="S.History.RenameCancel">取消</sys:String>
     <sys:String x:Key="S.History.RenameCancelled">已取消重命名。</sys:String>
@@ -280,12 +281,19 @@
     <sys:String x:Key="S.Settings.Data.History">历史库：{0}</sys:String>
     <sys:String x:Key="S.Settings.Data.Counts">{0} 条记录 · {1} 张图片</sys:String>
     <sys:String x:Key="S.Settings.Section.Retention">历史保留规则</sys:String>
+    <sys:String x:Key="S.Settings.Retention.Days">历史保留天数</sys:String>
+    <sys:String x:Key="S.Settings.Retention.Hint">{0}–{1} 天；按 Enter 或离开输入框保存，下次启动或跨日清理生效。</sys:String>
+    <sys:String x:Key="S.Settings.Retention.Invalid">请输入 {0}–{1} 之间的整数；当前保留规则未改变。</sys:String>
+    <sys:String x:Key="S.Settings.Retention.Saved">历史保留天数已设为 {0} 天，下次启动或跨日清理时使用新规则。</sys:String>
     <sys:String x:Key="S.Settings.Section.Update">检查更新</sys:String>
     <sys:String x:Key="S.Settings.Saved">设置已保存。</sys:String>
     <sys:String x:Key="S.Settings.SaveFailed">保存设置失败：{0}</sys:String>
     <sys:String x:Key="S.Settings.SavePath">设置文件：{0}</sys:String>
     <sys:String x:Key="S.Settings.Close">关闭</sys:String>
     <sys:String x:Key="S.Settings.Version">版本 {0}</sys:String>
+    <sys:String x:Key="S.Settings.Section.About">关于</sys:String>
+    <sys:String x:Key="S.Settings.About.Font">中文字体：MiSans（小米）</sys:String>
+    <sys:String x:Key="S.Settings.About.FontLicense">依据 MiSans 字体免费商用许可使用</sys:String>
 
     <!-- ===== 检查更新 ===== -->
     <sys:String x:Key="S.Update.Title">检查更新</sys:String>
@@ -358,4 +366,8 @@
     <sys:String x:Key="S.QuickView.Shortcut">快览快捷键</sys:String>
     <sys:String x:Key="S.QuickView.ClearShortcut">清除</sys:String>
     <sys:String x:Key="S.QuickView.ShortcutDisabled">未设置</sys:String>
+    <sys:String x:Key="S.QuickView.EmptyHint">截图后会出现在这里。</sys:String>
+    <sys:String x:Key="S.History.ZoomIn">放大</sys:String>
+    <sys:String x:Key="S.History.ZoomOut">缩小</sys:String>
+    <sys:String x:Key="S.History.PreviewDetails">{0}×{1} px · {2} · {3}</sys:String>
 </ResourceDictionary>

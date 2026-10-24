@@ -14,7 +14,7 @@ namespace DeepShot.Ui;
 /// <para>
 /// 全部字段都是"语义化"的名字（WindowBackground / CardBackground / Accent …），不是"灰色 3 号"，
 /// 所以深色主题可以整体改色而不必动任何一个窗口的代码。
-/// 之前的做法是把十六进制色值写在 <c>HistoryUi</c> 里各窗口互相引用，深色主题一接就会
+/// 之前的做法是把十六进制色值写在 <c>HistoryUi</c>（现为 <c>UiKit</c>） 里各窗口互相引用，深色主题一接就会
 /// "半边白半边黑"，这里统一收口。
 /// </para>
 /// <para>
@@ -58,6 +58,9 @@ public sealed class ThemePalette
 
     /// <summary>悬停在普通按钮/卡片上时的底色。</summary>
     public required Color HoverBackground { get; init; }
+
+    /// <summary>极淡的强调色底（选中的列表项、导航项、信息条）。</summary>
+    public required Color AccentSoft { get; init; }
 
     /// <summary>错误提示文字。</summary>
     public required Color Error { get; init; }
@@ -145,6 +148,12 @@ public sealed class ThemePalette
     /// <summary>悬停底色。</summary>
     public SolidColorBrush HoverBackgroundBrush => Get(nameof(HoverBackground));
 
+    /// <summary>主按钮悬停色。</summary>
+    public SolidColorBrush AccentHoverBrush => Get(nameof(AccentHover));
+
+    /// <summary>极淡强调底。</summary>
+    public SolidColorBrush AccentSoftBrush => Get(nameof(AccentSoft));
+
     /// <summary>错误文字。</summary>
     public SolidColorBrush ErrorBrush => Get(nameof(Error));
 
@@ -215,22 +224,24 @@ public sealed class ThemePalette
     public static ThemePalette Light { get; } = new()
     {
         IsDark = false,
-        WindowBackground = Rgb(0xF6, 0xF6, 0xF9),
+        // 冷调中性灰：窗口底比卡片暗一档，卡片"浮"在上面；强调色是更饱和的靛蓝。
+        WindowBackground = Rgb(0xF3, 0xF4, 0xF7),
         Surface = Rgb(0xFF, 0xFF, 0xFF),
-        SurfaceAlt = Rgb(0xEC, 0xEC, 0xF1),
-        Border = Rgb(0xD5, 0xD5, 0xDD),
-        Divider = Rgb(0xE4, 0xE4, 0xEA),
-        Foreground = Rgb(0x1C, 0x1C, 0x20),
-        SecondaryForeground = Rgb(0x63, 0x63, 0x6E),
-        Accent = Rgb(0x1D, 0x74, 0xD8),
+        SurfaceAlt = Rgb(0xED, 0xEF, 0xF3),
+        Border = Rgb(0xD9, 0xDC, 0xE3),
+        Divider = Rgb(0xE7, 0xE9, 0xEE),
+        Foreground = Rgb(0x15, 0x17, 0x1C),
+        SecondaryForeground = Rgb(0x67, 0x6C, 0x78),
+        Accent = Rgb(0x25, 0x63, 0xEB),
         OnAccent = Rgb(0xFF, 0xFF, 0xFF),
-        AccentHover = Rgb(0x1A, 0x66, 0xBF),
-        HoverBackground = Rgb(0xE8, 0xEF, 0xFA),
-        Error = Rgb(0xC4, 0x2B, 0x1C),
-        Success = Rgb(0x1B, 0x7F, 0x3B),
-        Warning = Rgb(0xA0, 0x64, 0x00),
-        Star = Rgb(0xE5, 0xA5, 0x00),
-        StarInactive = Rgb(0xAF, 0xAF, 0xB9),
+        AccentHover = Rgb(0x1D, 0x4F, 0xD0),
+        HoverBackground = Rgb(0xEA, 0xF0, 0xFE),
+        AccentSoft = Rgb(0xE5, 0xED, 0xFD),
+        Error = Rgb(0xD9, 0x30, 0x25),
+        Success = Rgb(0x18, 0x80, 0x38),
+        Warning = Rgb(0xB0, 0x60, 0x00),
+        Star = Rgb(0xF5, 0xA4, 0x00),
+        StarInactive = Rgb(0xAF, 0xB3, 0xBD),
         // 遮罩用深色工具条：它是压在"冻结画面"上的浮层，深浅主题下都保持同样的高对比。
         OverlayBar = Argb(0xEE, 0x1E, 0x1E, 0x22),
         OverlayBarBorder = Argb(0x59, 0xFF, 0xFF, 0xFF),
@@ -238,13 +249,13 @@ public sealed class ThemePalette
         OverlayButton = Argb(0x22, 0xFF, 0xFF, 0xFF),
         OverlayButtonBorder = Argb(0x4D, 0xFF, 0xFF, 0xFF),
         OverlayButtonHover = Argb(0x44, 0xFF, 0xFF, 0xFF),
-        OverlaySelected = Argb(0x80, 0x2E, 0x9B, 0xF0),
+        OverlaySelected = Argb(0x80, 0x25, 0x63, 0xEB),
         ToastBackground = Argb(0xF2, 0x20, 0x20, 0x24),
         ToastBorder = Argb(0x99, 0xFF, 0xFF, 0xFF),
         ToastForeground = Argb(0xFF, 0xFF, 0xFF, 0xFF),
-        RadiusLarge = 10,
-        RadiusMedium = 6,
-        RadiusSmall = 4,
+        RadiusLarge = 12,
+        RadiusMedium = 8,
+        RadiusSmall = 6,
     };
 
     /// <summary>深色主题：深灰底 + 稍亮卡片 + 更亮的蓝色强调。</summary>
@@ -253,17 +264,18 @@ public sealed class ThemePalette
         new ThemePalette
     {
         IsDark = true,
-        WindowBackground = Rgb(0x1E, 0x1E, 0x22),
-        Surface = Rgb(0x2A, 0x2A, 0x30),
-        SurfaceAlt = Rgb(0x34, 0x34, 0x3B),
-        Border = Rgb(0x44, 0x44, 0x4E),
-        Divider = Rgb(0x35, 0x35, 0x3C),
-        Foreground = Rgb(0xF2, 0xF2, 0xF6),
-        SecondaryForeground = Rgb(0xA8, 0xA8, 0xB4),
-        Accent = Rgb(0x4C, 0x9A, 0xF0),
-        OnAccent = Rgb(0x0E, 0x1B, 0x2B),
-        AccentHover = Rgb(0x62, 0xA9, 0xF5),
-        HoverBackground = Rgb(0x38, 0x38, 0x42),
+        WindowBackground = Rgb(0x14, 0x15, 0x19),
+        Surface = Rgb(0x1E, 0x20, 0x26),
+        SurfaceAlt = Rgb(0x28, 0x2A, 0x31),
+        Border = Rgb(0x39, 0x3C, 0x45),
+        Divider = Rgb(0x2C, 0x2F, 0x36),
+        Foreground = Rgb(0xF2, 0xF3, 0xF6),
+        SecondaryForeground = Rgb(0xA0, 0xA4, 0xAF),
+        Accent = Rgb(0x6E, 0xA0, 0xFF),
+        OnAccent = Rgb(0x08, 0x16, 0x2E),
+        AccentHover = Rgb(0x8A, 0xB3, 0xFF),
+        HoverBackground = Rgb(0x2E, 0x31, 0x3A),
+        AccentSoft = Rgb(0x1F, 0x2C, 0x47),
         Error = Rgb(0xFF, 0x8A, 0x7A),
         Success = Rgb(0x6E, 0xD3, 0x8B),
         Warning = Rgb(0xF0, 0xC0, 0x60),
@@ -276,7 +288,7 @@ public sealed class ThemePalette
         OverlayButton = Argb(0x22, 0xFF, 0xFF, 0xFF),
         OverlayButtonBorder = Argb(0x4D, 0xFF, 0xFF, 0xFF),
         OverlayButtonHover = Argb(0x44, 0xFF, 0xFF, 0xFF),
-        OverlaySelected = Argb(0x80, 0x4C, 0x9A, 0xF0),
+        OverlaySelected = Argb(0x80, 0x6E, 0xA0, 0xFF),
         ToastBackground = Argb(0xF2, 0x2A, 0x2A, 0x30),
         ToastBorder = Argb(0x99, 0xFF, 0xFF, 0xFF),
         ToastForeground = Argb(0xFF, 0xFF, 0xFF, 0xFF),
@@ -308,6 +320,7 @@ public sealed class ThemePalette
         OnAccent = overrides.OnAccent,
         AccentHover = overrides.AccentHover,
         HoverBackground = overrides.HoverBackground,
+        AccentSoft = overrides.AccentSoft,
         Error = overrides.Error,
         Success = overrides.Success,
         Warning = overrides.Warning,

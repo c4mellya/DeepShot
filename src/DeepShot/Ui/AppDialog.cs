@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
+using DeepShot.Core;
 using DeepShot.History;
 using DeepShot.Platform;
 
@@ -100,9 +101,6 @@ internal static class AppDialog
 /// <summary>自绘提示框窗口本体（只由 <see cref="AppDialog"/> 创建）。</summary>
 internal sealed class AppDialogWindow : Window
 {
-    private const string TriangleIcon = "M12,3 L22,20 H2 Z M12,10 V14 M12,17 V17.5";
-    private const string Circle = "M12,3 A9,9 0 1 0 12,21 A9,9 0 1 0 12,3";
-
     internal AppDialogWindow(
         Window? owner,
         string message,
@@ -121,7 +119,7 @@ internal sealed class AppDialogWindow : Window
         SetResourceReference(FontFamilyProperty, ThemeManager.FontFamilyKey);
         AutomationProperties.SetAutomationId(this, "app-dialog");
         AutomationProperties.SetName(this, title);
-        SourceInitialized += (_, _) => DwmApi.TrySetDarkTitleBar(this, ThemeManager.Palette.IsDark);
+        AppChrome.SyncDarkTitleBar(this);
 
         if (owner is { IsVisible: true })
         {
@@ -137,37 +135,38 @@ internal sealed class AppDialogWindow : Window
             Topmost = true;
         }
 
-        // 图标徽标：淡色圆底 + 矢量图标。
+        // 图标徽标（统一走 UiKit.StatusBadge：淡色圆底 + 细环 + 同色矢量图标）。
         var (iconData, toneKey) = ToneFor(kind, destructive);
-        var tint = new Border { Width = 44, Height = 44, CornerRadius = new CornerRadius(22), Opacity = 0.16 };
-        tint.SetResourceReference(Border.BackgroundProperty, toneKey);
-        var glyph = HistoryIcons.Create(iconData, 22, toneKey, 2.0);
-        glyph.HorizontalAlignment = HorizontalAlignment.Center;
-        glyph.VerticalAlignment = VerticalAlignment.Center;
-        var badge = new Grid { Width = 44, Height = 44, VerticalAlignment = VerticalAlignment.Top };
-        badge.Children.Add(tint);
-        badge.Children.Add(glyph);
+        var badge = UiKit.StatusBadge(iconData, toneKey, 44);
 
-        var body = new TextBlock
+        // 文字区：标题不是应用名时（如"删除截图"）在正文上方再给一行醒目标题，
+        // 让对话框一眼就说清"要做什么"；应用名已经在标题栏里，不重复。
+        var textStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        if (!string.IsNullOrWhiteSpace(title) && !string.Equals(title, AppInfo.Name, StringComparison.OrdinalIgnoreCase))
         {
-            Text = message,
-            FontSize = 13.5,
-            TextWrapping = TextWrapping.Wrap,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        body.SetResourceReference(TextBlock.ForegroundProperty, ThemeManager.BrushKeys.Foreground);
+            var heading = UiKit.Text(title, TextRole.Subtitle, wrap: true);
+            heading.Margin = new Thickness(0, 0, 0, Tokens.Space.XS + 2);
+            AutomationProperties.SetAutomationId(heading, "app-dialog-heading");
+            textStack.Children.Add(heading);
+        }
+
+        var body = UiKit.Text(message, TextRole.BodyLarge, wrap: true);
+        body.LineHeight = 22;
         AutomationProperties.SetAutomationId(body, "app-dialog-message");
         AutomationProperties.SetName(body, message);
+        textStack.Children.Add(body);
 
         // 长文本（异常信息）限高滚动，避免对话框撑出屏幕。
         var scroller = new ScrollViewer
         {
-            Content = body,
+            Content = textStack,
             MaxHeight = 300,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            Margin = new Thickness(16, 0, 0, 0),
+            Margin = new Thickness(Tokens.Space.L, 0, 0, 0),
             VerticalAlignment = VerticalAlignment.Center,
+            MinHeight = 44,
+            VerticalContentAlignment = VerticalAlignment.Center,
         };
 
         var content = new Grid();
@@ -177,31 +176,19 @@ internal sealed class AppDialogWindow : Window
         content.Children.Add(badge);
         content.Children.Add(scroller);
 
-        var ok = HistoryUi.Button(okText ?? StringsUi.Get("S.Dialog.Ok"), okText ?? StringsUi.Get("S.Dialog.Ok"), Accept, primary: true);
-        AutomationProperties.SetAutomationId(ok, "app-dialog-ok");
-        ok.Margin = new Thickness(0);
-        if (destructive)
-        {
-            ok.SetResourceReference(Control.BackgroundProperty, ThemeManager.BrushKeys.Error);
-            ok.SetResourceReference(Control.BorderBrushProperty, ThemeManager.BrushKeys.Error);
-            ok.SetResourceReference(Control.ForegroundProperty, ThemeManager.BrushKeys.OnAccent);
-        }
-
-        var buttons = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            HorizontalAlignment = HorizontalAlignment.Right,
-            Margin = new Thickness(0, 24, 0, 0),
-        };
+        // 按钮：确认 = 主按钮（破坏性操作 = 危险红），取消 = 次按钮；统一 UiKit 规格。
+        var okLabel = okText ?? StringsUi.Get("S.Dialog.Ok");
+        var ok = UiKit.Button(okLabel, okLabel, Accept, destructive ? ButtonKind.Danger : ButtonKind.Primary, "app-dialog-ok");
+        ok.MinWidth = 88;
 
         Button focusTarget = ok;
+        Button? cancel = null;
         if (confirm)
         {
             var cancelLabel = cancelText ?? StringsUi.Get("S.Dialog.Cancel");
-            var cancel = HistoryUi.Button(cancelLabel, cancelLabel, () => DialogResult = false);
-            AutomationProperties.SetAutomationId(cancel, "app-dialog-cancel");
+            cancel = UiKit.Button(cancelLabel, cancelLabel, () => DialogResult = false, ButtonKind.Secondary, "app-dialog-cancel");
+            cancel.MinWidth = 88;
             cancel.IsCancel = true;
-            buttons.Children.Add(cancel);
 
             // 破坏性操作默认落在“取消”，回车不会误删。
             if (destructive)
@@ -220,11 +207,13 @@ internal sealed class AppDialogWindow : Window
             ok.IsCancel = true;
         }
 
-        buttons.Children.Add(ok);
+        // 内容区 + 底部操作栏（面板色底 + 顶部分隔线，与设置窗口的底栏同款）。
+        var buttons = cancel is null ? UiKit.ButtonBar(ok) : UiKit.ButtonBar(cancel, ok);
+        content.Margin = new Thickness(Tokens.DialogPadding.Left, Tokens.DialogPadding.Top + 4, Tokens.DialogPadding.Right, Tokens.DialogPadding.Bottom);
 
-        var panel = new StackPanel { Margin = new Thickness(26, 22, 26, 22) };
+        var panel = new StackPanel();
         panel.Children.Add(content);
-        panel.Children.Add(buttons);
+        panel.Children.Add(UiKit.FooterBar(buttons));
         Content = panel;
         AppChrome.Apply(this, allowMaximize: false, allowMinimize: false);
 
@@ -248,9 +237,9 @@ internal sealed class AppDialogWindow : Window
 
     private static (string Icon, string ToneKey) ToneFor(AppDialogKind kind, bool destructive) => kind switch
     {
-        AppDialogKind.Error => (Circle + " M9,9 L15,15 M15,9 L9,15", ThemeManager.BrushKeys.Error),
-        AppDialogKind.Warning => (TriangleIcon, destructive ? ThemeManager.BrushKeys.Error : ThemeManager.BrushKeys.Warning),
-        AppDialogKind.Question => (Circle + " M9.5,9.5 A2.5,2.5 0 1 1 12,12 V14 M12,17 V17.5", ThemeManager.BrushKeys.Accent),
-        _ => (Circle + " M12,11 V17 M12,7.5 V8", ThemeManager.BrushKeys.Accent),
+        AppDialogKind.Error => (AppIcons.Close, ThemeManager.BrushKeys.Error),
+        AppDialogKind.Warning => (AppIcons.Warning, destructive ? ThemeManager.BrushKeys.Error : ThemeManager.BrushKeys.Warning),
+        AppDialogKind.Question => (AppIcons.Help, ThemeManager.BrushKeys.Accent),
+        _ => (AppIcons.Info, ThemeManager.BrushKeys.Accent),
     };
 }

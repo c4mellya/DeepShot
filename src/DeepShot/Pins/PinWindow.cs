@@ -7,6 +7,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using DeepShot.Capture;
 using DeepShot.Core.Geometry;
 using DeepShot.Core.Output;
 using DeepShot.Core.Pins;
@@ -48,19 +49,20 @@ public sealed class PinWindow : Window
     /// <summary>锁定描边的线宽（DIP）与颜色（橙色）。</summary>
     private const double LockedBorderThicknessValue = 2.0;
 
-    /// <summary>关闭按钮尺寸（DIP）与右上角边距（DIP）。</summary>
-    private const double CloseButtonSize = 22;
-    private const double CloseButtonMargin = 4;
+    /// <summary>关闭按钮尺寸（DIP）与四角浮件（关闭按钮、锁定徽标）的边距（DIP）。</summary>
+    private const double CloseButtonSize = 24;
+    private const double CloseButtonMargin = 6;
+
+    /// <summary>贴图宽或高不超过这个值（DIP）时隐藏关闭按钮（沿用原先 3 × 22 的阈值）。</summary>
+    private const double CloseButtonHideThreshold = 66;
 
     /// <summary>鼠标停止移动多久之后重新取 DPI / 复核物理矩形（毫秒）。</summary>
     private const int DpiRefreshDelayMilliseconds = 220;
 
     private static readonly Color BorderColor = Color.FromArgb(0x8C, 0x00, 0x00, 0x00);
+
+    /// <summary>锁定色（琥珀）：描边与锁定徽标的挂锁图标同色，一眼对应。</summary>
     private static readonly Color LockedBorderColor = Color.FromRgb(0xFF, 0xA0, 0x40);
-    private static readonly Color CloseButtonBackgroundColor = Color.FromArgb(0xB3, 0x20, 0x20, 0x20);
-    private static readonly Color CloseButtonBorderColor = Color.FromArgb(0x66, 0xFF, 0xFF, 0xFF);
-    private static readonly Color LockBadgeBackgroundColor = Color.FromArgb(0xCC, 0x1E, 0x1E, 0x1E);
-    private static readonly Color LockBadgeForegroundColor = Color.FromRgb(0xFF, 0xC1, 0x6A);
 
     private readonly BitmapSource _image;
     private readonly PixelRect _screenBounds;
@@ -114,8 +116,8 @@ public sealed class PinWindow : Window
         ShowActivated = true;
         Cursor = Cursors.SizeAll;
 
-        _normalBorderBrush = CreateFrozenBrush(BorderColor);
-        _lockedBorderBrush = CreateFrozenBrush(LockedBorderColor);
+        _normalBorderBrush = UiKit.Frozen(BorderColor);
+        _lockedBorderBrush = UiKit.Frozen(LockedBorderColor);
 
         _picture = new Image
         {
@@ -126,49 +128,20 @@ public sealed class PinWindow : Window
         // 贴图是像素图：放大时用最近邻，保持像素锐利（与遮罩预览一致）。
         RenderOptions.SetBitmapScalingMode(_picture, BitmapScalingMode.NearestNeighbor);
 
-        _lockText = new TextBlock
-        {
-            Text = StringsUi.Get("S.Pin.LockedBadge"),
-            Foreground = CreateFrozenBrush(LockBadgeForegroundColor),
-            FontSize = 11,
-            FontFamily = new FontFamily(ThemeManager.FontFamilyName),
-            VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(6, 2, 6, 2),
-        };
+        // 锁定徽标：与截图遮罩同一套深色玻璃胶囊，挂锁图标用琥珀色呼应锁定描边。
+        _lockText = OverlayChrome.BadgeText(StringsUi.Get("S.Pin.LockedBadge"));
+        _lockBadge = OverlayChrome.LockBadge(_lockText, _lockedBorderBrush);
+        _lockBadge.HorizontalAlignment = HorizontalAlignment.Left;
+        _lockBadge.VerticalAlignment = VerticalAlignment.Top;
+        _lockBadge.Margin = new Thickness(CloseButtonMargin);
+        _lockBadge.Visibility = Visibility.Collapsed;
 
-        _lockBadge = new Border
-        {
-            Background = CreateFrozenBrush(LockBadgeBackgroundColor),
-            BorderBrush = _lockedBorderBrush,
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(3),
-            Child = _lockText,
-            HorizontalAlignment = HorizontalAlignment.Left,
-            VerticalAlignment = VerticalAlignment.Top,
-            Margin = new Thickness(CloseButtonMargin),
-            Visibility = Visibility.Collapsed,
-            IsHitTestVisible = false,
-        };
-
-        _closeButton = new Button
-        {
-            Content = "×",
-            Width = CloseButtonSize,
-            Height = CloseButtonSize,
-            Margin = new Thickness(CloseButtonMargin),
-            HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Top,
-            Foreground = Brushes.White,
-            Background = CreateFrozenBrush(CloseButtonBackgroundColor),
-            BorderBrush = CreateFrozenBrush(CloseButtonBorderColor),
-            BorderThickness = new Thickness(1),
-            FontSize = 14,
-            Padding = new Thickness(0),
-            Focusable = false,
-            IsTabStop = false,
-            Cursor = Cursors.Hand,
-            ToolTip = StringsUi.Get("S.Pin.Close"),
-        };
+        // 关闭按钮：圆形深色玻璃 + 线条 ×，悬停变实心红（不抢焦点，Esc / 右键菜单仍可关闭）。
+        _closeButton = OverlayChrome.GlassIconButton(AppIcons.Close, StringsUi.Get("S.Pin.Close"), CloseButtonSize, danger: true);
+        _closeButton.Margin = new Thickness(CloseButtonMargin);
+        _closeButton.HorizontalAlignment = HorizontalAlignment.Right;
+        _closeButton.VerticalAlignment = VerticalAlignment.Top;
+        System.Windows.Automation.AutomationProperties.SetName(_closeButton, StringsUi.Get("S.Pin.Close"));
         _closeButton.Click += (_, _) =>
         {
             AppLog.Info("Pins", $"贴图窗口关闭（右上 ×）：{_state}");
@@ -418,7 +391,7 @@ public sealed class PinWindow : Window
         Cursor = _state.IsLocked ? Cursors.Arrow : Cursors.SizeAll;
 
         // 贴图太小（40px）时 × 按钮会盖住几乎整张图：小于 3 倍按钮尺寸时隐藏，Esc/右键菜单仍可关闭。
-        var showClose = _state.DisplayWidth > CloseButtonSize * 3 && _state.DisplayHeight > CloseButtonSize * 3;
+        var showClose = _state.DisplayWidth > CloseButtonHideThreshold && _state.DisplayHeight > CloseButtonHideThreshold;
         _closeButton.Visibility = showClose ? Visibility.Visible : Visibility.Collapsed;
 
         if (_state.IsLocked)
@@ -832,13 +805,6 @@ public sealed class PinWindow : Window
 
         AppLog.Info("Pins", $"贴图窗口已关闭：{_state.Bounds} 状态={_state}");
         PinWindows.NotifyClosed(this);
-    }
-
-    private static SolidColorBrush CreateFrozenBrush(Color color)
-    {
-        var brush = new SolidColorBrush(color);
-        brush.Freeze();
-        return brush;
     }
 }
 

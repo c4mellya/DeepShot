@@ -1,7 +1,7 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
-using System.Windows.Media;
 using DeepShot.Platform;
 
 namespace DeepShot.Ui;
@@ -14,6 +14,18 @@ internal static class WelcomeGuide
         var marker = Path.Combine(AppPaths.DataRoot, "welcome-v1.completed");
         if (File.Exists(marker)) return;
 
+        var window = Create(screenshotShortcut, pinShortcut);
+        window.Closed += (_, _) =>
+        {
+            try { File.WriteAllText(marker, DateTimeOffset.UtcNow.ToString("O")); }
+            catch (Exception ex) { AppLog.Warn("Welcome", $"Unable to save guide state: {ex.Message}"); }
+        };
+        window.Show();
+    }
+
+    /// <summary>构建欢迎窗口（不显示、不写标记；预览/截图验证也走这里）。</summary>
+    internal static Window Create(string screenshotShortcut, string pinShortcut)
+    {
         var chinese = StringsUi.IsChinese;
         var window = new Window
         {
@@ -27,99 +39,49 @@ internal static class WelcomeGuide
         window.SetResourceReference(Control.BackgroundProperty, ThemeManager.BrushKeys.WindowBackground);
         window.SetResourceReference(Control.ForegroundProperty, ThemeManager.BrushKeys.Foreground);
         window.SetResourceReference(Control.FontFamilyProperty, ThemeManager.FontFamilyKey);
-        window.SourceInitialized += (_, _) => DwmApi.TrySetDarkTitleBar(window, ThemeManager.Palette.IsDark);
+        AppChrome.SyncDarkTitleBar(window);
 
-        var panel = new StackPanel { Margin = new Thickness(32, 30, 32, 26) };
+        var panel = new StackPanel { Margin = new Thickness(Tokens.Space.XXL, Tokens.Space.L, Tokens.Space.XXL, Tokens.Space.XL + 4) };
 
-        // 标题：品牌徽标 + 一句话。
-        var header = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 24) };
-        header.Children.Add(AppChrome.IconImage(60));
-        var titles = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(16, 0, 0, 0) };
-        titles.Children.Add(Text("DeepShot", 22, ThemeManager.BrushKeys.Foreground, FontWeights.SemiBold));
-        titles.Children.Add(Text(chinese ? "截图、标注、贴在桌面" : "Capture, annotate, pin", 13, ThemeManager.BrushKeys.SecondaryForeground));
-        header.Children.Add(titles);
-        panel.Children.Add(header);
+        // 头部：居中的品牌徽标（带柔光）+ 大标题 + 一句话。
+        var mark = UiKit.BrandMark(64);
+        mark.HorizontalAlignment = HorizontalAlignment.Center;
+        panel.Children.Add(mark);
 
-        // 三件事。
-        var card = new Border { CornerRadius = new CornerRadius(14), BorderThickness = new Thickness(1) };
-        card.SetResourceReference(Border.BackgroundProperty, ThemeManager.BrushKeys.Surface);
-        card.SetResourceReference(Border.BorderBrushProperty, ThemeManager.BrushKeys.Divider);
-        var rows = new StackPanel();
-        rows.Children.Add(Row(screenshotShortcut, chinese ? "截图" : "Capture", false));
-        rows.Children.Add(Row(pinShortcut, chinese ? "贴图" : "Pin from clipboard", true));
-        rows.Children.Add(Row(chinese ? "托盘图标" : "Tray icon", chinese ? "最近截图" : "Recent captures", true));
-        card.Child = rows;
-        panel.Children.Add(card);
+        var title = UiKit.Text("DeepShot", TextRole.Display);
+        title.HorizontalAlignment = HorizontalAlignment.Center;
+        title.Margin = new Thickness(0, Tokens.Space.M, 0, 0);
+        panel.Children.Add(title);
 
-        var button = new Button
-        {
-            Content = chinese ? "开始使用" : "Get started",
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            Margin = new Thickness(0, 24, 0, 0),
-            Padding = new Thickness(20, 10, 20, 10),
-            FontSize = 14,
-            BorderThickness = new Thickness(0),
-        };
-        button.SetResourceReference(Control.BackgroundProperty, ThemeManager.BrushKeys.Accent);
-        button.SetResourceReference(Control.ForegroundProperty, ThemeManager.BrushKeys.OnAccent);
-        button.Click += (_, _) => window.Close();
+        var tagline = UiKit.Text(chinese ? "截图、标注、贴在桌面" : "Capture, annotate, pin", TextRole.Body, ThemeManager.BrushKeys.SecondaryForeground);
+        tagline.HorizontalAlignment = HorizontalAlignment.Center;
+        tagline.Margin = new Thickness(0, Tokens.Space.XS, 0, Tokens.Space.XL);
+        panel.Children.Add(tagline);
+
+        // 三件事：行首图标方块 + 说明 + 右侧键帽。
+        panel.Children.Add(UiKit.Card(
+            Row(AppIcons.Crop, chinese ? "截图" : "Capture", UiKit.KeyCaps(screenshotShortcut)),
+            Row(AppIcons.Pin, chinese ? "贴图" : "Pin from clipboard", UiKit.KeyCaps(pinShortcut)),
+            Row(AppIcons.Gallery, chinese ? "最近截图" : "Recent captures",
+                UiKit.Text(chinese ? "托盘图标" : "Tray icon", TextRole.Caption))));
+
+        var startText = chinese ? "开始使用" : "Get started";
+        var button = UiKit.Button(startText, startText, window.Close, ButtonKind.Primary, "welcome-start");
+        button.HorizontalAlignment = HorizontalAlignment.Stretch;
+        button.Height = Tokens.Height.Large;
+        button.FontSize = Tokens.Text.BodyLarge;
+        button.Margin = new Thickness(0, Tokens.Space.XL, 0, 0);
+        button.IsDefault = true;
         panel.Children.Add(button);
 
         window.Content = panel;
         AppChrome.Apply(window, allowMaximize: false, allowMinimize: false);
-        window.Closed += (_, _) =>
-        {
-            try { File.WriteAllText(marker, DateTimeOffset.UtcNow.ToString("O")); }
-            catch (Exception ex) { AppLog.Warn("Welcome", $"Unable to save guide state: {ex.Message}"); }
-        };
-        window.Show();
+        AutomationProperties.SetAutomationId(window, "welcome-window");
+        window.Loaded += (_, _) => UiKit.Entrance(panel);
+        return window;
     }
 
-    private static FrameworkElement Row(string key, string label, bool divider)
-    {
-        var cap = new Border
-        {
-            CornerRadius = new CornerRadius(8),
-            BorderThickness = new Thickness(1),
-            Padding = new Thickness(12, 5, 12, 5),
-            MinWidth = 84,
-            Child = Text(key, 13, ThemeManager.BrushKeys.Foreground, FontWeights.SemiBold, center: true),
-        };
-        cap.SetResourceReference(Border.BackgroundProperty, ThemeManager.BrushKeys.SurfaceAlt);
-        cap.SetResourceReference(Border.BorderBrushProperty, ThemeManager.BrushKeys.Border);
-
-        var grid = new Grid { Margin = new Thickness(18, 14, 18, 14) };
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        var text = Text(label, 14, ThemeManager.BrushKeys.Foreground);
-        text.Margin = new Thickness(16, 0, 0, 0);
-        Grid.SetColumn(text, 1);
-        grid.Children.Add(cap);
-        grid.Children.Add(text);
-
-        var host = new StackPanel();
-        if (divider)
-        {
-            var line = new Border { Height = 1, Margin = new Thickness(18, 0, 0, 0) };
-            line.SetResourceReference(Border.BackgroundProperty, ThemeManager.BrushKeys.Divider);
-            host.Children.Add(line);
-        }
-
-        host.Children.Add(grid);
-        return host;
-    }
-
-    private static TextBlock Text(string text, double size, string brushKey, FontWeight? weight = null, bool center = false)
-    {
-        var block = new TextBlock
-        {
-            Text = text,
-            FontSize = size,
-            VerticalAlignment = VerticalAlignment.Center,
-            HorizontalAlignment = center ? HorizontalAlignment.Center : HorizontalAlignment.Left,
-        };
-        block.SetResourceReference(TextBlock.ForegroundProperty, brushKey);
-        if (weight is { } value) block.FontWeight = value;
-        return block;
-    }
+    /// <summary>一行：行首图标方块 + 说明 + 右侧附件（统一走 UiKit 的设置行版式）。</summary>
+    private static FrameworkElement Row(string iconData, string label, FrameworkElement trailing) =>
+        UiKit.SettingsRow(UiKit.RowLeading(UiKit.IconTile(iconData), UiKit.Text(label, TextRole.BodyLarge)), trailing);
 }

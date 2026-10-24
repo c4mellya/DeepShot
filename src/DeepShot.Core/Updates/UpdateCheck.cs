@@ -23,7 +23,8 @@ public enum UpdateStatus
 }
 
 /// <summary>
-/// 更新清单（约定格式）：<c>{ "version": "0.2.0", "url": "https://…", "notes": "…" }</c>。
+/// GitHub Release（tag_name/html_url/body）或旧更新清单
+/// <c>{ "version": "0.2.0", "url": "https://…", "notes": "…" }</c> 的统一结果。
 /// </summary>
 /// <param name="VersionText">清单里的原始版本文本。</param>
 /// <param name="Version">解析后的版本（解析失败时为 null，由 <see cref="UpdateCheckResult"/> 判定为失败）。</param>
@@ -71,32 +72,56 @@ public sealed record UpdateManifest(string? VersionText, AppVersion? Version, st
             return false;
         }
 
-        if (string.IsNullOrWhiteSpace(dto.Version))
+        // GitHub Releases API 与旧版 { version, url, notes } 清单共用同一个结果模型。
+        var isRelease = dto.TagName is not null || dto.HtmlUrl is not null || dto.Draft || dto.Prerelease;
+        if (isRelease && (dto.Draft || dto.Prerelease))
         {
-            error = "更新清单缺少 version 字段。";
+            error = "GitHub 返回的是草稿或预发布版本，无法确认最新正式版本。";
             return false;
         }
 
-        if (!AppVersion.TryParse(dto.Version, out var version, out var versionError))
+        var versionText = isRelease ? dto.TagName : dto.Version;
+        var versionField = isRelease ? "tag_name" : "version";
+        if (string.IsNullOrWhiteSpace(versionText))
         {
-            error = $"更新清单的 version 不合法：{versionError}";
+            error = $"更新信息缺少 {versionField} 字段。";
+            return false;
+        }
+
+        if (!AppVersion.TryParse(versionText, out var version, out var versionError))
+        {
+            error = $"更新信息的 {versionField} 不合法：{versionError}";
+            return false;
+        }
+
+        if (isRelease && version.IsPreRelease)
+        {
+            error = "GitHub Release 的标签是预发布版本，无法确认最新正式版本。";
+            return false;
+        }
+
+        var pageUrl = isRelease ? dto.HtmlUrl : dto.Url;
+        if (isRelease && string.IsNullOrWhiteSpace(pageUrl))
+        {
+            error = "GitHub Release 缺少 html_url 发布页地址。";
             return false;
         }
 
         string? url = null;
-        if (!string.IsNullOrWhiteSpace(dto.Url))
+        if (!string.IsNullOrWhiteSpace(pageUrl))
         {
-            if (!Uri.TryCreate(dto.Url.Trim(), UriKind.Absolute, out var parsed) ||
+            if (!Uri.TryCreate(pageUrl.Trim(), UriKind.Absolute, out var parsed) ||
                 (parsed.Scheme != Uri.UriSchemeHttp && parsed.Scheme != Uri.UriSchemeHttps))
             {
-                error = $"更新清单的 url 不是有效的 http/https 地址：“{dto.Url}”。";
+                error = $"更新信息的发布页不是有效的 http/https 地址：“{pageUrl}”。";
                 return false;
             }
 
             url = parsed.ToString();
         }
 
-        manifest = new UpdateManifest(dto.Version.Trim(), version, url, string.IsNullOrWhiteSpace(dto.Notes) ? null : dto.Notes.Trim());
+        var notes = isRelease ? dto.Body : dto.Notes;
+        manifest = new UpdateManifest(versionText.Trim(), version, url, string.IsNullOrWhiteSpace(notes) ? null : notes.Trim());
         return true;
     }
 
@@ -106,7 +131,12 @@ public sealed record UpdateManifest(string? VersionText, AppVersion? Version, st
     private sealed record ManifestDto(
         [property: JsonPropertyName("version")] string? Version,
         [property: JsonPropertyName("url")] string? Url,
-        [property: JsonPropertyName("notes")] string? Notes);
+        [property: JsonPropertyName("notes")] string? Notes,
+        [property: JsonPropertyName("tag_name")] string? TagName,
+        [property: JsonPropertyName("html_url")] string? HtmlUrl,
+        [property: JsonPropertyName("body")] string? Body,
+        [property: JsonPropertyName("draft")] bool Draft,
+        [property: JsonPropertyName("prerelease")] bool Prerelease);
 }
 
 /// <summary>
@@ -130,8 +160,8 @@ public sealed record UpdateCheckResult(
     /// <summary>新版本号文本（无更新时为 null）。</summary>
     public string? AvailableVersion => HasUpdate ? Manifest?.VersionText : null;
 
-    /// <summary>下载页地址（没有时调用方不显示下载按钮）。</summary>
-    public string? DownloadUrl => HasUpdate ? Manifest?.Url : null;
+    /// <summary>最近正式版本的发布页（检查成功且有地址时可打开）。</summary>
+    public string? DownloadUrl => Status is UpdateStatus.UpdateAvailable or UpdateStatus.UpToDate ? Manifest?.Url : null;
 
     /// <summary>
     /// 面向用户的结论短语（不含句号）。设置/Toast/日志共用同一份文案，避免各处措辞不一致。

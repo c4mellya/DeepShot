@@ -50,26 +50,50 @@ public sealed class ToastWindow : Window
         SizeToContent = SizeToContent.WidthAndHeight;
 
         // T30：取主题里的提示色（深色底/浅色边框都是半透明，压在冻结画面上仍然清晰）。
-        var palette = ThemeManager.Palette;
+        // 一律用资源引用：提示显示期间切换主题也会跟着换色。
         var text = new TextBlock
         {
             Text = message,
-            Foreground = palette.ToastForegroundBrush,
-            FontFamily = new FontFamily(ThemeManager.FontFamilyName),
-            FontSize = 13,
+            FontSize = Tokens.Text.Body,
+            LineHeight = 20,
             TextWrapping = TextWrapping.Wrap,
             MaxWidth = 420,
+            VerticalAlignment = VerticalAlignment.Center,
         };
+        text.SetResourceReference(TextBlock.ForegroundProperty, ThemeManager.BrushKeys.ToastForeground);
+        text.SetResourceReference(TextBlock.FontFamilyProperty, ThemeManager.FontFamilyKey);
 
-        Content = new Border
+        // 行首一枚小应用图标：一眼认出"这是 DeepShot 的提示"，不必读完文字。
+        var mark = AppChrome.IconImage(18);
+        mark.Margin = new Thickness(0, 0, Tokens.Space.S + 2, 0);
+        mark.VerticalAlignment = VerticalAlignment.Center;
+        var line = new DockPanel();
+        DockPanel.SetDock(mark, Dock.Left);
+        line.Children.Add(mark);
+        line.Children.Add(text);
+
+        var bubble = new Border
         {
-            Background = palette.ToastBackgroundBrush,
-            BorderBrush = palette.ToastBorderBrush,
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(palette.RadiusMedium),
-            Padding = new Thickness(14, 9, 14, 9),
-            Child = text,
+            CornerRadius = new CornerRadius(Tokens.Radius.Popup),
+            Padding = new Thickness(Tokens.Space.M, Tokens.Space.S + 2, Tokens.Space.L, Tokens.Space.S + 2),
+            Child = line,
         };
+        bubble.SetResourceReference(Border.BackgroundProperty, ThemeManager.BrushKeys.ToastBackground);
+        bubble.SetResourceReference(Border.BorderBrushProperty, ThemeManager.BrushKeys.ToastBorder);
+
+        // 投影做成气泡身后的兄弟元素（不加在文字的祖先上，避免文字被位图化发虚）；
+        // 外围留出投影的绘制空间，窗口本身是透明的。
+        var shadow = UiKit.ShadowPlate(Tokens.Radius.Popup, blur: 16, depth: 4, opacity: 0.28);
+        shadow.SetResourceReference(Border.BackgroundProperty, ThemeManager.BrushKeys.ToastBackground);
+
+        var host = new Grid { Margin = new Thickness(12, 8, 12, 16) };
+        host.Children.Add(shadow);
+        host.Children.Add(bubble);
+        Content = host;
+
+        // 轻轻浮入（只动透明度与位移，不影响定位与命中）。
+        Loaded += (_, _) => UiKit.Entrance(host, 4);
 
         _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(AutoCloseMilliseconds) };
         _timer.Tick += OnTimerTick;

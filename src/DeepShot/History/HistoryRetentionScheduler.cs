@@ -35,6 +35,7 @@ internal sealed class HistoryRetentionScheduler : IDisposable
     internal static readonly TimeSpan MinimumInterval = TimeSpan.FromMinutes(5);
 
     private readonly HistoryStore _store;
+    private readonly Func<int> _retentionDays;
     private Action<int, HistoryRetentionResult>? _onPurged;
     private readonly DispatcherTimer _timer;
     private DateTime _lastCheckDate;
@@ -47,9 +48,11 @@ internal sealed class HistoryRetentionScheduler : IDisposable
     internal HistoryRetentionScheduler(
         HistoryStore store,
         Action<int, HistoryRetentionResult>? onPurged = null,
-        TimeSpan? checkInterval = null)
+        TimeSpan? checkInterval = null,
+        Func<int>? retentionDays = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
+        _retentionDays = retentionDays ?? (() => HistoryRetentionPolicy.DefaultRetentionDays);
         _onPurged = onPurged;
         _lastCheckDate = DateTime.Now.Date;
 
@@ -75,7 +78,7 @@ internal sealed class HistoryRetentionScheduler : IDisposable
         _timer.Start();
         AppLog.Info(
             "History",
-            $"30 天清理调度器已启动：每 {CheckInterval.TotalMinutes:0} 分钟检查日期变化，" +
+            $"历史自动清理调度器已启动：每 {CheckInterval.TotalMinutes:0} 分钟检查日期变化，" +
             $"当前日期={_lastCheckDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}");
     }
 
@@ -95,7 +98,7 @@ internal sealed class HistoryRetentionScheduler : IDisposable
         AppLog.Info(
             "History",
             $"检测到跨日：{previous.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)} → " +
-            $"{today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}，执行 30 天清理检查");
+            $"{today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}，执行 历史自动清理检查");
 
         // 跨日必然已经超过 MinimumInterval（默认 5 分钟），这里的节流主要挡住"系统时间回拨"。
         if (DateTime.UtcNow - _lastPurgeUtc < MinimumInterval)
@@ -119,16 +122,16 @@ internal sealed class HistoryRetentionScheduler : IDisposable
             var now = DateTime.UtcNow;
             var result = _store.Repository.PurgeExpired(
                 now,
-                HistoryRetentionPolicy.DefaultRetentionDays);
+                _retentionDays());
             LastResult = result;
 
-            AppLog.Info("History", $"30 天清理（{trigger}）：{result}");
+            AppLog.Info("History", $"历史自动清理（{trigger}）：{result}");
 
             if (result.Failures.Count > 0)
             {
                 foreach (var (id, reason) in result.Failures)
                 {
-                    AppLog.Warn("History", $"30 天清理未能删除记录 Id={id}：{reason}");
+                    AppLog.Warn("History", $"历史自动清理未能删除记录 Id={id}：{reason}");
                 }
             }
 
@@ -142,7 +145,7 @@ internal sealed class HistoryRetentionScheduler : IDisposable
         catch (Exception ex)
         {
             // 清理失败不影响任何其它功能；下次跨日/下次启动会再试。
-            AppLog.Error("History", $"30 天清理失败（{trigger}，本次放弃，下次再试）", ex);
+            AppLog.Error("History", $"历史自动清理失败（{trigger}，本次放弃，下次再试）", ex);
             return null;
         }
     }
@@ -155,7 +158,7 @@ internal sealed class HistoryRetentionScheduler : IDisposable
         }
         catch (Exception ex)
         {
-            AppLog.Warn("History", $"30 天清理完成回调出错（忽略，记录已删除）：{ex.Message}");
+            AppLog.Warn("History", $"历史自动清理完成回调出错（忽略，记录已删除）：{ex.Message}");
         }
     }
 
@@ -169,6 +172,6 @@ internal sealed class HistoryRetentionScheduler : IDisposable
         _disposed = true;
         _timer.Stop();
         _onPurged = null;
-        AppLog.Info("History", "30 天清理调度器已停止");
+        AppLog.Info("History", "历史自动清理调度器已停止");
     }
 }

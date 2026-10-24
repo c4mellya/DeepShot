@@ -6,9 +6,6 @@ public static class AppInfo
     public const string Name = "DeepShot";
     public const string DataFolderName = "DeepShot";
 
-    /// <summary>
-    /// 更新渠道地址。发布前填入真实仓库/版本清单地址；
-    /// 为空时必须向用户明确提示"尚未配置更新渠道"，不得显示"已是最新版"。
-    /// </summary>
-    public const string UpdateManifestUrl = "";
+    /// <summary>GitHub 最新正式 Release 的 API 地址（保留原渠道常量名供现有入口使用）。</summary>
+    public const string UpdateManifestUrl = "https://api.github.com/repos/c4mellya/DeepShot/releases/latest";
 }

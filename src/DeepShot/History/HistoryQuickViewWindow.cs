@@ -17,18 +17,24 @@ namespace DeepShot.History;
 internal sealed class HistoryQuickViewWindow : Window
 {
     private const int RecentLimit = 20;
+    /// <summary>未选中缩略图只轻微压暗：0.6 会把浅色截图洗成一片灰，0.72 仍能一眼分出选中项。</summary>
+    private const double UnselectedThumbnailOpacity = 0.72;
     private readonly HistoryStore _store;
     private readonly Action<HistoryRecord?, bool> _openGallery;
     private readonly Action _openSettings;
     private readonly Image _picture;
+    private readonly Grid _pictureStage;
     private readonly Border _imageFrame;
     private readonly StackPanel _empty;
     private readonly TextBlock _emptyText;
+    private readonly TextBlock _emptyHint;
     private readonly TextBlock _name;
     private readonly TextBlock _dimensions;
     private readonly TextBlock _counter;
     private readonly TextBlock _status;
     private readonly StackPanel _thumbnails;
+    private readonly ScrollViewer _strip;
+    private readonly Grid _meta;
     private readonly Button _previous;
     private readonly Button _next;
     private readonly List<Button> _imageActions = new();
@@ -72,7 +78,7 @@ internal sealed class HistoryQuickViewWindow : Window
             GlassFrameThickness = new Thickness(1),
             UseAeroCaptionButtons = false,
         });
-        SetResourceReference(BackgroundProperty, HistoryUi.Keys.Surface);
+        SetResourceReference(BackgroundProperty, UiKit.Keys.Surface);
         UseLayoutRounding = true;
         SnapsToDevicePixels = true;
         TextOptions.SetTextFormattingMode(this, TextFormattingMode.Display);
@@ -82,38 +88,49 @@ internal sealed class HistoryQuickViewWindow : Window
         ShowActivated = true;
         Topmost = true;
         Opacity = 0;
-        FontFamily = new FontFamily(HistoryUi.FontFamilyName);
+        SetResourceReference(FontFamilyProperty, ThemeManager.FontFamilyKey);
         AutomationProperties.SetAutomationId(this, "history-quick-view");
 
-        var root = new Grid { Margin = new Thickness(16) };
+        var root = new Grid { Margin = new Thickness(Tokens.Space.L) };
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         for (var i = 0; i < 4; i++) root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
         // --- 头部：标题 + 计数（左），历史 / 设置 / 关闭（右上角入口） ---
-        var header = new Grid { Margin = new Thickness(2, 0, 0, 12) };
+        var header = new Grid { Margin = new Thickness(Tokens.Space.XS, 0, 0, Tokens.Space.M) };
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-        var heading = HistoryUi.Text(StringsUi.Get("S.QuickView.Title"), 16, weight: FontWeights.SemiBold, measureNaturalWidth: true);
-        heading.HorizontalAlignment = HorizontalAlignment.Left;
-        _counter = HistoryUi.Text(string.Empty, 12, brushKey: HistoryUi.Keys.Secondary, measureNaturalWidth: true);
-        _counter.Margin = new Thickness(10, 2, 0, 0);
+        var heading = UiKit.Text(StringsUi.Get("S.QuickView.Title"), TextRole.Subtitle);
+        heading.TextTrimming = TextTrimming.None;
+        heading.VerticalAlignment = VerticalAlignment.Center;
+        // 计数用等宽数字："3 / 12" 翻页时不左右跳。
+        _counter = UiKit.Text(string.Empty, TextRole.Caption);
+        _counter.TextTrimming = TextTrimming.None;
+        _counter.VerticalAlignment = VerticalAlignment.Center;
+        _counter.Margin = new Thickness(Tokens.Space.S + 2, 1, 0, 0);
+        System.Windows.Documents.Typography.SetNumeralAlignment(_counter, FontNumeralAlignment.Tabular);
         var titleRow = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
         titleRow.Children.Add(heading);
         titleRow.Children.Add(_counter);
         header.Children.Add(titleRow);
 
         var tools = new StackPanel { Orientation = Orientation.Horizontal };
-        tools.Children.Add(HeaderButton(HistoryIcons.Gallery, "S.Common.History", "quick-view-history", () => OpenGallery(false)));
-        tools.Children.Add(HeaderButton(HistoryIcons.Settings, "S.Common.Settings", "quick-view-settings", OpenSettings));
-        tools.Children.Add(HeaderButton(HistoryIcons.Close, "S.Common.Close", "quick-view-close", Close));
+        tools.Children.Add(HeaderButton(AppIcons.Gallery, "S.Common.History", "quick-view-history", () => OpenGallery(false)));
+        tools.Children.Add(HeaderButton(AppIcons.Settings, "S.Common.Settings", "quick-view-settings", OpenSettings));
+        tools.Children.Add(HeaderButton(AppIcons.Close, "S.Common.Close", "quick-view-close", Close));
         Grid.SetColumn(tools, 1);
         header.Children.Add(tools);
         Add(root, header, 0);
 
         // --- 大图 + 两侧悬停出现的翻页按钮 ---
-        _picture = new Image { Stretch = Stretch.Uniform, Cursor = Cursors.Hand, Margin = new Thickness(8) };
+        _picture = new Image
+        {
+            Stretch = Stretch.Uniform,
+            Cursor = Cursors.Hand,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
         AutomationProperties.SetAutomationId(_picture, "quick-view-image");
         _picture.ToolTip = StringsUi.Get("S.History.DragHint");
         RenderOptions.SetBitmapScalingMode(_picture, BitmapScalingMode.HighQuality);
@@ -122,34 +139,34 @@ internal sealed class HistoryQuickViewWindow : Window
             if (Current is { } record) Drag(record, source);
         });
 
-        _emptyText = HistoryUi.Text(string.Empty, 13, brushKey: HistoryUi.Keys.Secondary);
-        _emptyText.TextWrapping = TextWrapping.Wrap;
-        _emptyText.TextAlignment = TextAlignment.Center;
-        _emptyText.Margin = new Thickness(0, 10, 0, 0);
-        var emptyIcon = HistoryIcons.Create(HistoryIcons.Image, 36, HistoryUi.Keys.Secondary, 1.5);
-        emptyIcon.HorizontalAlignment = HorizontalAlignment.Center;
-        _empty = new StackPanel
-        {
-            VerticalAlignment = VerticalAlignment.Center,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            Margin = new Thickness(24),
-        };
-        _empty.Children.Add(emptyIcon);
-        _empty.Children.Add(_emptyText);
+        // 图片垫一块投影底板 + 细描边：浮在浅灰画框里，像一张照片而不是一块贴图。
+        _pictureStage = UiKit.Elevated(_picture, cornerRadius: 2, outline: true, blur: 18, depth: 4, opacity: 0.16);
+        _pictureStage.Margin = new Thickness(Tokens.Space.M);
 
-        _previous = NavButton(HistoryIcons.ChevronLeft, "S.QuickView.Previous", "quick-view-previous", () => Select(_index - 1), HorizontalAlignment.Left);
-        _next = NavButton(HistoryIcons.ChevronRight, "S.QuickView.Next", "quick-view-next", () => Select(_index + 1), HorizontalAlignment.Right);
+        _emptyText = UiKit.Text(string.Empty, TextRole.BodyStrong, wrap: true);
+        _emptyHint = UiKit.Text(StringsUi.Get("S.QuickView.EmptyHint"), TextRole.Caption, wrap: true);
+        _empty = UiKit.EmptyState(AppIcons.Image, _emptyText, _emptyHint);
+
+        _previous = NavButton(AppIcons.ChevronLeft, "S.QuickView.Previous", "quick-view-previous", () => Select(_index - 1), HorizontalAlignment.Left);
+        _next = NavButton(AppIcons.ChevronRight, "S.QuickView.Next", "quick-view-next", () => Select(_index + 1), HorizontalAlignment.Right);
 
         var imageHost = new Grid { Background = Brushes.Transparent };
-        imageHost.Children.Add(_picture);
+        imageHost.Children.Add(_pictureStage);
         imageHost.Children.Add(_empty);
         imageHost.Children.Add(_previous);
         imageHost.Children.Add(_next);
         imageHost.MouseEnter += (_, _) => FadeNav(1);
         imageHost.MouseLeave += (_, _) => FadeNav(0);
 
-        _imageFrame = new Border { CornerRadius = new CornerRadius(12), ClipToBounds = true, Child = imageHost };
-        _imageFrame.SetResourceReference(Border.BackgroundProperty, HistoryUi.Keys.SurfaceAlt);
+        _imageFrame = new Border
+        {
+            CornerRadius = new CornerRadius(Tokens.Radius.Card),
+            BorderThickness = new Thickness(1),
+            ClipToBounds = true,
+            Child = imageHost,
+        };
+        _imageFrame.SetResourceReference(Border.BackgroundProperty, UiKit.Keys.SurfaceAlt);
+        _imageFrame.SetResourceReference(Border.BorderBrushProperty, UiKit.Keys.Divider);
         _imageFrame.SizeChanged += (_, _) =>
         {
             // First layout pass: decode immediately so the image is crisp on first paint.
@@ -159,11 +176,14 @@ internal sealed class HistoryQuickViewWindow : Window
         Add(root, _imageFrame, 1);
 
         // --- 名称 + 尺寸 ---
-        _name = HistoryUi.Text(string.Empty, 13, weight: FontWeights.SemiBold);
-        _name.HorizontalAlignment = HorizontalAlignment.Left;
-        _dimensions = HistoryUi.Text(string.Empty, 12, brushKey: HistoryUi.Keys.Secondary, measureNaturalWidth: true);
-        _dimensions.Margin = new Thickness(12, 0, 0, 0);
-        var meta = new Grid { Margin = new Thickness(2, 12, 2, 10) };
+        _name = UiKit.Text(string.Empty, TextRole.BodyStrong);
+        _name.VerticalAlignment = VerticalAlignment.Center;
+        _dimensions = UiKit.Text(string.Empty, TextRole.Caption);
+        _dimensions.TextTrimming = TextTrimming.None;
+        _dimensions.VerticalAlignment = VerticalAlignment.Center;
+        _dimensions.Margin = new Thickness(Tokens.Space.M, 0, 0, 0);
+        System.Windows.Documents.Typography.SetNumeralAlignment(_dimensions, FontNumeralAlignment.Tabular);
+        var meta = _meta = new Grid { Margin = new Thickness(Tokens.Space.XS, Tokens.Space.M, Tokens.Space.XS, Tokens.Space.S + 2) };
         meta.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         meta.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         meta.Children.Add(_name);
@@ -171,15 +191,15 @@ internal sealed class HistoryQuickViewWindow : Window
         meta.Children.Add(_dimensions);
         Add(root, meta, 2);
 
-        // --- 缩略图条 ---
+        // --- 缩略图条（超出宽度时，被截断的一侧淡出，提示还能滚动） ---
         _thumbnails = new StackPanel { Orientation = Orientation.Horizontal };
-        var strip = new ScrollViewer
+        var strip = _strip = new ScrollViewer
         {
             Content = _thumbnails,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden,
             VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            Margin = new Thickness(0, 0, 0, 12),
         };
+        strip.ScrollChanged += (_, _) => UpdateStripFade();
         Add(root, strip, 3);
 
         // --- 操作：复制（主）/ 贴图 / 标注 ---
@@ -190,25 +210,38 @@ internal sealed class HistoryQuickViewWindow : Window
         var column = 0;
         foreach (var item in new (string Key, string Id, string Icon, Action Action, bool Primary)[]
         {
-            ("S.Common.Copy", "quick-view-copy", HistoryIcons.Copy, Copy, true),
-            ("S.Common.Pin", "quick-view-pin", HistoryIcons.Pin, Pin, false),
-            ("S.Common.Annotation", "quick-view-edit", HistoryIcons.Annotate, () => OpenGallery(true), false),
+            ("S.Common.Copy", "quick-view-copy", AppIcons.Copy, Copy, true),
+            ("S.Common.Pin", "quick-view-pin", AppIcons.Pin, Pin, false),
+            ("S.Common.Annotation", "quick-view-edit", AppIcons.Annotate, () => OpenGallery(true), false),
         })
         {
-            var button = ActionButton(item.Key, item.Id, item.Icon, item.Action, item.Primary);
-            button.Margin = new Thickness(column == 0 ? 0 : 8, 0, 0, 0);
+            var text = StringsUi.Get(item.Key);
+            var button = UiKit.Button(
+                text,
+                text,
+                item.Action,
+                item.Primary ? ButtonKind.Primary : ButtonKind.Secondary,
+                item.Id,
+                item.Icon);
+            // 三个按钮按列等分铺满：高度取 Large，左右内距收窄，避免英文长词被挤。
+            button.MinWidth = 0;
+            button.Height = Tokens.Height.Large - 2;
+            button.Padding = new Thickness(Tokens.Space.M, 0, Tokens.Space.M, 0);
+            button.HorizontalAlignment = HorizontalAlignment.Stretch;
+            button.HorizontalContentAlignment = HorizontalAlignment.Center;
+            button.Margin = new Thickness(column == 0 ? 0 : Tokens.Space.S, 0, 0, 0);
             Grid.SetColumn(button, column++);
             _imageActions.Add(button);
             actions.Children.Add(button);
         }
 
+        // 与上方（缩略图条，或空状态时的画框）的间距放在按钮行上：名称行/缩略图条收起时间距不丢。
+        actions.Margin = new Thickness(0, Tokens.Space.M, 0, 0);
         Add(root, actions, 4);
 
         // --- 仅在拖出 / 贴图 / 失败时才出现的一行提示 ---
-        _status = HistoryUi.Text(string.Empty, 12, brushKey: HistoryUi.Keys.Secondary);
-        _status.TextWrapping = TextWrapping.Wrap;
-        _status.Margin = new Thickness(2, 10, 2, 0);
-        _status.HorizontalAlignment = HorizontalAlignment.Left;
+        _status = UiKit.Text(string.Empty, TextRole.Caption, wrap: true);
+        _status.Margin = new Thickness(Tokens.Space.XS, Tokens.Space.S + 2, Tokens.Space.XS, 0);
         _status.Visibility = Visibility.Collapsed;
         Add(root, _status, 5);
 
@@ -217,8 +250,8 @@ internal sealed class HistoryQuickViewWindow : Window
             BorderThickness = new Thickness(1),
             Child = root,
         };
-        card.SetResourceReference(Border.BackgroundProperty, HistoryUi.Keys.Surface);
-        card.SetResourceReference(Border.BorderBrushProperty, HistoryUi.Keys.Divider);
+        card.SetResourceReference(Border.BackgroundProperty, UiKit.Keys.Surface);
+        card.SetResourceReference(Border.BorderBrushProperty, UiKit.Keys.Divider);
         Content = card;
 
         SourceInitialized += (_, _) =>
@@ -279,8 +312,8 @@ internal sealed class HistoryQuickViewWindow : Window
     private static Button HeaderButton(string icon, string nameKey, string id, Action action)
     {
         var name = StringsUi.Get(nameKey);
-        var button = HistoryUi.IconButton(icon, name, name, action, size: 32, iconKey: HistoryUi.Keys.Secondary);
-        button.Margin = new Thickness(2, 0, 0, 0);
+        var button = UiKit.IconButton(icon, name, name, action, size: 32, iconKey: UiKit.Keys.Secondary);
+        button.Margin = new Thickness(Tokens.Space.XS / 2, 0, 0, 0);
         AutomationProperties.SetAutomationId(button, id);
         return button;
     }
@@ -289,52 +322,47 @@ internal sealed class HistoryQuickViewWindow : Window
     private static Button NavButton(string icon, string nameKey, string id, Action action, HorizontalAlignment side)
     {
         var name = StringsUi.Get(nameKey);
-        var button = HistoryUi.IconButton(icon, name, name, action, size: 34, iconKey: HistoryUi.Keys.Foreground, iconSize: 18);
+        var button = UiKit.IconButton(icon, name, name, action, size: 34, iconKey: UiKit.Keys.Foreground, iconSize: 18);
         button.HorizontalAlignment = side;
         button.VerticalAlignment = VerticalAlignment.Center;
-        button.Margin = new Thickness(8, 0, 8, 0);
+        button.Margin = new Thickness(Tokens.Space.S + 2, 0, Tokens.Space.S + 2, 0);
         button.Opacity = 0;
         button.BorderThickness = new Thickness(1);
-        button.SetResourceReference(Control.BackgroundProperty, HistoryUi.Keys.Surface);
-        button.SetResourceReference(Control.BorderBrushProperty, HistoryUi.Keys.Divider);
+        button.SetResourceReference(Control.BackgroundProperty, UiKit.Keys.Surface);
+        button.SetResourceReference(Control.BorderBrushProperty, UiKit.Keys.Divider);
         AutomationProperties.SetAutomationId(button, id);
         return button;
     }
 
-    private static Button ActionButton(string key, string id, string icon, Action action, bool primary)
+    private double ThumbnailOpacity(int index) => index == _index ? 1 : UnselectedThumbnailOpacity;
+
+    /// <summary>缩略图条两端的淡出遮罩：只在那一侧还有被截断的内容时出现。</summary>
+    private void UpdateStripFade()
     {
-        var text = StringsUi.Get(key);
-        var label = HistoryUi.Text(text, 13, weight: FontWeights.SemiBold, measureNaturalWidth: true);
-        label.ClearValue(TextBlock.ForegroundProperty);
-        var glyph = HistoryIcons.Create(icon, 15, primary ? HistoryUi.Keys.OnAccent : HistoryUi.Keys.Secondary);
-        glyph.Margin = new Thickness(0, 0, 7, 0);
-        glyph.VerticalAlignment = VerticalAlignment.Center;
-        var content = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
-        content.Children.Add(glyph);
-        content.Children.Add(label);
-
-        var button = new Button { Content = content, Padding = new Thickness(12, 9, 12, 9), FontSize = 13 };
-        if (primary)
+        var width = _strip.ViewportWidth;
+        if (width <= 0) return;
+        var fadeLeft = _strip.HorizontalOffset > 0.5;
+        var fadeRight = _strip.HorizontalOffset + width < _strip.ExtentWidth - 0.5;
+        if (!fadeLeft && !fadeRight)
         {
-            button.BorderThickness = new Thickness(0);
-            button.SetResourceReference(Control.BackgroundProperty, HistoryUi.Keys.Accent);
-            button.SetResourceReference(Control.ForegroundProperty, HistoryUi.Keys.OnAccent);
-        }
-        else
-        {
-            button.SetResourceReference(Control.BackgroundProperty, HistoryUi.Keys.SurfaceAlt);
+            _strip.OpacityMask = null;
+            return;
         }
 
-        AutomationProperties.SetName(button, text);
-        AutomationProperties.SetAutomationId(button, id);
-        button.Click += (_, _) => action();
-        return button;
+        var edge = Math.Min(0.25, 28 / width);
+        var mask = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 0) };
+        mask.GradientStops.Add(new GradientStop(fadeLeft ? Colors.Transparent : Colors.Black, 0));
+        mask.GradientStops.Add(new GradientStop(Colors.Black, edge));
+        mask.GradientStops.Add(new GradientStop(Colors.Black, 1 - edge));
+        mask.GradientStops.Add(new GradientStop(fadeRight ? Colors.Transparent : Colors.Black, 1));
+        mask.Freeze();
+        _strip.OpacityMask = mask;
     }
 
     private void FadeNav(double to)
     {
-        if (_previous.IsEnabled) HistoryUi.Fade(_previous, UIElement.OpacityProperty, to);
-        if (_next.IsEnabled) HistoryUi.Fade(_next, UIElement.OpacityProperty, to);
+        if (_previous.IsEnabled) UiKit.Fade(_previous, UIElement.OpacityProperty, to);
+        if (_next.IsEnabled) UiKit.Fade(_next, UIElement.OpacityProperty, to);
     }
 
     internal void Reload()
@@ -357,6 +385,7 @@ internal sealed class HistoryQuickViewWindow : Window
             BuildThumbnails();
             ShowCurrent();
             _emptyText.Text = StringsUi.Get("S.QuickView.LoadFailed");
+            _emptyHint.Visibility = Visibility.Collapsed;
         }
     }
 
@@ -370,21 +399,26 @@ internal sealed class HistoryQuickViewWindow : Window
         {
             var index = i;
             var record = _records[i];
-            var picture = new Image { Source = _store.TryGetCachedPreview(record), Stretch = Stretch.UniformToFill, IsHitTestVisible = false, Clip = new RectangleGeometry(new Rect(0, 0, 54, 40), 6, 6) };
+            // 64×48 外框 = 2px 选中环 + 2px 留缝 + 56×40 圆角图（内 6 / 外 10，同心圆角）。
+            var picture = new Image { Source = _store.TryGetCachedPreview(record), Stretch = Stretch.UniformToFill, IsHitTestVisible = false, Clip = new RectangleGeometry(new Rect(0, 0, 56, 40), Tokens.Radius.Small, Tokens.Radius.Small) };
             if (picture.Source is null) pending.Add((record, picture));
             var border = new Border
             {
-                Width = 62, Height = 48, Padding = new Thickness(2), CornerRadius = new CornerRadius(9),
-                Margin = new Thickness(0, 0, 6, 0), BorderThickness = new Thickness(2),
+                Width = 64, Height = 48, Padding = new Thickness(2), CornerRadius = new CornerRadius(Tokens.Radius.Popup),
+                Margin = new Thickness(0, 0, Tokens.Space.XS + 2, 0), BorderThickness = new Thickness(2),
+                BorderBrush = Brushes.Transparent, Opacity = UnselectedThumbnailOpacity,
                 Cursor = Cursors.Hand, ToolTip = record.Name,
                 Child = picture
             };
             RenderOptions.SetBitmapScalingMode(picture, BitmapScalingMode.HighQuality);
-            border.SetResourceReference(Border.BackgroundProperty, HistoryUi.Keys.SurfaceAlt);
+            border.SetResourceReference(Border.BackgroundProperty, UiKit.Keys.SurfaceAlt);
             AutomationProperties.SetName(border, record.Name);
             AutomationProperties.SetAutomationId(border, $"quick-view-thumbnail-{i}");
             HistoryImageDrag.Attach(border, source => Drag(record, source));
             border.MouseLeftButtonUp += (_, e) => { Select(index); e.Handled = true; };
+            // 悬停：未选中的缩略图提亮，离开时回到当前状态应有的透明度。
+            border.MouseEnter += (_, _) => UiKit.Fade(border, UIElement.OpacityProperty, 1);
+            border.MouseLeave += (_, _) => UiKit.Fade(border, UIElement.OpacityProperty, ThumbnailOpacity(index));
             _thumbnailBorders.Add(border);
             _thumbnails.Children.Add(border);
         }
@@ -425,8 +459,13 @@ internal sealed class HistoryQuickViewWindow : Window
         try { hasImage = record is not null && RefreshPicture(); }
         catch (Exception ex) { AppLog.Error("History", "快览显示图片失败", ex); hasImage = false; }
         _picture.Visibility = _picture.Source is null ? Visibility.Hidden : Visibility.Visible;
+        _pictureStage.Visibility = _picture.Visibility;
         _empty.Visibility = _picture.Source is null ? Visibility.Visible : Visibility.Collapsed;
         _emptyText.Text = StringsUi.Get(record is null ? "S.QuickView.Empty" : "S.History.DragMissing");
+        _emptyHint.Visibility = record is null ? Visibility.Visible : Visibility.Collapsed;
+        // 没有记录时收起名称行与缩略图条，让空状态独占画框。
+        _meta.Visibility = record is null ? Visibility.Collapsed : Visibility.Visible;
+        _strip.Visibility = _records.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
         _name.Text = record?.Name ?? string.Empty;
         _name.ToolTip = record?.Name;
         _dimensions.Text = record is null ? string.Empty : $"{record.Width}×{record.Height}";
@@ -440,10 +479,10 @@ internal sealed class HistoryQuickViewWindow : Window
         {
             var selected = i == _index;
             if (selected)
-                _thumbnailBorders[i].SetResourceReference(Border.BorderBrushProperty, HistoryUi.Keys.Accent);
+                _thumbnailBorders[i].SetResourceReference(Border.BorderBrushProperty, UiKit.Keys.Accent);
             else
                 _thumbnailBorders[i].BorderBrush = Brushes.Transparent;
-            _thumbnailBorders[i].Opacity = selected ? 1 : 0.6;
+            UiKit.Fade(_thumbnailBorders[i], UIElement.OpacityProperty, ThumbnailOpacity(i));
         }
 
         if (record is not null) _thumbnailBorders[_index].BringIntoView();

@@ -68,6 +68,8 @@ public sealed record AppSettings
 
     public const string DefaultQuickViewShortcut = "Alt+Q";
     public const int CurrentSettingsVersion = 2;
+    public const int MinHistoryRetentionDays = 1;
+    public const int MaxHistoryRetentionDays = 3650;
 
     /// <summary>设置文件名。</summary>
     public const string FileName = "settings.json";
@@ -92,6 +94,9 @@ public sealed record AppSettings
 
     /// <summary>旧设置没有此字段时保持原有的窗口识别行为。</summary>
     public CaptureSelectionMode CaptureMode { get; init; } = CaptureSelectionMode.Window;
+
+    /// <summary>普通历史记录的保留天数，收藏不受影响。</summary>
+    public int HistoryRetentionDays { get; init; } = History.HistoryRetentionPolicy.DefaultRetentionDays;
 
     /// <summary>
     /// 开机启动（当前用户方式：<c>HKCU\Software\Microsoft\Windows\CurrentVersion\Run</c>）。
@@ -141,6 +146,7 @@ public sealed record AppSettings
             Language = NormalizeLanguage(settings.Language, warnings),
             Theme = NormalizeTheme(settings.Theme, warnings),
             CaptureMode = NormalizeCaptureMode(settings.CaptureMode, warnings),
+            HistoryRetentionDays = NormalizeHistoryRetentionDays(settings.HistoryRetentionDays, warnings),
             LaunchAtStartup = settings.LaunchAtStartup,
             Version = Math.Max(settings.Version, CurrentSettingsVersion),
         };
@@ -243,7 +249,14 @@ public sealed record AppSettings
     }
 
     public override string ToString() =>
-        $"截图={ScreenshotShortcut} 快速截图={QuickScreenshotShortcut} 贴图={PinShortcut} 语言={Language} 主题={Theme} 截图方式={CaptureMode} 开机启动={LaunchAtStartup}";
+        $"截图={ScreenshotShortcut} 快速截图={QuickScreenshotShortcut} 贴图={PinShortcut} 语言={Language} 主题={Theme} 截图方式={CaptureMode} 历史保留={HistoryRetentionDays}天 开机启动={LaunchAtStartup}";
+
+    private static int NormalizeHistoryRetentionDays(int days, List<string> warnings)
+    {
+        if (days is >= MinHistoryRetentionDays and <= MaxHistoryRetentionDays) return days;
+        warnings.Add($"历史保留天数 {days} 无效，已回退为默认值 {History.HistoryRetentionPolicy.DefaultRetentionDays} 天。");
+        return History.HistoryRetentionPolicy.DefaultRetentionDays;
+    }
 
     private static string NormalizeOptionalShortcut(string? value, List<string> warnings)
     {

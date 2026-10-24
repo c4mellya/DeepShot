@@ -33,14 +33,20 @@ public static class UpdateChecker
     private const string UserAgent = "DeepShot-UpdateCheck/1.0";
 
     /// <summary>
-    /// 当前运行的程序集版本（规范文本，例如 <c>0.1.0</c>；读不到时返回 <c>0.0.0</c>）。
+    /// 当前运行的应用版本（优先信息版本，保留预发布标识；读不到时返回 <c>0.0.0</c>）。
     /// </summary>
     public static string GetCurrentVersion()
     {
         try
         {
-            var version = Assembly.GetEntryAssembly()?.GetName().Version ??
-                          typeof(UpdateChecker).Assembly.GetName().Version;
+            var assembly = Assembly.GetEntryAssembly() ?? typeof(UpdateChecker).Assembly;
+            var informational = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+            if (AppVersion.TryParse(informational, out var informationVersion, out _))
+            {
+                return informationVersion.ToNormalizedString();
+            }
+
+            var version = assembly.GetName().Version;
             if (version is null)
             {
                 return "0.0.0";
@@ -86,14 +92,19 @@ public static class UpdateChecker
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
             request.Headers.TryAddWithoutValidation("User-Agent", UserAgent);
-            request.Headers.TryAddWithoutValidation("Accept", "application/json");
+            var isGitHub = new Uri(url).Host.Equals("api.github.com", StringComparison.OrdinalIgnoreCase);
+            request.Headers.TryAddWithoutValidation("Accept", isGitHub ? "application/vnd.github+json" : "application/json");
+            if (isGitHub)
+            {
+                request.Headers.TryAddWithoutValidation("X-GitHub-Api-Version", "2022-11-28");
+            }
 
             using var response = await client.SendAsync(request, HttpCompletionOption.ResponseContentRead)
                 .ConfigureAwait(true);
 
             if (!response.IsSuccessStatusCode)
             {
-                var reason = $"HTTP {(int)response.StatusCode} {response.ReasonPhrase}".Trim();
+                var reason = DescribeStatus(response.StatusCode);
                 AppLog.Warn("Update", $"检查更新失败：{reason}（渠道 {url}）");
                 return UpdateCheck.Failed(current, url, reason);
             }
@@ -152,9 +163,10 @@ public static class UpdateChecker
     /// <summary>把一条 HTTP 状态码描述成用户能看懂的中文（供需要更细提示的调用方使用）。</summary>
     public static string DescribeStatus(HttpStatusCode status) => (int)status switch
     {
-        404 => "更新清单不存在（HTTP 404）",
-        403 => "更新清单拒绝访问（HTTP 403）",
+        404 => "尚无可用的正式发布版本，或更新渠道不存在（HTTP 404）",
+        403 => "更新请求被拒绝，可能触发 GitHub API 访问限制，请稍后重试（HTTP 403）",
+        429 => "更新请求过于频繁，请稍后重试（HTTP 429）",
         >= 500 => $"更新渠道服务器出错（HTTP {(int)status}）",
-        _ => $"更新清单返回了意外的状态码 HTTP {(int)status}",
+        _ => $"更新渠道返回了意外的状态码 HTTP {(int)status}",
     };
 }

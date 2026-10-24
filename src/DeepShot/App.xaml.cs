@@ -46,6 +46,7 @@ public partial class App : Application
     private TrayIcon? _trayIcon;
     private GlobalHotkey? _globalHotkey;
     private bool _capturingShortcut;
+    private bool _checkingForUpdates;
     private CaptureOverlayWindow? _captureOverlay;
     private HistoryQuickViewWindow? _historyQuickView;
     private long _quickViewClosedAt = -1000;
@@ -67,7 +68,7 @@ public partial class App : Application
     private HistoryCaptureSink? _historyCaptureSink;
 
     /// <summary>
-    /// T27：30 天清理调度器（启动清一次 + 跨日再清）。历史不可用时为 null。
+    /// T27：历史自动清理调度器（启动清一次 + 跨日再清）。历史不可用时为 null。
     /// </summary>
     private HistoryRetentionScheduler? _retentionScheduler;
 
@@ -455,6 +456,9 @@ public partial class App : Application
     /// </remarks>
     private async void CheckForUpdates(string trigger)
     {
+        if (_checkingForUpdates) return;
+        _checkingForUpdates = true;
+        ToastWindow.Show(StringsUi.Get("S.Update.Checking"));
         AppLog.Info("Update", $"检查更新触发：{trigger}（渠道={AppInfo.UpdateManifestUrl}）");
 
         UpdateCheckResult result;
@@ -470,6 +474,10 @@ public partial class App : Application
                 UpdateChecker.GetCurrentVersion(),
                 AppInfo.UpdateManifestUrl,
                 ex.Message);
+        }
+        finally
+        {
+            _checkingForUpdates = false;
         }
 
         UpdateChecker.LogResult(result, trigger);
@@ -546,7 +554,7 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// T27：启动 30 天清理并开启跨日检查。历史不可用时什么也不做。
+    /// T27：启动 历史自动清理并开启跨日检查。历史不可用时什么也不做。
     /// </summary>
     /// <remarks>
     /// 清理规则在 Core（<see cref="HistoryRetentionPolicy"/>）：按**创建时间**算 30 天、
@@ -558,18 +566,19 @@ public partial class App : Application
     {
         if (_historyStore is null)
         {
-            AppLog.Info("History", "30 天清理未启动：历史库本次不可用");
+            AppLog.Info("History", "历史自动清理未启动：历史库本次不可用");
             return;
         }
 
         try
         {
-            _retentionScheduler = new HistoryRetentionScheduler(_historyStore, OnHistoryPurged);
+            _retentionScheduler = new HistoryRetentionScheduler(
+                _historyStore, OnHistoryPurged, retentionDays: () => Settings.HistoryRetentionDays);
             _retentionScheduler.Start();
         }
         catch (Exception ex)
         {
-            AppLog.Error("History", "30 天清理调度器启动失败（历史功能仍可用，只是不再自动清理）", ex);
+            AppLog.Error("History", "历史自动清理调度器启动失败（历史功能仍可用，只是不再自动清理）", ex);
             _retentionScheduler = null;
         }
     }
@@ -577,7 +586,7 @@ public partial class App : Application
     /// <summary>清理删除了记录后的收尾：刷新已打开的图库（否则用户看到的还是被删掉的卡片）。</summary>
     private void OnHistoryPurged(int deletedCount, HistoryRetentionResult result)
     {
-        AppLog.Info("History", $"30 天清理已删除 {deletedCount} 条记录：{result}");
+        AppLog.Info("History", $"历史自动清理已删除 {deletedCount} 条记录：{result}");
 
         _historyQuickView?.Reload();
 
@@ -587,7 +596,7 @@ public partial class App : Application
             return;
         }
 
-        HistoryGallery.ReloadIfOpen($"30 天清理删除了 {deletedCount} 条过期记录");
+        HistoryGallery.ReloadIfOpen($"历史自动清理删除了 {deletedCount} 条过期记录");
     }
 
     /// <summary>截图/贴图历史写入失败时提示一次（主操作已经成功，只提"历史没记上"）。</summary>
@@ -1060,7 +1069,7 @@ public partial class App : Application
         overlay.Cancel();
     }
 
-    /// <summary>退出时停止 30 天清理调度器（不删任何东西，下次启动会再清一次）。</summary>
+    /// <summary>退出时停止 历史自动清理调度器（不删任何东西，下次启动会再清一次）。</summary>
     private void DisposeHistoryRetention()
     {
         _retentionScheduler?.Dispose();

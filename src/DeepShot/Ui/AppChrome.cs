@@ -32,7 +32,7 @@ internal static class AppChrome
             {
                 var image = new BitmapImage();
                 image.BeginInit();
-                image.UriSource = new Uri("pack://application:,,,/Assets/app-icon.png", UriKind.Absolute);
+                image.UriSource = new Uri("pack://application:,,,/DeepShot;component/Assets/app-icon.png", UriKind.Absolute);
                 image.CacheOption = BitmapCacheOption.OnLoad;
                 image.EndInit();
                 image.Freeze();
@@ -62,7 +62,7 @@ internal static class AppChrome
             try
             {
                 var frame = BitmapFrame.Create(
-                    new Uri("pack://application:,,,/Assets/app.ico", UriKind.Absolute),
+                    new Uri("pack://application:,,,/DeepShot;component/Assets/app.ico", UriKind.Absolute),
                     BitmapCreateOptions.None,
                     BitmapCacheOption.OnLoad);
                 frame.Freeze();
@@ -98,6 +98,20 @@ internal static class AppChrome
                     window.Icon = icon;
                 }
             }));
+    }
+
+    /// <summary>
+    /// 让系统窗框的深浅色标志（标题栏区域、贴靠/预览缩略图）始终跟随当前主题：
+    /// 句柄创建时设置一次，窗口打开期间切换主题再同步一次，关闭时退订。
+    /// </summary>
+    internal static void SyncDarkTitleBar(Window window)
+    {
+        void Sync() => DwmApi.TrySetDarkTitleBar(window, ThemeManager.Palette.IsDark);
+        void OnThemeChanged(DeepShot.Core.Settings.AppTheme _) => window.Dispatcher.BeginInvoke(Sync);
+
+        window.SourceInitialized += (_, _) => Sync();
+        ThemeManager.Changed += OnThemeChanged;
+        window.Closed += (_, _) => ThemeManager.Changed -= OnThemeChanged;
     }
 
     /// <summary>创建一个应用图标 Image（高质量缩放）。</summary>
@@ -150,7 +164,8 @@ internal static class AppChrome
         bar.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         bar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-        var icon = IconImage(20);
+        // Win11 风格：18px 图标 + 12px 标题，留出呼吸感。
+        var icon = IconImage(18);
         icon.Margin = new Thickness(14, 0, 10, 0);
         icon.VerticalAlignment = VerticalAlignment.Center;
         Grid.SetColumn(icon, 0);
@@ -158,7 +173,7 @@ internal static class AppChrome
 
         var title = new TextBlock
         {
-            FontSize = 12.5,
+            FontSize = Tokens.Text.Caption,
             VerticalAlignment = VerticalAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis,
             IsHitTestVisible = false,
@@ -211,6 +226,24 @@ internal static class AppChrome
                 maximize.Content = GlyphFor(maximized ? "M2.5,0.5 H9.5 V7.5 M0.5,2.5 H7.5 V9.5 H0.5 Z" : "M0.5,0.5 H9.5 V9.5 H0.5 Z");
             }
         };
+    }
+
+    /// <summary>
+    /// 在标题栏与内容"身后"垫一层装饰背景（从窗口最顶端开始，跨过标题栏，不吃命中测试）。
+    /// 用于头部晕染这类需要和标题栏连成一片、不能在标题栏下沿留出接缝的背景。
+    /// 必须在 <see cref="Apply"/> 之后调用。
+    /// </summary>
+    internal static void AddBackdrop(Window window, FrameworkElement backdrop)
+    {
+        if (window.Content is not Grid { RowDefinitions.Count: 2 } root)
+        {
+            return;
+        }
+
+        backdrop.IsHitTestVisible = false;
+        Grid.SetRow(backdrop, 0);
+        Grid.SetRowSpan(backdrop, 2);
+        root.Children.Insert(0, backdrop);
     }
 
     private static Button CaptionButton(string glyph, string name, bool close, Action action)
