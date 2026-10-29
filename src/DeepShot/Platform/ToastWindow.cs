@@ -34,6 +34,9 @@ public sealed class ToastWindow : Window
 
     private readonly DispatcherTimer _timer;
 
+    /// <summary>当前显示的提示；新提示出现时关闭旧的，避免叠在一起。</summary>
+    private static ToastWindow? _current;
+
     private ToastWindow(string message)
     {
         Title = StringsUi.Format("S.Toast.WindowTitle", Environment.ProcessId);
@@ -117,7 +120,16 @@ public sealed class ToastWindow : Window
 
         try
         {
+            _current?.Close();
             var toast = new ToastWindow(message);
+            toast.Closed += (_, _) =>
+            {
+                if (ReferenceEquals(_current, toast))
+                {
+                    _current = null;
+                }
+            };
+            _current = toast;
             toast.Show();
             AppLog.Info("Toast", $"已显示提示：{message}");
             return toast;

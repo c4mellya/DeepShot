@@ -168,6 +168,9 @@ public static class ThemeManager
         public const string Divider = "Theme.Divider";
         public const string Foreground = "Theme.Foreground";
         public const string SecondaryForeground = "Theme.SecondaryForeground";
+        public const string TertiaryForeground = "Theme.TertiaryForeground";
+        public const string PressedBackground = "Theme.PressedBackground";
+        public const string FocusRing = "Theme.FocusRing";
         public const string Accent = "Theme.Accent";
         public const string OnAccent = "Theme.OnAccent";
         public const string HoverBackground = "Theme.HoverBackground";
@@ -203,7 +206,10 @@ public static class ThemeManager
 
     private static readonly object Gate = new();
     private static ResourceDictionary? _dynamic;
-    private static ThemePalette _palette = ThemePalette.Light;
+    private static ThemePalette _palette = ThemePalettes.DeepSeekLight;
+
+    /// <summary>用户选择的主题品牌（组件库配色卡：Claude / DeepSeek）。</summary>
+    public static ThemeBrand SelectedBrand { get; private set; } = ThemeBrand.DeepSeek;
 
     /// <summary>用户选择的主题（<see cref="AppTheme.System"/> 时实际颜色由系统决定）。</summary>
     public static AppTheme SelectedTheme { get; private set; } = AppTheme.System;
@@ -221,56 +227,76 @@ public static class ThemeManager
     public static event Action<AppTheme>? Changed;
 
     /// <summary>
-    /// 初始化：把主题资源键写进应用资源字典（只做一次），然后应用 <see cref="AppSettings.Theme"/>。
+    /// 初始化：把主题资源键写进应用资源字典（只做一次），然后应用品牌 + 明暗。
     /// </summary>
     /// <param name="application">当前应用（<c>Application.Current</c>；测试里可为 null）。</param>
-    /// <param name="theme">用户选择的主题。</param>
+    /// <param name="brand">主题品牌（Claude / DeepSeek）。</param>
+    /// <param name="theme">用户选择的明暗模式。</param>
     /// <returns>本次是否真的改变了颜色（首次初始化一定为 true）。</returns>
-    public static bool Initialize(Application? application, AppTheme theme)
+    public static bool Initialize(Application? application, ThemeBrand brand, AppTheme theme)
     {
         lock (Gate)
         {
             if (_dynamic is null)
             {
                 _dynamic = new ResourceDictionary();
+                var initial = ThemePalettes.For(brand, AppTheme.Light);
                 foreach (var key in AllBrushKeys)
                 {
                     // 初始给浅色，随后 Apply 会整体替换。
-                    _dynamic[key] = ThemePalette.Light.Get(ColorPropertyOf(key) ?? "Foreground");
+                    _dynamic[key] = initial.Get(ColorPropertyOf(key) ?? "Foreground");
                 }
 
-                _dynamic[RadiusKeys.Large] = ThemePalette.Light.RadiusLarge;
-                _dynamic[RadiusKeys.Medium] = ThemePalette.Light.RadiusMedium;
-                _dynamic[RadiusKeys.Small] = ThemePalette.Light.RadiusSmall;
+                _dynamic[RadiusKeys.Large] = initial.RadiusLarge;
+                _dynamic[RadiusKeys.Medium] = initial.RadiusMedium;
+                _dynamic[RadiusKeys.Small] = initial.RadiusSmall;
                 _dynamic[FontFamilyKey] = AppFonts.Family;
 
                 if (application is not null)
                 {
                     application.Resources.MergedDictionaries.Add(_dynamic);
                     UiStyles.Install(application);
+
+                    // 跟随系统：用户在 Windows 设置里改明暗或强调色时就地刷新。
+                    var dispatcher = application.Dispatcher;
+                    SystemEvents.UserPreferenceChanged += (_, e) =>
+                    {
+                        if (e.Category is not (UserPreferenceCategory.General or UserPreferenceCategory.Color or UserPreferenceCategory.VisualStyle))
+                        {
+                            return;
+                        }
+
+                        dispatcher.BeginInvoke(() =>
+                        {
+                            ThemePalettes.InvalidateAccent();
+                            Apply(SelectedBrand, SelectedTheme);
+                        });
+                    };
                 }
             }
         }
 
-        return Apply(theme);
+        return Apply(brand, theme);
     }
 
     /// <summary>
     /// 应用主题：解析"跟随系统"、就地替换所有主题画刷与圆角，并触发 <see cref="Changed"/>。
     /// </summary>
-    /// <returns>实际生效的主题是否变化（颜色一定被重新写入）。</returns>
-    public static bool Apply(AppTheme theme)
+    /// <returns>实际生效的明暗是否变化（颜色一定被重新写入）。</returns>
+    public static bool Apply(ThemeBrand brand, AppTheme theme)
     {
         AppTheme effective;
         var changed = false;
 
         lock (Gate)
         {
+            SelectedBrand = brand;
             SelectedTheme = theme;
             effective = ThemePalette.ResolveEffective(theme);
-            changed = effective != EffectiveTheme || _palette is null;
+            var palette = ThemePalettes.For(brand, effective);
+            changed = effective != EffectiveTheme || _palette is null || !ReferenceEquals(_palette, palette);
             EffectiveTheme = effective;
-            _palette = ThemePalette.ForEffective(effective);
+            _palette = palette;
 
             if (_dynamic is not null)
             {
@@ -304,6 +330,9 @@ public static class ThemeManager
         return changed;
     }
 
+    /// <summary>只切换明暗、沿用当前品牌（兼容旧调用点）。</summary>
+    public static bool Apply(AppTheme theme) => Apply(SelectedBrand, theme);
+
     /// <summary>主题资源键 → <see cref="ThemePalette"/> 上的颜色属性名。</summary>
     private static string? ColorPropertyOf(string key) => key switch
     {
@@ -314,6 +343,9 @@ public static class ThemeManager
         BrushKeys.Divider => nameof(ThemePalette.Divider),
         BrushKeys.Foreground => nameof(ThemePalette.Foreground),
         BrushKeys.SecondaryForeground => nameof(ThemePalette.SecondaryForeground),
+        BrushKeys.TertiaryForeground => nameof(ThemePalette.TertiaryForeground),
+        BrushKeys.PressedBackground => nameof(ThemePalette.PressedBackground),
+        BrushKeys.FocusRing => nameof(ThemePalette.FocusRing),
         BrushKeys.Accent => nameof(ThemePalette.Accent),
         BrushKeys.OnAccent => nameof(ThemePalette.OnAccent),
         BrushKeys.HoverBackground => nameof(ThemePalette.HoverBackground),
@@ -346,6 +378,9 @@ public static class ThemeManager
         BrushKeys.Divider,
         BrushKeys.Foreground,
         BrushKeys.SecondaryForeground,
+        BrushKeys.TertiaryForeground,
+        BrushKeys.PressedBackground,
+        BrushKeys.FocusRing,
         BrushKeys.Accent,
         BrushKeys.OnAccent,
         BrushKeys.HoverBackground,

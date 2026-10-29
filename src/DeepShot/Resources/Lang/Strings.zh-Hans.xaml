@@ -15,6 +15,8 @@
     <sys:String x:Key="S.Common.Ok">确定</sys:String>
     <sys:String x:Key="S.Common.Cancel">取消</sys:String>
     <sys:String x:Key="S.Common.Close">关闭</sys:String>
+    <sys:String x:Key="S.Common.Minimize">最小化</sys:String>
+    <sys:String x:Key="S.Common.Maximize">最大化</sys:String>
     <sys:String x:Key="S.Common.Copy">复制</sys:String>
     <sys:String x:Key="S.Common.SaveAs">另存为</sys:String>
     <sys:String x:Key="S.Common.Pin">贴图</sys:String>
@@ -69,6 +71,24 @@
     <sys:String x:Key="S.Overlay.Redo">重做</sys:String>
     <sys:String x:Key="S.Overlay.SizeBadge">{0} × {1}</sys:String>
     <sys:String x:Key="S.Overlay.SelectionLocked">选区已锁定（{0} 个标注）</sys:String>
+    <sys:String x:Key="S.Overlay.Copied">已复制到剪贴板</sys:String>
+    <sys:String x:Key="S.Overlay.Saved">已保存 {0}</sys:String>
+    <sys:String x:Key="S.Overlay.DiscardHint">再按一次 Esc 放弃标注并退出</sys:String>
+    <sys:String x:Key="S.Overlay.CannotDraw">当前状态不能绘制标注</sys:String>
+    <sys:String x:Key="S.Overlay.CannotType">当前状态不能输入文字</sys:String>
+    <sys:String x:Key="S.Overlay.NothingToUndo">没有可撤销的标注</sys:String>
+    <sys:String x:Key="S.Overlay.NothingToRedo">没有可重做的标注</sys:String>
+    <sys:String x:Key="S.Overlay.CopyFailed">复制失败</sys:String>
+    <sys:String x:Key="S.Overlay.SaveDialogFailed">无法打开保存对话框</sys:String>
+    <sys:String x:Key="S.Overlay.SaveFailed">保存失败，请重试</sys:String>
+    <sys:String x:Key="S.Overlay.PinFailed">贴图失败</sys:String>
+    <sys:String x:Key="S.Overlay.TextInput">标注文字输入框</sys:String>
+    <sys:String x:Key="S.Overlay.Color.Red">红色</sys:String>
+    <sys:String x:Key="S.Overlay.Color.Yellow">黄色</sys:String>
+    <sys:String x:Key="S.Overlay.Color.Green">绿色</sys:String>
+    <sys:String x:Key="S.Overlay.Color.Blue">蓝色</sys:String>
+    <sys:String x:Key="S.Overlay.Color.White">白色</sys:String>
+    <sys:String x:Key="S.Overlay.Color.Black">黑色</sys:String>
 
     <!-- ===== 贴图 ===== -->
     <sys:String x:Key="S.Pin.WindowTitle">DeepShot 贴图 {0}</sys:String>
@@ -91,6 +111,24 @@
     <!-- ===== 历史图库 ===== -->
     <sys:String x:Key="S.History.WindowTitle">历史</sys:String>
     <sys:String x:Key="S.History.WindowName">DeepShot 历史图库</sys:String>
+    <sys:String x:Key="S.History.PageDesc">浏览、搜索和管理你的截图。</sys:String>
+    <sys:String x:Key="S.History.Toolbar.DateJump">跳转到日期</sys:String>
+    <sys:String x:Key="S.History.Toolbar.Date">日期</sys:String>
+    <sys:String x:Key="S.History.Toolbar.Select">选择</sys:String>
+    <sys:String x:Key="S.History.Toolbar.SelectDone">完成</sys:String>
+    <sys:String x:Key="S.History.DateIndex.Name">时间索引</sys:String>
+    <sys:String x:Key="S.History.DateIndex.ReturnLatest">回到最新</sys:String>
+    <sys:String x:Key="S.History.DateIndex.MonthTip">{0} · {1} 张</sys:String>
+    <sys:String x:Key="S.History.DateJump.Title">跳转到日期</sys:String>
+    <sys:String x:Key="S.History.DateJump.Today">今天</sys:String>
+    <sys:String x:Key="S.History.DateJump.Close">关闭</sys:String>
+    <sys:String x:Key="S.History.DateJump.BackToMonths">返回月份</sys:String>
+    <sys:String x:Key="S.History.DateJump.NoRecords">这一天没有记录</sys:String>
+    <sys:String x:Key="S.History.DateJump.Count">{0} 张</sys:String>
+    <sys:String x:Key="S.History.DateJump.Year">{0} 年</sys:String>
+    <sys:String x:Key="S.History.SelectDay">全选当天</sys:String>
+    <sys:String x:Key="S.History.SearchHint">Ctrl+F</sys:String>
+    <sys:String x:Key="S.History.PageHeadCount">共 {0} 条</sys:String>
     <sys:String x:Key="S.History.Title">历史记录</sys:String>
     <sys:String x:Key="S.History.SearchPlaceholder">搜索</sys:String>
     <sys:String x:Key="S.History.SearchName">搜索历史</sys:String>
@@ -132,6 +170,7 @@
 
     <!-- ===== 历史：空状态说明（与 Core 的 HistoryView.DescribeEmptyState 对应） ===== -->
     <sys:String x:Key="S.History.EmptyNoRecords">按 {0} 开始截图，记录会出现在这里。</sys:String>
+    <sys:String x:Key="S.History.EmptyNoRecordsNoShortcut">截图快捷键已清除，可从托盘或设置开始截图。</sys:String>
     <sys:String x:Key="S.History.EmptySearchAndFavorites">没有匹配“{0}”的收藏。</sys:String>
     <sys:String x:Key="S.History.EmptyFavorites">点击缩略图上的星标即可收藏。</sys:String>
     <sys:String x:Key="S.History.EmptySearch">没有匹配“{0}”的记录。</sys:String>
@@ -241,6 +280,7 @@
     <sys:String x:Key="S.Toast.QuickScreenshotCopied">截图已复制</sys:String>
     <sys:String x:Key="S.Settings.Shortcut.Pin">贴图快捷键</sys:String>
     <sys:String x:Key="S.Settings.Shortcut.Hint">点击后按下两到三个键的组合，例如 Alt+A、Alt+Shift+A；需包含 Ctrl / Alt / Shift / Win。</sys:String>
+    <sys:String x:Key="S.Settings.Shortcut.Cleared">快捷键已清除</sys:String>
     <sys:String x:Key="S.Settings.Shortcut.Waiting">请按下组合键…</sys:String>
     <sys:String x:Key="S.Settings.Shortcut.NeedModifier">需要至少一个修饰键（Ctrl / Alt / Shift / Win），可搭配字母、数字、功能键、方向键、小键盘或标点。</sys:String>
     <sys:String x:Key="S.Settings.Shortcut.SecondKey">请选择一个受支持的主键，如字母、数字、功能键、方向键、小键盘或标点。</sys:String>
@@ -267,11 +307,18 @@
     <sys:String x:Key="S.Settings.Theme.Effective">当前外观：{0}（系统为{1}）</sys:String>
     <sys:String x:Key="S.Settings.Section.Startup">开机启动</sys:String>
     <sys:String x:Key="S.Settings.Startup.Enable">开机时自动启动 DeepShot</sys:String>
-    <sys:String x:Key="S.Settings.Startup.Detail">当前用户，写入 HKCU\Software\Microsoft\Windows\CurrentVersion\Run</sys:String>
-    <sys:String x:Key="S.Settings.Startup.On">已写入注册表启动项。</sys:String>
-    <sys:String x:Key="S.Settings.Startup.Off">已从注册表启动项移除。</sys:String>
-    <sys:String x:Key="S.Settings.Startup.Failed">更新开机启动失败（注册表写入被拒绝，详见日志）。</sys:String>
-    <sys:String x:Key="S.Settings.Startup.BusyHint">开机启动开关在等待注册表结果，请稍候。</sys:String>
+    <sys:String x:Key="S.Settings.Startup.Detail">登录 Windows 后在后台启动。</sys:String>
+    <sys:String x:Key="S.Settings.Startup.On">登录时将自动启动 DeepShot。</sys:String>
+    <sys:String x:Key="S.Settings.Startup.Off">登录时不再自动启动 DeepShot。</sys:String>
+    <sys:String x:Key="S.Settings.Startup.Failed">无法更新开机启动设置，详见日志。</sys:String>
+    <sys:String x:Key="S.Settings.Startup.BusyHint">正在更新开机启动设置，请稍候。</sys:String>
+    <sys:String x:Key="S.Welcome.WindowTitle">欢迎使用 DeepShot</sys:String>
+    <sys:String x:Key="S.Welcome.Tagline">截图、标注、贴在桌面</sys:String>
+    <sys:String x:Key="S.Welcome.Capture">截图</sys:String>
+    <sys:String x:Key="S.Welcome.Pin">贴图</sys:String>
+    <sys:String x:Key="S.Welcome.Recent">最近截图</sys:String>
+    <sys:String x:Key="S.Welcome.TrayIcon">托盘图标</sys:String>
+    <sys:String x:Key="S.Welcome.Start">开始使用</sys:String>
     <sys:String x:Key="S.Settings.Update.ManifestUrl">更新渠道（AppInfo.UpdateManifestUrl）</sys:String>
     <sys:String x:Key="S.Settings.Update.Check">检查更新</sys:String>
     <sys:String x:Key="S.Settings.Section.Data">数据目录</sys:String>
@@ -292,8 +339,40 @@
     <sys:String x:Key="S.Settings.Close">关闭</sys:String>
     <sys:String x:Key="S.Settings.Version">版本 {0}</sys:String>
     <sys:String x:Key="S.Settings.Section.About">关于</sys:String>
-    <sys:String x:Key="S.Settings.About.Font">中文字体：MiSans（小米）</sys:String>
-    <sys:String x:Key="S.Settings.About.FontLicense">依据 MiSans 字体免费商用许可使用</sys:String>
+    <sys:String x:Key="S.Settings.About.Font">界面字体：Inter / 微软雅黑 UI</sys:String>
+    <sys:String x:Key="S.Settings.About.FontLicense">Inter 依据 SIL Open Font License 1.1 使用</sys:String>
+    <sys:String x:Key="S.Settings.Nav.BackToGallery">返回图库</sys:String>
+    <sys:String x:Key="S.Settings.Nav.General">通用</sys:String>
+    <sys:String x:Key="S.Settings.Nav.Shortcuts">快捷键</sys:String>
+    <sys:String x:Key="S.Settings.Nav.Appearance">外观</sys:String>
+    <sys:String x:Key="S.Settings.Nav.Data">数据</sys:String>
+    <sys:String x:Key="S.Settings.Nav.About">关于</sys:String>
+    <sys:String x:Key="S.Settings.Pane.General.Title">通用</sys:String>
+    <sys:String x:Key="S.Settings.Pane.General.Desc">截图方式、语言与启动行为。</sys:String>
+    <sys:String x:Key="S.Settings.Pane.Shortcuts.Title">快捷键</sys:String>
+    <sys:String x:Key="S.Settings.Pane.Shortcuts.Desc">修改后立即生效；被其他程序占用时自动回滚。</sys:String>
+    <sys:String x:Key="S.Settings.Pane.Appearance.Title">外观</sys:String>
+    <sys:String x:Key="S.Settings.Pane.Appearance.Desc">选择配色品牌与明暗模式，立即应用到整个界面。</sys:String>
+    <sys:String x:Key="S.Settings.Pane.Data.Title">数据</sys:String>
+    <sys:String x:Key="S.Settings.Pane.Data.Desc">历史库位置、记录数量与自动清理规则。</sys:String>
+    <sys:String x:Key="S.Settings.Pane.About.Title">关于</sys:String>
+    <sys:String x:Key="S.Settings.Pane.About.Desc">版本与更新。</sys:String>
+    <sys:String x:Key="S.Settings.Group.Capture">截图与启动</sys:String>
+    <sys:String x:Key="S.Settings.Group.Shortcuts">全局快捷键</sys:String>
+    <sys:String x:Key="S.Settings.Group.Brand">品牌</sys:String>
+    <sys:String x:Key="S.Settings.Group.Mode">明暗模式</sys:String>
+    <sys:String x:Key="S.Settings.Group.Storage">存储位置</sys:String>
+    <sys:String x:Key="S.Settings.Group.Retention">历史保留</sys:String>
+    <sys:String x:Key="S.Settings.Group.Update">更新</sys:String>
+    <sys:String x:Key="S.Settings.Group.Font">字体</sys:String>
+    <sys:String x:Key="S.Settings.ThemeBrand">主题品牌</sys:String>
+    <sys:String x:Key="S.Settings.ThemeBrand.DeepSeek">DeepSeek</sys:String>
+    <sys:String x:Key="S.Settings.ThemeBrand.Claude">Claude</sys:String>
+    <sys:String x:Key="S.Settings.ThemeBrand.Hint">DeepSeek：冷白 + 品牌蓝；Claude：暖白 + 赤陶。</sys:String>
+    <sys:String x:Key="S.Settings.ThemeMode">明暗模式</sys:String>
+    <sys:String x:Key="S.Settings.ThemeMode.Hint">跟随系统时由 Windows 的应用模式决定。</sys:String>
+    <sys:String x:Key="S.Settings.Theme.Summary">当前：{0} · {1}</sys:String>
+    <sys:String x:Key="S.Settings.Theme.BrandEffective">当前品牌：{0}</sys:String>
 
     <!-- ===== 检查更新 ===== -->
     <sys:String x:Key="S.Update.Title">检查更新</sys:String>
@@ -370,4 +449,10 @@
     <sys:String x:Key="S.History.ZoomIn">放大</sys:String>
     <sys:String x:Key="S.History.ZoomOut">缩小</sys:String>
     <sys:String x:Key="S.History.PreviewDetails">{0}×{1} px · {2} · {3}</sys:String>
+    <sys:String x:Key="S.History.MoreActions">更多</sys:String>
+    <sys:String x:Key="S.Nav.Name">导航</sys:String>
+    <sys:String x:Key="S.Nav.All">全部</sys:String>
+    <sys:String x:Key="S.Nav.Favorites">收藏</sys:String>
+    <sys:String x:Key="S.History.PreviewInfo">{0} · {1}×{2}</sys:String>
+    <sys:String x:Key="S.Settings.PageTitle">设置</sys:String>
 </ResourceDictionary>

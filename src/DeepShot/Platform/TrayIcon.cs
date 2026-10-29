@@ -344,6 +344,7 @@ public sealed class TrayIcon : IDisposable
         {
             // 标准修正：先把隐藏窗口设为前台，菜单才会在点击别处时正确消失。
             NativeMethods.SetForegroundWindow(_window);
+            ApplyMenuTheme();
             var command = NativeMethods.TrackPopupMenuEx(
                 menu,
                 NativeMethods.TPM_RIGHTBUTTON | NativeMethods.TPM_RETURNCMD | NativeMethods.TPM_NONOTIFY,
@@ -377,8 +378,10 @@ public sealed class TrayIcon : IDisposable
         }
 
         // T31：全部文案走 Resources\Lang 的语言资源（切换语言后下次弹菜单就是新语言）。
-        AppendCommand(menu, TrayMenuCommand.Screenshot, StringsUi.Get("S.Tray.Screenshot"));
-        AppendCommand(menu, TrayMenuCommand.PasteFromClipboard, StringsUi.Get("S.Tray.PasteFromClipboard"));
+        // 快捷键用制表符分隔，原生菜单会把它右对齐；“截图”是默认项（粗体）。
+        AppendCommand(menu, TrayMenuCommand.Screenshot, WithShortcut(StringsUi.Get("S.Tray.Screenshot"), DeepShot.History.HistoryShortcutProvider.ScreenshotShortcut));
+        AppendCommand(menu, TrayMenuCommand.PasteFromClipboard, WithShortcut(StringsUi.Get("S.Tray.PasteFromClipboard"), DeepShot.History.HistoryShortcutProvider.PinShortcut));
+        SetMenuDefaultItem(menu, (uint)TrayMenuCommand.Screenshot, 0);
         NativeMethods.AppendMenu(menu, NativeMethods.MF_SEPARATOR, UIntPtr.Zero, null);
 
         // T20：文案随贴图状态变化（“隐藏全部贴图 (2)”/“显示全部贴图 (2)”），
@@ -408,6 +411,40 @@ public sealed class TrayIcon : IDisposable
             $"设置={StringsUi.Get("S.Tray.Settings")} 检查更新={StringsUi.Get("S.Tray.CheckUpdates")} " +
             $"退出={StringsUi.Get("S.Tray.Exit")}");
         return menu;
+    }
+
+    private static string WithShortcut(string text, string? shortcut) =>
+        string.IsNullOrWhiteSpace(shortcut) ? text : $"{text}\t{shortcut}";
+
+    [DllImport("user32.dll")]
+    private static extern bool SetMenuDefaultItem(IntPtr hMenu, uint uItem, uint fByPos);
+
+    [DllImport("uxtheme.dll", EntryPoint = "#135")]
+    private static extern int SetPreferredAppMode(int mode);
+
+    [DllImport("uxtheme.dll", EntryPoint = "#136")]
+    private static extern void FlushMenuThemes();
+
+    /// <summary>
+    /// 原生菜单跟随应用的深浅色：uxtheme 未公开的 SetPreferredAppMode（1903+，2=强制深色 3=强制浅色）。
+    /// 不支持的系统上静默跳过，菜单保持系统默认外观。
+    /// </summary>
+    private static void ApplyMenuTheme()
+    {
+        if (Environment.OSVersion.Version.Build < 18362)
+        {
+            return;
+        }
+
+        try
+        {
+            SetPreferredAppMode(ThemeManager.EffectiveTheme == DeepShot.Core.Settings.AppTheme.Dark ? 2 : 3);
+            FlushMenuThemes();
+        }
+        catch (Exception ex) when (ex is EntryPointNotFoundException or DllNotFoundException)
+        {
+            AppLog.Warn("Tray", $"托盘菜单主题设置不可用：{ex.Message}");
+        }
     }
 
     private static void AppendCommand(IntPtr menu, TrayMenuCommand command, string text) =>

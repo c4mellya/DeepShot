@@ -9,9 +9,12 @@ namespace DeepShot.Ui;
 /// </summary>
 internal static class Tokens
 {
-    /// <summary>字号阶梯（与 MiSans 的 x 高度配合，正文 13 在 100% 缩放下最清晰）。</summary>
+    /// <summary>字号阶梯（组件库字体栈，正文 13 在 100% 缩放下最清晰）。</summary>
     internal static class Text
     {
+        /// <summary>组件库 eyebrow：分组标签、时间索引年份。</summary>
+        internal const double Eyebrow = 11;
+
         /// <summary>辅助说明、徽标、时间戳。</summary>
         internal const double Caption = 12;
 
@@ -40,37 +43,49 @@ internal static class Tokens
         internal const double L = 16;
         internal const double XL = 24;
         internal const double XXL = 32;
+        internal const double XXXL = 48;
     }
 
     /// <summary>圆角。</summary>
     internal static class Radius
     {
-        /// <summary>徽标、色块、小标签。</summary>
-        internal const double Small = 6;
+        /// <summary>行内代码 / 小色块（组件库 xs）。</summary>
+        internal const double XS = 2;
+
+        /// <summary>徽标、色块。</summary>
+        internal const double Small = 4;
 
         /// <summary>按钮、输入框、下拉框、菜单项。</summary>
-        internal const double Control = 8;
+        internal const double Control = 4;
 
         /// <summary>弹出层（下拉列表、右键菜单）。</summary>
-        internal const double Popup = 10;
+        internal const double Popup = 8;
 
         /// <summary>内容卡片、设置分组。</summary>
-        internal const double Card = 12;
+        internal const double Card = 8;
+
+        /// <summary>浮起面板（组件库 panel）。</summary>
+        internal const double Panel = 8;
     }
 
     /// <summary>控件高度。</summary>
     internal static class Height
     {
         internal const double Compact = 28;
-        internal const double Control = 34;
-        internal const double Large = 40;
+        internal const double Control = 32;
+        internal const double Large = 36;
+
+        /// <summary>组件库页面控件基准（按钮 / 输入 / 分段）。</summary>
+        internal const double PageCompact = 28;
+        internal const double PageControl = 32;
+        internal const double PageLarge = 36;
     }
 
     /// <summary>卡片内容的标准内边距（设置行、欢迎页行）。</summary>
-    internal static readonly Thickness CardRowPadding = new(18, 14, 18, 14);
+    internal static readonly Thickness CardRowPadding = new(16, 12, 16, 12);
 
     /// <summary>对话框内容区的标准外边距。</summary>
-    internal static readonly Thickness DialogPadding = new(28, 20, 28, 24);
+    internal static readonly Thickness DialogPadding = new(24, 16, 24, 24);
 
     /// <summary>
     /// 深色玻璃（截图浮层、贴图、标注工具条，永远是深底、不随主题变）上的危险色。
@@ -79,23 +94,23 @@ internal static class Tokens
     internal static class Danger
     {
         /// <summary>实心/泛红底（悬停的关闭贴图、取消按钮）。</summary>
-        internal const string GlassFill = "#FFE5484D";
+        internal const string GlassFill = "#FFC42B1C";
 
         /// <summary>深底上的危险文字与图标（错误提示、取消按钮悬停）。</summary>
-        internal const string GlassText = "#FFFF8A7A";
+        internal const string GlassText = "#FFFF99A4";
     }
 
     /// <summary>动效。</summary>
     internal static class Motion
     {
         /// <summary>悬停/按下等即时反馈。</summary>
-        internal static readonly TimeSpan Fast = TimeSpan.FromMilliseconds(120);
+        internal static readonly TimeSpan Fast = TimeSpan.FromMilliseconds(83);
 
         /// <summary>出现/选中切换。</summary>
-        internal static readonly TimeSpan Normal = TimeSpan.FromMilliseconds(180);
+        internal static readonly TimeSpan Normal = TimeSpan.FromMilliseconds(167);
 
         /// <summary>窗口/面板进入。</summary>
-        internal static readonly TimeSpan Slow = TimeSpan.FromMilliseconds(260);
+        internal static readonly TimeSpan Slow = TimeSpan.FromMilliseconds(250);
 
         /// <summary>统一缓动（快出慢停）。</summary>
         internal static IEasingFunction Ease { get; } = CreateEase();

@@ -12,7 +12,7 @@
     <AssemblyName>DeepShot</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
-    <Version>0.2.1</Version>
+    <Version>0.4.0</Version>
     <AssemblyTitle>DeepShot</AssemblyTitle>
     <Product>DeepShot</Product>
     <Company>DeepShot</Company>
@@ -30,10 +30,6 @@
   <ItemGroup>
     <Resource Include="Assets\app.ico" />
     <Resource Include="Assets\app-icon.png" />
-    <!-- MiSans（小米）：按许可协议原样内嵌，只带 Regular/Semibold 两个字重（原因见 Ui/AppFonts.cs）。 -->
-    <Resource Include="Assets\Fonts\*.ttf" />
-    <!-- 字体版权/许可声明随程序发布（安装包打包整个发布目录）。 -->
-    <Content Include="Assets\Fonts\MiSans-NOTICE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

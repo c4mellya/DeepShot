@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
-using System.Windows.Documents;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Markup;
 using System.Windows.Media;
@@ -15,8 +15,9 @@ using DeepShot.Ui;
 namespace DeepShot.History;
 
 /// <summary>
-/// 图库里的一个缩略图卡片：圆角 12 的面板 + 内嵌 6px、同心圆角的缩略图 + 名称/时间/尺寸，
-/// 星标（右上）与操作工具条（底部悬浮）在悬停 / 选中 / 键盘焦点时浮现。
+/// 图库里的一张图块（参照 Windows 11 照片）：图块就是缩略图本身——8 圆角裁剪 + 1px 内侧发丝线，
+/// 不显示文件名、时间、尺寸等文字。悬停时顶部淡入一层柔和暗色渐变，让左上复选框与右上星标在任何图上都清楚；
+/// 右下角浮出深色亚克力药丸（复制 / 贴图 / 更多），更多与右键是同一个菜单。
 /// </summary>
 /// <remarks>
 /// <para>
@@ -25,18 +26,13 @@ namespace DeepShot.History;
 /// 与窗口）实现，卡片只负责长相与命中。
 /// </para>
 /// <para>
-/// <b>UIA</b>：卡片、星标、名称、操作按钮都带稳定的 AutomationId
-/// （<c>history-card-N</c> / <c>history-star-N</c> / <c>history-name-N</c> / <c>history-action-SLUG-N</c>）。
-/// 操作条和星标用<b>透明度</b>而不是 Visibility 来隐藏：它们始终在 UIA 树里、始终可 Tab 到，
-/// 键盘聚焦到其中任何一个按钮时整条会浮现出来。
+/// <b>UIA</b>：卡片、星标、操作组、菜单项都带稳定的 AutomationId
+/// （<c>history-card-N</c> / <c>history-star-N</c> / <c>history-actions-N</c> / <c>history-action-SLUG-N</c>）。
+/// 浮层控件用<b>透明度</b>而不是 Visibility 隐藏：始终在 UIA 树里、始终可 Tab 到。
 /// </para>
 /// <para>
-/// <b>状态层次</b>：悬停 = 上浮 3px + 柔和投影 + 半透明强调色描边；单击选中 = 实心描边 + 外圈淡光晕
-/// （与输入框聚焦同一语言）；勾选（多选）= 实心描边 + 整卡淡淡染色。三者可以叠加，但一眼能分开。
-/// </para>
-/// <para>
-/// <b>颜色</b>全部是 <c>Theme.*</c> 资源引用：换主题自动更新，卡片不需要再手动刷新。
-/// 投影都在独立的 <see cref="UiKit.ShadowPlate"/> 兄弟元素上，文字与缩略图不会被位图化发虚。
+/// <b>状态层次</b>：悬停 = 顶部渐变 + 浮层控件；选中 / 勾选 = 2px 强调色环（勾选时图片再内缩到 0.94）；
+/// 键盘焦点 = 2px 焦点环、略淡。
 /// </para>
 /// </remarks>
 internal sealed class HistoryCard : Border
@@ -44,66 +40,120 @@ internal sealed class HistoryCard : Border
     /// <summary>默认卡片宽度（DIP）；实际宽度由图库按可用宽度用 <see cref="SetLayoutWidth"/> 均分。</summary>
     internal const double CardWidth = 240;
 
-    /// <summary>卡片最小宽度：再窄底部操作条就放不下了。</summary>
-    internal const double MinCardWidth = 212;
+    /// <summary>卡片最小宽度：再窄右下角的操作组会压住画面主体。</summary>
+    internal const double MinCardWidth = 188;
 
     /// <summary>卡片之间的横竖间距。</summary>
-    internal const double Gap = Tokens.Space.L;
+    internal const double Gap = Tokens.Space.S;
 
-    /// <summary>缩略图高宽比（接近 16:10，横屏截图裁切最少）。</summary>
-    private const double ThumbnailAspect = 0.62;
+    /// <summary>缩略图高宽比（16:10，横屏截图裁切最少）。</summary>
+    private const double ThumbnailAspect = 0.625;
 
+    /// <summary>图块圆角。</summary>
     private const double Radius = Tokens.Radius.Card;
 
-    /// <summary>缩略图离卡片边的内嵌距离；缩略图圆角 = 外圆角 − 内嵌，内外同心。</summary>
-    private const double Inset = 6;
+    /// <summary>浮层控件离图块边的距离。</summary>
+    private const double OverlayInset = 8;
 
-    private const double ThumbnailRadius = Radius - Inset;
+    /// <summary>星标底圆直径。</summary>
+    private const double StarSize = 28;
+
+    /// <summary>操作组里图标按钮的边长。</summary>
+    private const double ActionSize = 28;
+
+    /// <summary>顶部渐变高度。</summary>
+    private const double ScrimHeight = 56;
+
+    /// <summary>勾选时图片内缩比例。</summary>
+    private const double CheckedScale = 0.94;
+
+    /// <summary>顶部渐变：黑色 0.28 → 0，固定 56px 高（不随图块高度拉伸）。</summary>
+    private static readonly Brush ScrimBrush = CreateScrimBrush();
+
+    /// <summary>悬浮操作岛 / 星标圆底：半透明深色胶囊 + 白色细描边，透出底图（与星标模板里的颜色一致）。</summary>
+    private static readonly Brush IslandFill = Frozen(Color.FromArgb(0x66, 0x20, 0x20, 0x20));
+
+    private static readonly Brush IslandBorder = Frozen(Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF));
+
+    private static SolidColorBrush Frozen(Color color)
+    {
+        var brush = new SolidColorBrush(color);
+        brush.Freeze();
+        return brush;
+    }
 
     private static readonly Lazy<ControlTemplate> StarTemplate = new(() => (ControlTemplate)XamlReader.Parse("""
         <ControlTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                          xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                          TargetType="Button">
           <Grid Background="Transparent" SnapsToDevicePixels="True">
-            <Ellipse x:Name="Bg" Fill="{DynamicResource Theme.Surface}"
-                     Stroke="{DynamicResource Theme.Border}" StrokeThickness="1" />
-            <Ellipse x:Name="Ov" Fill="{DynamicResource Theme.Foreground}" Opacity="0" IsHitTestVisible="False" />
+            <Ellipse x:Name="Bg" Fill="#66202020"
+                     Stroke="#33FFFFFF" StrokeThickness="1" />
+            <Ellipse x:Name="Ov" Fill="{DynamicResource Theme.OverlayButtonHover}" Opacity="0" IsHitTestVisible="False" />
             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
           </Grid>
           <ControlTemplate.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
-              <Setter TargetName="Ov" Property="Opacity" Value="0.07" />
+              <Setter TargetName="Ov" Property="Opacity" Value="1" />
             </Trigger>
             <Trigger Property="IsPressed" Value="True">
-              <Setter TargetName="Ov" Property="Opacity" Value="0.14" />
+              <Setter TargetName="Ov" Property="Opacity" Value="0.6" />
             </Trigger>
             <Trigger Property="IsKeyboardFocused" Value="True">
-              <Setter TargetName="Bg" Property="Stroke" Value="{DynamicResource Theme.Accent}" />
+              <Setter TargetName="Bg" Property="Stroke" Value="{DynamicResource Theme.FocusRing}" />
+              <Setter TargetName="Bg" Property="StrokeThickness" Value="2" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+        """));
+
+    private static readonly Lazy<ControlTemplate> OverlayButtonTemplate = new(() => (ControlTemplate)XamlReader.Parse("""
+        <ControlTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                         TargetType="Button">
+          <Border x:Name="Bg" Background="Transparent" BorderBrush="Transparent" BorderThickness="1"
+                  CornerRadius="14" SnapsToDevicePixels="True">
+            <ContentPresenter x:Name="Content" HorizontalAlignment="Center" VerticalAlignment="Center" />
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="Bg" Property="Background" Value="{DynamicResource Theme.OverlayButtonHover}" />
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+              <Setter TargetName="Content" Property="Opacity" Value="0.7" />
+            </Trigger>
+            <Trigger Property="IsKeyboardFocused" Value="True">
+              <Setter TargetName="Bg" Property="BorderBrush" Value="{DynamicResource Theme.FocusRing}" />
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
         """));
 
     private readonly HistoryRecord _record;
+    private readonly HistoryCardCallbacks _callbacks;
     private readonly Border _thumbnailFrame;
     private readonly Image _picture;
-    private readonly TextBlock _nameBlock;
+    private readonly Grid _imageHost;
+    private readonly ScaleTransform _imageScale = new(1, 1);
+    private readonly Border _scrim;
     private readonly Button _starButton;
     private readonly System.Windows.Controls.Viewbox _starIcon;
-    private readonly FrameworkElement _actionPill;
-    private readonly FrameworkElement _sourceChip;
+    private readonly FrameworkElement _actionGroup;
+    private readonly Button _moreButton;
     private readonly Border _ring;
-    private readonly Border _halo;
-    private readonly Border _tint;
+    private readonly Border _focusRing;
     private readonly CheckBox _checkBox;
-    private readonly Border _shadow;
     private readonly TranslateTransform _lift = new();
+    private ContextMenu? _menu;
     private Action<HistoryCard>? _checkedChanged;
     private bool _checked;
     private bool _selectionMode;
     private bool _selected;
     private bool _hovered;
     private bool _favorite;
+    private bool _menuOpen;
+    private bool _pointerFocus;
+    private double _scaleTarget = 1;
 
     /// <param name="record">记录。</param>
     /// <param name="index">本页序号（用于 AutomationId 与"第 N 条"日志）。</param>
@@ -118,22 +168,23 @@ internal sealed class HistoryCard : Border
         bool loadingPreview = false)
     {
         _record = record ?? throw new ArgumentNullException(nameof(record));
+        _callbacks = callbacks ?? throw new ArgumentNullException(nameof(callbacks));
         _favorite = record.IsFavorite;
         Index = index;
 
         Margin = new Thickness(0, 0, Gap, Gap);
         Padding = new Thickness(0);
         Background = Brushes.Transparent;
-        Cursor = Cursors.Hand;
         SnapsToDevicePixels = true;
+        UseLayoutRounding = true;
         RenderTransform = _lift;
-        ToolTip = $"{record.Name}\n{FormatTime(record)}\n{record.Width}×{record.Height} · " +
-                  $"{DescribeSource(record.Source)}";
+        Focusable = true;
+        FocusVisualStyle = null;
 
-        AutomationProperties.SetName(this, StringsUi.Format("S.History.CardName", record.Name));
+        AutomationProperties.SetName(this, StringsUi.Format("S.History.CardName", DescribeShort(record)));
         AutomationProperties.SetAutomationId(this, $"history-card-{index}");
 
-        // --- 缩略图：UniformToFill 裁切铺满，四角同心圆角 ---
+        // --- 图片：UniformToFill 裁切铺满；像素不够时不放大（见 FitPicture） ---
         _picture = new Image
         {
             Source = preview,
@@ -143,30 +194,14 @@ internal sealed class HistoryCard : Border
             VerticalAlignment = VerticalAlignment.Center,
         };
         RenderOptions.SetBitmapScalingMode(_picture, BitmapScalingMode.HighQuality);
-
         Loaded += (_, _) => FitPicture();
 
-        _thumbnailFrame = new Border
-        {
-            CornerRadius = new CornerRadius(ThumbnailRadius),
-            Child = _picture,
-        };
+        _thumbnailFrame = new Border { Child = _picture, SnapsToDevicePixels = true };
         _thumbnailFrame.SetResourceReference(BackgroundProperty, UiKit.Keys.SurfaceAlt);
         if (callbacks.Drag is { } drag)
         {
-            _thumbnailFrame.ToolTip = StringsUi.Get("S.History.DragHint");
             HistoryImageDrag.Attach(_thumbnailFrame, source => drag(_record, source));
         }
-
-        // 圆角裁剪：Border 的 CornerRadius 不裁子元素，只能手动裁。
-        _thumbnailFrame.SizeChanged += (_, e) =>
-        {
-            _thumbnailFrame.Clip = new RectangleGeometry(
-                new Rect(0, 0, e.NewSize.Width, e.NewSize.Height),
-                ThumbnailRadius,
-                ThumbnailRadius);
-            FitPicture();
-        };
 
         if (preview is null && !loadingPreview)
         {
@@ -178,23 +213,51 @@ internal sealed class HistoryCard : Border
             _picture.Opacity = 0;
         }
 
-        // 缩略图内侧一圈发丝线：白底截图放在白色卡片上也有清楚的边界。
+        // 顶部渐变：只为让角标读得清，不拦截命中。
+        _scrim = new Border
+        {
+            Height = ScrimHeight,
+            VerticalAlignment = VerticalAlignment.Top,
+            Background = ScrimBrush,
+            IsHitTestVisible = false,
+            Opacity = 0,
+        };
+
+        // 圆角裁剪：Border 的 CornerRadius 不裁子元素，只能手动裁。
+        var clipped = new Grid();
+        clipped.Children.Add(_thumbnailFrame);
+        clipped.Children.Add(_scrim);
+        clipped.SizeChanged += (_, e) =>
+        {
+            clipped.Clip = new RectangleGeometry(new Rect(e.NewSize), Radius, Radius);
+            FitPicture();
+        };
+
+        // 内侧一圈发丝线：白底截图放在浅色窗口上也有清楚的边界。
         var hairline = new Border
         {
-            CornerRadius = new CornerRadius(ThumbnailRadius),
+            CornerRadius = new CornerRadius(Radius),
             BorderThickness = new Thickness(1),
             IsHitTestVisible = false,
             SnapsToDevicePixels = true,
+            Opacity = 0.8,
         };
         hairline.SetResourceReference(BorderBrushProperty, UiKit.Keys.Divider);
 
-        // --- 左上角：多选复选框 + 紧随其后的来源标签（悬停浮现） ---
-        _sourceChip = UiKit.OverlayChip(DescribeSource(record.Source));
-        _sourceChip.Margin = new Thickness(36, 8, 0, 0);
+        // 勾选时整块图片内缩（照片式），环留在图块边界上。
+        _imageHost = new Grid
+        {
+            RenderTransform = _imageScale,
+            RenderTransformOrigin = new Point(0.5, 0.5),
+        };
+        _imageHost.Children.Add(clipped);
+        _imageHost.Children.Add(hairline);
+
+        // --- 左上：多选复选框 ---
         _checkBox = UiKit.CheckBox($"history-select-{index}", StringsUi.Get("S.History.SelectCard"));
         _checkBox.HorizontalAlignment = HorizontalAlignment.Left;
         _checkBox.VerticalAlignment = VerticalAlignment.Top;
-        _checkBox.Margin = new Thickness(8, 8, 0, 0);
+        _checkBox.Margin = new Thickness(OverlayInset, OverlayInset, 0, 0);
         _checkBox.Click += (_, e) =>
         {
             e.Handled = true;
@@ -203,18 +266,19 @@ internal sealed class HistoryCard : Border
             _checkedChanged?.Invoke(this);
         };
 
-        // --- 右上角星标：矢量图标按钮，点它不会触发卡片选中/预览 ---
-        _starIcon = AppIcons.Create(AppIcons.Star, 15, UiKit.Keys.Secondary, 1.9);
+        // --- 右上：星标（深色圆底，任何图上都看得见） ---
+        _starIcon = AppIcons.Create(AppIcons.Star, 14, ThemeManager.BrushKeys.OverlayForeground, 1.9);
         _starButton = new Button
         {
             Content = _starIcon,
             Template = StarTemplate.Value,
-            Width = 28,
-            Height = 28,
-            Cursor = Cursors.Hand,
+            Width = StarSize,
+            Height = StarSize,
+            MinWidth = 0,
+            MinHeight = 0,
             HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Top,
-            Margin = new Thickness(0, 6, 6, 0),
+            Margin = new Thickness(0, OverlayInset, OverlayInset, 0),
             FocusVisualStyle = null,
         };
         AutomationProperties.SetAutomationId(_starButton, $"history-star-{index}");
@@ -225,99 +289,34 @@ internal sealed class HistoryCard : Border
         };
         ApplyStarVisual();
 
-        // --- 底部悬浮的图标操作条 ---
-        _actionPill = BuildActionBar(callbacks);
+        // --- 右下：深色亚克力操作组 ---
+        _moreButton = OverlayButton(StringsUi.Get("S.History.MoreActions"), Slugs.More, BuildMoreGlyph(), OpenMenuFromButton);
+        _actionGroup = BuildActionGroup();
 
-        var thumbnailHost = new Grid { Margin = new Thickness(Inset, Inset, Inset, 0) };
-        thumbnailHost.Children.Add(_thumbnailFrame);
-        thumbnailHost.Children.Add(hairline);
-        thumbnailHost.Children.Add(_sourceChip);
-        thumbnailHost.Children.Add(_checkBox);
-        thumbnailHost.Children.Add(_starButton);
-        thumbnailHost.Children.Add(_actionPill);
+        // 选中 / 勾选：2px 强调色环；键盘焦点：2px 焦点环、略淡。都盖在图片上，用透明度过渡（没有布局抖动）。
+        _focusRing = BuildRing(ThemeManager.BrushKeys.FocusRing);
+        _ring = BuildRing(UiKit.Keys.Accent);
 
-        // --- 文字区：名称（正文加粗）+ 时间 · 尺寸（说明文字，等宽数字） ---
-        _nameBlock = UiKit.Text(record.Name, TextRole.BodyStrong);
-        _nameBlock.HorizontalAlignment = HorizontalAlignment.Stretch;
-        AutomationProperties.SetAutomationId(_nameBlock, $"history-name-{index}");
-
-        var meta = UiKit.Text($"{FormatTime(record)} · {record.Width}×{record.Height}", TextRole.Caption);
-        meta.HorizontalAlignment = HorizontalAlignment.Stretch;
-        meta.Margin = new Thickness(0, 3, 0, 0);
-        Typography.SetNumeralAlignment(meta, FontNumeralAlignment.Tabular);
-        AutomationProperties.SetAutomationId(meta, $"history-meta-{index}");
-
-        var textArea = new StackPanel { Margin = new Thickness(Inset + 5, 10, Inset + 5, 12) };
-        textArea.Children.Add(_nameBlock);
-        textArea.Children.Add(meta);
-
-        var stack = new StackPanel();
-        stack.Children.Add(thumbnailHost);
-        stack.Children.Add(textArea);
-
-        var surface = new Border
-        {
-            CornerRadius = new CornerRadius(Radius),
-            BorderThickness = new Thickness(1),
-            SnapsToDevicePixels = true,
-            Child = stack,
-        };
-        surface.SetResourceReference(BackgroundProperty, UiKit.Keys.Surface);
-        surface.SetResourceReference(BorderBrushProperty, UiKit.Keys.Divider);
-
-        // 勾选后整张卡片淡淡染上强调色。
-        _tint = new Border
-        {
-            CornerRadius = new CornerRadius(Radius),
-            Opacity = 0,
-            IsHitTestVisible = false,
-        };
-        _tint.SetResourceReference(BackgroundProperty, UiKit.Keys.Accent);
-
-        // 悬停 / 选中 / 勾选的强调色描边：叠在卡片边框之上，用透明度过渡（没有布局抖动）。
-        _ring = new Border
-        {
-            CornerRadius = new CornerRadius(Radius),
-            BorderThickness = new Thickness(1),
-            Opacity = 0,
-            IsHitTestVisible = false,
-            SnapsToDevicePixels = true,
-        };
-        _ring.SetResourceReference(BorderBrushProperty, UiKit.Keys.Accent);
-
-        // 选中 / 键盘焦点：描边外再一圈 3px 淡强调色光晕（与输入框聚焦同一视觉语言）。
-        _halo = new Border
-        {
-            Margin = new Thickness(-3),
-            CornerRadius = new CornerRadius(Radius + 3),
-            BorderThickness = new Thickness(3),
-            Opacity = 0,
-            IsHitTestVisible = false,
-        };
-        _halo.SetResourceReference(BorderBrushProperty, UiKit.Keys.Accent);
-
-        // 两层投影：常驻的极淡贴地影 + 悬停时淡入的大范围柔影（都在独立底板上）。
-        var restShadow = UiKit.ShadowPlate(Radius, blur: 6, depth: 1, opacity: 0.05);
-        _shadow = UiKit.ShadowPlate(Radius, blur: 28, depth: 10, opacity: 0.16);
-        _shadow.Opacity = 0;
-
-        var root = new Grid();
-        root.Children.Add(restShadow);
-        root.Children.Add(_shadow);
-        root.Children.Add(surface);
-        root.Children.Add(_tint);
+        var root = new Grid { Background = Brushes.Transparent };
+        root.Children.Add(_imageHost);
+        root.Children.Add(_checkBox);
+        root.Children.Add(_starButton);
+        root.Children.Add(_actionGroup);
+        root.Children.Add(_focusRing);
         root.Children.Add(_ring);
-        root.Children.Add(_halo);
         Child = root;
 
         SetLayoutWidth(CardWidth);
 
-        _actionPill.Opacity = 0;
-        _sourceChip.Opacity = 0;
+        _actionGroup.Opacity = 0;
         _checkBox.Opacity = 0;
         _starButton.Opacity = _favorite ? 1 : 0;
 
+        PreviewMouseLeftButtonDown += OnPreviewPointerDown;
+        PreviewMouseRightButtonDown += OnPreviewPointerDown;
         MouseLeftButtonDown += OnMouseLeftButtonDown;
+        MouseRightButtonUp += OnMouseRightButtonUp;
+        KeyDown += OnKeyDown;
         MouseEnter += (_, _) =>
         {
             _hovered = true;
@@ -329,6 +328,15 @@ internal sealed class HistoryCard : Border
             UpdateChrome();
         };
         IsKeyboardFocusWithinChanged += (_, _) => UpdateChrome();
+        IsKeyboardFocusedChanged += (_, e) =>
+        {
+            if (e.NewValue is false)
+            {
+                _pointerFocus = false;
+            }
+
+            UpdateChrome();
+        };
     }
 
     /// <summary>本页序号（日志/AutomationId 用）。</summary>
@@ -337,7 +345,7 @@ internal sealed class HistoryCard : Border
     /// <summary>这条记录（窗口按 Id 对账）。</summary>
     internal HistoryRecord Record => _record;
 
-    /// <summary>是否被选中（选中后强调色描边 + 外圈光晕 + 操作条常驻）。</summary>
+    /// <summary>是否被选中（选中后 2px 强调色环 + 浮层控件常驻）。</summary>
     internal bool IsSelected
     {
         get => _selected;
@@ -381,7 +389,7 @@ internal sealed class HistoryCard : Border
     }
 
     /// <summary>
-    /// 按图库算好的列宽设置卡片宽度；缩略图高度跟随宽度（固定高宽比），整行永远铺满、右侧不留空白。
+    /// 按图库算好的列宽设置图块宽度；高度跟随宽度（16:10），整行永远铺满、右侧不留空白。
     /// </summary>
     internal void SetLayoutWidth(double width)
     {
@@ -392,7 +400,7 @@ internal sealed class HistoryCard : Border
         }
 
         Width = width;
-        _thumbnailFrame.Height = Math.Round((width - Inset * 2) * ThumbnailAspect);
+        Height = Math.Round(width * ThumbnailAspect);
         FitPicture();
     }
 
@@ -436,40 +444,64 @@ internal sealed class HistoryCard : Border
     }
 
     /// <summary>
-    /// 缩略图像素不够铺满卡片时，放大会发糊：改为不放大、居中显示原始像素；够用时才裁切铺满。
+    /// 缩略图像素不够铺满图块时，放大会发糊：改为不放大、居中显示原始像素；够用时才裁切铺满。
     /// 需要已经在可视树里（要读 DPI）；没有图时什么也不做。
     /// </summary>
     private void FitPicture()
     {
-        if (_picture.Source is not BitmapSource preview || !IsLoaded || double.IsNaN(Width))
+        if (_picture.Source is not BitmapSource preview || !IsLoaded || double.IsNaN(Width) || double.IsNaN(Height))
         {
             return;
         }
 
         var scale = VisualTreeHelper.GetDpi(this).DpiScaleX;
         var needed = Math.Max(
-            (Width - Inset * 2) * scale / preview.PixelWidth,
-            _thumbnailFrame.Height * scale / preview.PixelHeight);
+            Width * scale / preview.PixelWidth,
+            Height * scale / preview.PixelHeight);
         var upscaled = needed > 1.15;
         _picture.Stretch = upscaled ? Stretch.Uniform : Stretch.UniformToFill;
         _picture.StretchDirection = upscaled ? StretchDirection.DownOnly : StretchDirection.Both;
     }
 
-    private static StackPanel BuildMissingPlaceholder()
+    /// <summary>缩略图丢失：居中一枚 24px 三级色图标，不加文字（提示与 UIA 名字说明原因）。</summary>
+    private static Grid BuildMissingPlaceholder()
     {
-        var badge = UiKit.StatusBadge(AppIcons.Image, UiKit.Keys.Secondary, 40);
-        badge.HorizontalAlignment = HorizontalAlignment.Center;
-        var label = UiKit.Text(StringsUi.Get("S.History.ThumbnailMissing"), TextRole.Caption);
-        label.HorizontalAlignment = HorizontalAlignment.Center;
-        label.Margin = new Thickness(0, Tokens.Space.S, 0, 0);
-        var holder = new StackPanel
-        {
-            VerticalAlignment = VerticalAlignment.Center,
-            HorizontalAlignment = HorizontalAlignment.Center,
-        };
-        holder.Children.Add(badge);
-        holder.Children.Add(label);
+        var text = StringsUi.Get("S.History.ThumbnailMissing");
+        var icon = AppIcons.Create(AppIcons.Image, 24, ThemeManager.BrushKeys.TertiaryForeground, 1.6);
+        icon.HorizontalAlignment = HorizontalAlignment.Center;
+        icon.VerticalAlignment = VerticalAlignment.Center;
+        var holder = new Grid { Background = Brushes.Transparent, ToolTip = text };
+        AutomationProperties.SetName(holder, text);
+        holder.Children.Add(icon);
         return holder;
+    }
+
+    private static Border BuildRing(string brushKey)
+    {
+        var ring = new Border
+        {
+            CornerRadius = new CornerRadius(Radius),
+            BorderThickness = new Thickness(2),
+            Opacity = 0,
+            IsHitTestVisible = false,
+            SnapsToDevicePixels = true,
+        };
+        ring.SetResourceReference(BorderBrushProperty, brushKey);
+        return ring;
+    }
+
+    private static Brush CreateScrimBrush()
+    {
+        var brush = new LinearGradientBrush
+        {
+            MappingMode = BrushMappingMode.Absolute,
+            StartPoint = new Point(0, 0),
+            EndPoint = new Point(0, ScrimHeight),
+        };
+        brush.GradientStops.Add(new GradientStop(Color.FromArgb(0x47, 0, 0, 0), 0));
+        brush.GradientStops.Add(new GradientStop(Color.FromArgb(0x00, 0, 0, 0), 1));
+        brush.Freeze();
+        return brush;
     }
 
     /// <summary>收藏状态变化后更新星标（不重建控件，避免丢失焦点）。</summary>
@@ -480,13 +512,10 @@ internal sealed class HistoryCard : Border
         UpdateChrome();
     }
 
-    /// <summary>重命名后更新名称（不重建控件）。</summary>
+    /// <summary>重命名后更新（图块不显示名称；UIA 名字按时间·尺寸识别，名称变化无需重排）。</summary>
     internal void ApplyName(string name)
     {
-        _nameBlock.Text = name;
-        ToolTip = $"{name}\n{FormatTime(_record)}\n{_record.Width}×{_record.Height} · " +
-                  $"{DescribeSource(_record.Source)}";
-        AutomationProperties.SetName(this, StringsUi.Format("S.History.CardName", name));
+        AutomationProperties.SetName(this, StringsUi.Format("S.History.CardName", DescribeShort(_record)));
     }
 
     /// <summary>格式化时间：今天只显示时分秒，其它日期带上日期（"今天"随语言）。</summary>
@@ -508,6 +537,10 @@ internal sealed class HistoryCard : Border
         _ => source.ToString(),
     };
 
+    /// <summary>读屏用的简短描述："时间 · 宽×高"。</summary>
+    private static string DescribeShort(HistoryRecord record) =>
+        $"{FormatTime(record)} · {record.Width}×{record.Height}";
+
     private static string StarOn => StringsUi.Get("S.History.StarOn");
 
     private static string StarOff => StringsUi.Get("S.History.StarOff");
@@ -516,7 +549,10 @@ internal sealed class HistoryCard : Border
 
     private static string StarOffHint => StringsUi.Get("S.History.StarOffHint");
 
-    /// <summary>星标图标：已收藏 = 金色实心；未收藏 = 次要色空心。同时更新 UIA 名字与提示。</summary>
+    /// <summary>
+    /// 星标图标：已收藏 = 金色实心（<c>Theme.Star</c>）；未收藏 = 浮层前景色空心。
+    /// 同时更新 UIA 名字与提示。
+    /// </summary>
     private void ApplyStarVisual()
     {
         var path = AppIcons.PathOf(_starIcon);
@@ -527,7 +563,7 @@ internal sealed class HistoryCard : Border
         }
         else
         {
-            path.SetResourceReference(Shape.StrokeProperty, UiKit.Keys.Secondary);
+            path.SetResourceReference(Shape.StrokeProperty, ThemeManager.BrushKeys.OverlayForeground);
             path.Fill = Brushes.Transparent;
         }
 
@@ -535,76 +571,85 @@ internal sealed class HistoryCard : Border
         AutomationProperties.SetName(_starButton, _favorite ? StarOn : StarOff);
     }
 
-    /// <summary>按"悬停 / 选中 / 勾选 / 键盘焦点 / 收藏"刷新描边、光晕、染色、投影、上浮、操作条和星标。</summary>
+    /// <summary>按"悬停 / 选中 / 勾选 / 键盘焦点 / 菜单 / 收藏"刷新渐变、浮层控件、环与内缩。</summary>
     private void UpdateChrome()
     {
-        var focus = IsKeyboardFocusWithin;
-        var hot = _hovered || _selected || focus;
+        // 鼠标点进来的焦点不画焦点环；键盘带进来的（或点了之后又按了键）才画。
+        var keyboardFocus = IsKeyboardFocused && !_pointerFocus;
+        var focusWithin = IsKeyboardFocusWithin && !(IsKeyboardFocused && _pointerFocus);
+        var hot = _hovered || _selected || _menuOpen || focusWithin;
         var strong = _selected || _checked;
+        var showCheck = hot || _checked || _selectionMode;
         var ms = Tokens.Motion.Normal.TotalMilliseconds;
 
-        _ring.BorderThickness = new Thickness(strong ? 2 : 1);
-        UiKit.Fade(_ring, OpacityProperty, strong ? 1 : hot ? 0.45 : 0, ms);
-        UiKit.Fade(_halo, OpacityProperty, _selected || focus ? 0.2 : 0, ms);
-        UiKit.Fade(_tint, OpacityProperty, _checked ? 0.07 : 0, ms);
-        UiKit.Fade(_checkBox, OpacityProperty, hot || _checked || _selectionMode ? 1 : 0, ms);
-        UiKit.Fade(_actionPill, OpacityProperty, hot ? 1 : 0, ms);
-        UiKit.Fade(_sourceChip, OpacityProperty, hot ? 1 : 0, ms);
+        UiKit.Fade(_ring, OpacityProperty, strong ? 1 : 0, ms);
+        UiKit.Fade(_focusRing, OpacityProperty, keyboardFocus && !strong ? 0.6 : 0, ms);
+        UiKit.Fade(_scrim, OpacityProperty, showCheck ? 1 : 0, ms);
+        UiKit.Fade(_checkBox, OpacityProperty, showCheck ? 1 : 0, ms);
+        UiKit.Fade(_actionGroup, OpacityProperty, hot ? 1 : 0, ms);
         UiKit.Fade(_starButton, OpacityProperty, hot || _favorite ? 1 : 0, ms);
 
-        // 悬停上浮 + 柔影：只跟随鼠标，选中/勾选不浮起（避免整行高低不齐）。
-        UiKit.Fade(_shadow, OpacityProperty, _hovered ? 1 : 0, ms);
-        _lift.BeginAnimation(
-            TranslateTransform.YProperty,
-            new DoubleAnimation(_hovered ? -3 : 0, TimeSpan.FromMilliseconds(ms)) { EasingFunction = Tokens.Motion.Ease });
+        var scale = _checked ? CheckedScale : 1;
+        if (Math.Abs(scale - _scaleTarget) > 0.001)
+        {
+            _scaleTarget = scale;
+            var animation = new DoubleAnimation(scale, new Duration(Tokens.Motion.Fast)) { EasingFunction = Tokens.Motion.Ease };
+            _imageScale.BeginAnimation(ScaleTransform.ScaleXProperty, animation);
+            _imageScale.BeginAnimation(ScaleTransform.ScaleYProperty, animation);
+        }
     }
 
-    private FrameworkElement BuildActionBar(HistoryCardCallbacks callbacks)
+    /// <summary>右下角深色亚克力药丸：复制 / 贴图 / 更多。</summary>
+    private FrameworkElement BuildActionGroup()
     {
-        // 分组：常用操作 | 删除（危险操作单独隔开，红色图标）。
-        var separator = UiKit.VerticalSeparator(16);
-        separator.Margin = new Thickness(3, 0, 3, 0);
-        var bar = UiKit.FloatingBar(
-            ActionButton(StringsUi.Get("S.Common.Copy"), null, Slugs.Copy, AppIcons.Copy, () => callbacks.Copy?.Invoke(_record)),
-            ActionButton(StringsUi.Get("S.Common.Pin"), null, Slugs.Pin, AppIcons.Pin, () => callbacks.Pin?.Invoke(_record)),
-            ActionButton(
-                StringsUi.Get("S.Common.Preview"),
-                StringsUi.Get("S.History.ActionPreviewHint"),
-                Slugs.Preview,
-                AppIcons.Preview,
-                () => callbacks.Preview?.Invoke(_record)),
+        var row = new StackPanel { Orientation = Orientation.Horizontal };
+        row.Children.Add(OverlayButton(
+            StringsUi.Get("S.Common.Copy"),
+            Slugs.Copy,
+            AppIcons.Create(AppIcons.Copy, 16, ThemeManager.BrushKeys.OverlayForeground),
+            () => _callbacks.Copy?.Invoke(_record)));
+        row.Children.Add(OverlayButton(
+            StringsUi.Get("S.Common.Pin"),
+            Slugs.Pin,
+            AppIcons.Create(AppIcons.Pin, 16, ThemeManager.BrushKeys.OverlayForeground),
+            () => _callbacks.Pin?.Invoke(_record)));
+        row.Children.Add(_moreButton);
 
-            // T28：追加标注并覆盖（在现有图片上继续标注，保存回同一条记录）。
-            ActionButton(
-                StringsUi.Get("S.Common.Annotation"),
-                StringsUi.Get("S.History.ActionAnnotateHint"),
-                Slugs.Annotation,
-                AppIcons.Annotate,
-                () => callbacks.Edit?.Invoke(_record)),
-            ActionButton(
-                StringsUi.Get("S.Common.Rename"),
-                null,
-                Slugs.Rename,
-                AppIcons.Rename,
-                () => callbacks.Rename?.Invoke(_record)),
-            ActionButton(StringsUi.Get("S.Common.SaveAs"), null, Slugs.SaveAs, AppIcons.SaveAs, () => callbacks.SaveAs?.Invoke(_record)),
-            separator,
-            ActionButton(
-                StringsUi.Get("S.Common.Delete"),
-                StringsUi.Get("S.History.ActionDeleteHint"),
-                Slugs.Delete,
-                AppIcons.Delete,
-                () => callbacks.Delete?.Invoke(_record),
-                UiKit.Keys.Error));
-        bar.Margin = new Thickness(0, 0, 0, 8);
+        // 操作组自己的 AutomationId 挂在按钮容器上（一个 history-actions-N + 每个按钮 history-action-SLUG-N）。
+        AutomationProperties.SetAutomationId(row, $"history-actions-{Index}");
 
-        // FloatingBar = [投影底板, 面板]：AutomationId 挂在装着按钮的面板上（与旧版一致）。
-        AutomationProperties.SetAutomationId(bar.Children[1], $"history-actions-{Index}");
-        return bar;
+        var pill = new Border
+        {
+            Child = row,
+            Padding = new Thickness(2),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius((ActionSize + 6) / 2),
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Bottom,
+            Margin = new Thickness(0, 0, OverlayInset, OverlayInset),
+            SnapsToDevicePixels = true,
+        };
+        pill.Background = IslandFill;
+        pill.BorderBrush = IslandBorder;
+        return pill;
+    }
+
+    /// <summary>"更多"图标：三枚 3px 圆点（图标库没有省略号字形）。</summary>
+    private static StackPanel BuildMoreGlyph()
+    {
+        var dots = new StackPanel { Orientation = Orientation.Horizontal, IsHitTestVisible = false };
+        for (var i = 0; i < 3; i++)
+        {
+            var dot = new Ellipse { Width = 3, Height = 3, Margin = new Thickness(i == 0 ? 0 : 2.5, 0, 0, 0) };
+            dot.SetResourceReference(Shape.FillProperty, ThemeManager.BrushKeys.OverlayForeground);
+            dots.Children.Add(dot);
+        }
+
+        return dots;
     }
 
     /// <summary>
-    /// 操作按钮的 AutomationId 后缀（语言无关，验证脚本按它定位）。
+    /// 操作的 AutomationId 后缀（语言无关，验证脚本按它定位）。
     /// </summary>
     /// <remarks>
     /// T31 起这些 id 不再拼中文：固定 slug 让脚本与语言无关
@@ -615,6 +660,8 @@ internal sealed class HistoryCard : Border
         internal const string Copy = "copy";
 
         internal const string Pin = "pin";
+
+        internal const string More = "more";
 
         internal const string Rename = "rename";
 
@@ -627,27 +674,173 @@ internal sealed class HistoryCard : Border
         internal const string Preview = "preview";
     }
 
-    /// <summary>一个紧凑的图标操作按钮：UIA 名字 = 文案，悬停提示 = 文案或更详细的说明。</summary>
-    private Button ActionButton(
-        string text,
-        string? hint,
-        string automationSlug,
-        string iconData,
-        System.Action onClick,
-        string iconKey = UiKit.Keys.Foreground)
+    /// <summary>浮层上的 28 图标按钮：透明底、悬停 OverlayButtonHover；UIA 名字与提示 = 文案。</summary>
+    private Button OverlayButton(string text, string automationSlug, UIElement content, System.Action onClick)
     {
-        var button = UiKit.IconButton(iconData, text, hint ?? text, onClick, 26, iconKey, 14);
+        var button = new Button
+        {
+            Content = content,
+            Template = OverlayButtonTemplate.Value,
+            Width = ActionSize,
+            Height = ActionSize,
+            MinWidth = 0,
+            MinHeight = 0,
+            FocusVisualStyle = null,
+            ToolTip = text,
+        };
+        AutomationProperties.SetName(button, text);
         AutomationProperties.SetAutomationId(button, $"history-action-{automationSlug}-{Index}");
+        button.Click += (_, e) =>
+        {
+            e.Handled = true;
+            onClick();
+        };
         return button;
+    }
+
+    // --- 菜单（更多按钮与右键共用） ---
+
+    private ContextMenu EnsureMenu()
+    {
+        if (_menu is not null)
+        {
+            return _menu;
+        }
+
+        var menu = new ContextMenu();
+        menu.Items.Add(MenuAction(StringsUi.Get("S.Common.Preview"), Slugs.Preview, AppIcons.Preview, () => _callbacks.Preview?.Invoke(_record)));
+        menu.Items.Add(MenuAction(StringsUi.Get("S.Common.Annotation"), Slugs.Annotation, AppIcons.Annotate, () => _callbacks.Edit?.Invoke(_record)));
+        menu.Items.Add(MenuAction(StringsUi.Get("S.Common.Rename"), Slugs.Rename, AppIcons.Rename, () => _callbacks.Rename?.Invoke(_record)));
+        menu.Items.Add(MenuAction(StringsUi.Get("S.Common.SaveAs"), Slugs.SaveAs, AppIcons.SaveAs, () => _callbacks.SaveAs?.Invoke(_record)));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(MenuAction(StringsUi.Get("S.Common.Delete"), Slugs.Delete, AppIcons.Delete, () => _callbacks.Delete?.Invoke(_record), UiKit.Keys.Error));
+        menu.Opened += (_, _) =>
+        {
+            _menuOpen = true;
+            UpdateChrome();
+        };
+        menu.Closed += (_, _) =>
+        {
+            _menuOpen = false;
+            UpdateChrome();
+        };
+        _menu = menu;
+        return menu;
+    }
+
+    private MenuItem MenuAction(string text, string slug, string iconData, System.Action onClick, string? toneKey = null)
+    {
+        var item = new MenuItem
+        {
+            Header = text,
+            Icon = AppIcons.Create(iconData, 16, toneKey ?? UiKit.Keys.Foreground),
+        };
+        if (toneKey is not null)
+        {
+            item.SetResourceReference(Control.ForegroundProperty, toneKey);
+        }
+
+        AutomationProperties.SetName(item, text);
+        AutomationProperties.SetAutomationId(item, $"history-action-{slug}-{Index}");
+        item.Click += (_, _) => onClick();
+        return item;
+    }
+
+    private void OpenMenuFromButton() => OpenMenu(_moreButton, PlacementMode.Bottom);
+
+    private void OpenMenu(UIElement target, PlacementMode placement)
+    {
+        var menu = EnsureMenu();
+        menu.PlacementTarget = target;
+        menu.Placement = placement;
+        menu.IsOpen = true;
+    }
+
+    // --- 指针与键盘 ---
+
+    private void OnPreviewPointerDown(object sender, MouseButtonEventArgs e)
+    {
+        // 点在图片上（不是浮层按钮）时把焦点收到图块上，方便接着用键盘；鼠标带来的焦点不画焦点环。
+        if (e.OriginalSource is DependencyObject source && IsWithin(source, _imageHost) && !IsKeyboardFocused)
+        {
+            _pointerFocus = true;
+            Focus();
+        }
+    }
+
+    private static bool IsWithin(DependencyObject node, DependencyObject ancestor)
+    {
+        for (var current = node; current is not null; current = current is Visual or System.Windows.Media.Media3D.Visual3D
+                 ? VisualTreeHelper.GetParent(current)
+                 : LogicalTreeHelper.GetParent(current))
+        {
+            if (ReferenceEquals(current, ancestor))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void OnMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        // 双击 = 预览大图（PLAN：图库要能看大图）；单击只选中卡片。
+        // 双击 = 预览大图；单击只选中卡片。
         if (e.ClickCount >= 2)
         {
             RaisePreview();
             e.Handled = true;
+        }
+    }
+
+    private void OnMouseRightButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        OpenMenu(this, PlacementMode.MousePoint);
+    }
+
+    private void OnKeyDown(object sender, KeyEventArgs e)
+    {
+        // 只处理图块自身获焦时的按键：焦点在子按钮上时空格/回车属于那个按钮。
+        if (!ReferenceEquals(e.OriginalSource, this))
+        {
+            return;
+        }
+
+        if (_pointerFocus)
+        {
+            _pointerFocus = false;
+            UpdateChrome();
+        }
+
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        var modifiers = Keyboard.Modifiers;
+        switch (key)
+        {
+            case Key.Enter when modifiers == ModifierKeys.None:
+                RaisePreview();
+                e.Handled = true;
+                break;
+            case Key.Space when modifiers == ModifierKeys.None:
+                _checked = !_checked;
+                _checkBox.IsChecked = _checked;
+                UpdateChrome();
+                _checkedChanged?.Invoke(this);
+                e.Handled = true;
+                break;
+            case Key.Apps:
+            case Key.F10 when modifiers == ModifierKeys.Shift:
+                OpenMenu(_moreButton, PlacementMode.Bottom);
+                e.Handled = true;
+                break;
+            case Key.Delete when modifiers == ModifierKeys.None:
+                _callbacks.Delete?.Invoke(_record);
+                e.Handled = true;
+                break;
+            case Key.C when modifiers == ModifierKeys.Control:
+                _callbacks.Copy?.Invoke(_record);
+                e.Handled = true;
+                break;
         }
     }
 
@@ -656,6 +849,10 @@ internal sealed class HistoryCard : Border
         if (Tag is Action<HistoryRecord> preview)
         {
             preview(_record);
+        }
+        else
+        {
+            _callbacks.Preview?.Invoke(_record);
         }
     }
 
@@ -677,12 +874,13 @@ internal sealed class HistoryCard : Border
     }
 
     /// <summary>
-    /// 容器里按下卡片的空白处并拖动 = 滚动图库（触屏/鼠标都能用）。
+    /// 容器里按下卡片并拖动 = 滚动图库（触屏/鼠标都能用）。
     /// </summary>
     /// <remarks>
     /// 卡片本身是按钮语义（单击选中、双击预览），所以<b>不能</b>靠 <c>BringIntoView</c>
     /// 之类会改变滚动位置的行为来实现；这里只把垂直方向的像素增量交给外层
     /// <see cref="ScrollViewer"/>，横向与其它命中一律不处理。
+    /// 缩略图本身挂了拖出（<see cref="HistoryImageDrag"/>），按下事件会被它吃掉，此时不滚动。
     /// </remarks>
     internal void SetDragScroll(ScrollViewer? scroll)
     {

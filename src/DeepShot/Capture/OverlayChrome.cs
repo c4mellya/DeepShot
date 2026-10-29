@@ -109,7 +109,7 @@ internal static class OverlayChrome
 """;
 
     /// <summary>
-    /// 工具 / 图标 / 次要动作按钮：透明底，悬停 12% 白，按下再叠 8%；Tag=on 时是强调色实心 + OnAccent 前景。
+    /// 工具 / 图标 / 次要动作按钮：透明底，悬停 OverlayButtonHover，按下再叠 6% 白；Tag=on 时是 OverlaySelected 中性底。
     /// </summary>
     private static readonly Lazy<Style> ToolStyle = new(() => ParseStyle($$"""
         <Style {{Ns}} TargetType="Button">
@@ -118,21 +118,20 @@ internal static class OverlayChrome
             <Setter.Value>
               <ControlTemplate TargetType="Button">
                 <Grid SnapsToDevicePixels="True" Background="Transparent">
-                  <Border x:Name="Sel" CornerRadius="{{Ctl}}" Background="{DynamicResource Theme.Accent}" Opacity="0" />
-                  <Border x:Name="Hov" CornerRadius="{{Ctl}}" Background="#FFFFFFFF" Opacity="0" />
+                  <Border x:Name="Sel" CornerRadius="{{Ctl}}" Background="{DynamicResource Theme.OverlaySelected}" Opacity="0" />
+                  <Border x:Name="Hov" CornerRadius="{{Ctl}}" Background="{DynamicResource Theme.OverlayButtonHover}" Opacity="0" />
                   <Border x:Name="Prs" CornerRadius="{{Ctl}}" Background="#FFFFFFFF" Opacity="0" />
                   <ContentPresenter x:Name="Cp" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}" />
                 </Grid>
                 <ControlTemplate.Triggers>
                   <Trigger Property="IsMouseOver" Value="True">
-        {{HoverFade("Hov", "0.12")}}
+                    <Setter TargetName="Hov" Property="Opacity" Value="1" />
                   </Trigger>
                   <Trigger Property="IsPressed" Value="True">
-                    <Setter TargetName="Prs" Property="Opacity" Value="0.08" />
+                    <Setter TargetName="Prs" Property="Opacity" Value="0.06" />
                   </Trigger>
                   <Trigger Property="Tag" Value="on">
                     <Setter TargetName="Sel" Property="Opacity" Value="1" />
-                    <Setter Property="Foreground" Value="{DynamicResource Theme.OnAccent}" />
                   </Trigger>
                   <Trigger Property="IsEnabled" Value="False">
                     <Setter TargetName="Cp" Property="Opacity" Value="0.38" />
@@ -179,32 +178,11 @@ internal static class OverlayChrome
                 <Grid Width="24" Height="24" Background="Transparent" SnapsToDevicePixels="True">
                   <Ellipse x:Name="HovRing" Stroke="#73FFFFFF" StrokeThickness="1.5" Opacity="0" />
                   <Ellipse x:Name="OnRing" Stroke="#FFFFFFFF" StrokeThickness="2" Opacity="0" />
-                  <Ellipse x:Name="Dot" Margin="4" Fill="{TemplateBinding Background}" Stroke="#40FFFFFF" StrokeThickness="1"
-                           RenderTransformOrigin="0.5,0.5">
-                    <Ellipse.RenderTransform>
-                      <ScaleTransform ScaleX="1" ScaleY="1" />
-                    </Ellipse.RenderTransform>
-                  </Ellipse>
+                  <Ellipse x:Name="Dot" Margin="4" Fill="{TemplateBinding Background}" Stroke="#40FFFFFF" StrokeThickness="1" />
                 </Grid>
                 <ControlTemplate.Triggers>
                   <Trigger Property="IsMouseOver" Value="True">
                     <Setter TargetName="HovRing" Property="Opacity" Value="1" />
-                    <Trigger.EnterActions>
-                      <BeginStoryboard>
-                        <Storyboard>
-                          <DoubleAnimation Storyboard.TargetName="Dot" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1.12" Duration="{{Fast}}" />
-                          <DoubleAnimation Storyboard.TargetName="Dot" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1.12" Duration="{{Fast}}" />
-                        </Storyboard>
-                      </BeginStoryboard>
-                    </Trigger.EnterActions>
-                    <Trigger.ExitActions>
-                      <BeginStoryboard>
-                        <Storyboard>
-                          <DoubleAnimation Storyboard.TargetName="Dot" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1" Duration="{{Normal}}" />
-                          <DoubleAnimation Storyboard.TargetName="Dot" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1" Duration="{{Normal}}" />
-                        </Storyboard>
-                      </BeginStoryboard>
-                    </Trigger.ExitActions>
                   </Trigger>
                   <Trigger Property="Tag" Value="on">
                     <Setter TargetName="OnRing" Property="Opacity" Value="1" />
@@ -347,7 +325,6 @@ internal static class OverlayChrome
             Style = style,
             Focusable = false,
             IsTabStop = false,
-            Cursor = Cursors.Hand,
             FontSize = Tokens.Text.Body,
             FontWeight = AppFonts.Semibold,
             Background = Brushes.Transparent,

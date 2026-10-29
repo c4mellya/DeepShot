@@ -50,6 +50,7 @@ public partial class App : Application
     private CaptureOverlayWindow? _captureOverlay;
     private HistoryQuickViewWindow? _historyQuickView;
     private long _quickViewClosedAt = -1000;
+    private bool _mainWindowHiddenForCapture;
 
     /// <summary>
     /// 历史写入器（T23/T24）：启动时初始化数据库，之后由 <see cref="HistoryCaptureSink"/>
@@ -84,6 +85,12 @@ public partial class App : Application
     {
         base.OnStartup(e);
         AppChrome.RegisterWindowIcon();
+
+        // 全局禁用 Tab / 键盘导航调出的焦点虚线框（含系统默认样式），焦点本身与键盘操作不受影响。
+        EventManager.RegisterClassHandler(
+            typeof(FrameworkElement),
+            FrameworkElement.LoadedEvent,
+            new RoutedEventHandler((sender, _) => ((FrameworkElement)sender).FocusVisualStyle = null));
 
         if (!EnsureSingleInstance())
         {
@@ -185,11 +192,12 @@ public partial class App : Application
     {
         try
         {
+            var brand = Settings.ThemeBrand;
             var theme = Settings.Theme;
-            var changed = ThemeManager.Initialize(this, theme);
+            var changed = ThemeManager.Initialize(this, brand, theme);
             AppLog.Info(
                 "Theme",
-                $"主题就绪：选择={theme} 生效={ThemeManager.EffectiveTheme} 变化={changed} " +
+                $"主题就绪：品牌={brand} 选择={theme} 生效={ThemeManager.EffectiveTheme} 变化={changed} " +
                 $"系统浅色={ThemeManager.IsSystemUsingLightTheme()} 调色板={ThemeManager.Palette}");
         }
         catch (Exception ex)
@@ -315,6 +323,12 @@ public partial class App : Application
     /// <summary>注册一个热键并绑定动作，失败时写日志 + 记录原因（不抛异常）。</summary>
     private bool RegisterHotkeyFor(string text, Action action, List<string> errors)
     {
+        // 空字符串 = 用户在设置里清除了这个热键，不注册、不算失败。
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return true;
+        }
+
         if (!ShortcutSpec.TryParse(text, out var shortcut, out _) || shortcut is null)
         {
             var message = StringsUi.Format("S.Message.HotkeyInvalid", text, string.Empty);
@@ -366,6 +380,7 @@ public partial class App : Application
             "Settings",
             $"SETTINGS_CHANGED shortcuts={(previous.ScreenshotShortcut != current.ScreenshotShortcut || previous.PinShortcut != current.PinShortcut || previous.QuickScreenshotShortcut != current.QuickScreenshotShortcut || previous.QuickViewShortcut != current.QuickViewShortcut)} " +
             $"language={previous.Language != current.Language} theme={previous.Theme != current.Theme} " +
+            $"themeBrand={previous.ThemeBrand != current.ThemeBrand} " +
             $"startup={previous.LaunchAtStartup != current.LaunchAtStartup}");
 
         if (previous.Language != current.Language)
@@ -373,9 +388,9 @@ public partial class App : Application
             ApplyLanguage(current.Language);
         }
 
-        if (previous.Theme != current.Theme)
+        if (previous.Theme != current.Theme || previous.ThemeBrand != current.ThemeBrand)
         {
-            ApplyTheme(current.Theme);
+            ApplyTheme(current.ThemeBrand, current.Theme);
         }
 
         if (previous.LaunchAtStartup != current.LaunchAtStartup)
@@ -387,18 +402,18 @@ public partial class App : Application
     }
 
     /// <summary>T30：切换主题（立即生效，不重启）。</summary>
-    private void ApplyTheme(AppTheme theme)
+    private void ApplyTheme(ThemeBrand brand, AppTheme theme)
     {
         try
         {
-            var changed = ThemeManager.Apply(theme);
+            var changed = ThemeManager.Apply(brand, theme);
             AppLog.Info(
                 "Theme",
-                $"主题已切换：选择={theme} 生效={ThemeManager.EffectiveTheme} 颜色变化={changed}");
+                $"主题已切换：品牌={brand} 选择={theme} 生效={ThemeManager.EffectiveTheme} 颜色变化={changed}");
         }
         catch (Exception ex)
         {
-            AppLog.Error("Theme", $"切换主题失败（保持当前外观）：{theme}", ex);
+            AppLog.Error("Theme", $"切换主题失败（保持当前外观）：{brand}/{theme}", ex);
         }
     }
 
@@ -434,16 +449,33 @@ public partial class App : Application
         // 历史不可用时显示 0（不阻塞设置窗口）。
         HistoryWindowCounts.SetProvider(_historyStore is null ? null : () => _historyStore.Count());
 
-        var window = SettingsWindowHost.Show(store);
-        if (window is null)
+        if (_historyStore is null)
+        {
+            // 历史库不可用：主窗口没有图库页可承载，退回独立设置窗口（降级模式）。
+            AppLog.Warn("Settings", "历史库不可用，设置退回独立窗口");
+            var fallback = SettingsWindowHost.Show(store);
+            if (fallback is null)
+            {
+                NotifyUser(AppInfo.Name, StringsUi.Get("S.Message.SettingsOpenFailed"));
+                return;
+            }
+
+            fallback.ApplyShortcuts = _ => ApplyHotkeys();
+            fallback.ChangeRequested = OnSettingsChanged;
+            fallback.CheckUpdates = () => CheckForUpdates("设置窗口");
+            return;
+        }
+
+        var window = HistoryGallery.ShowSettings(_historyStore, store);
+        if (window?.SettingsPage is not { } page)
         {
             NotifyUser(AppInfo.Name, StringsUi.Get("S.Message.SettingsOpenFailed"));
             return;
         }
 
-        window.ApplyShortcuts = _ => ApplyHotkeys();
-        window.ChangeRequested = OnSettingsChanged;
-        window.CheckUpdates = () => CheckForUpdates("设置窗口");
+        page.ApplyShortcuts = _ => ApplyHotkeys();
+        page.ChangeRequested = OnSettingsChanged;
+        page.CheckUpdates = () => CheckForUpdates("设置窗口");
     }
 
     /// <summary>
@@ -518,6 +550,7 @@ public partial class App : Application
             _historyCaptureSink = new HistoryCaptureSink(_historyStore);
             _captureSink = _historyCaptureSink;
             PinWindows.SetHistoryRecorder(new HistoryPinRecorder(_historyStore));
+            HistoryGallery.OpenSettingsRequested = () => ShowSettings("主窗口导航");
 
             AppLog.Info(
                 "History",
@@ -640,7 +673,7 @@ public partial class App : Application
         string message;
         try
         {
-            ThemeManager.Initialize(this, AppTheme.System);
+            ThemeManager.Initialize(this, ThemeBrand.DeepSeek, AppTheme.System);
             StringsUi.Initialize(this, AppLanguage.System);
             message = StringsUi.Get("S.Message.AlreadyRunning");
         }
@@ -751,7 +784,9 @@ public partial class App : Application
         }
 
         CloseHistoryQuickView();
-        AppLog.Info("Capture", $"截图触发：{trigger}");
+        // 主窗口如果是 Topmost 的普通窗口，不藏起来会被拍进冻结图。
+        _mainWindowHiddenForCapture = HistoryGallery.HideForCapture();
+        AppLog.Info("Capture", $"截图触发：{trigger}（主窗口已隐藏={_mainWindowHiddenForCapture}）");
         try
         {
             var capture = ScreenCapture.CaptureMonitorUnderCursor();
@@ -797,6 +832,12 @@ public partial class App : Application
         catch (Exception ex)
         {
             AppLog.Error("Capture", "屏幕捕获或冻结遮罩显示失败", ex);
+            if (_mainWindowHiddenForCapture)
+            {
+                _mainWindowHiddenForCapture = false;
+                HistoryGallery.RestoreAfterCapture();
+            }
+
             NotifyUser(
                 StringsUi.Get("S.Message.CaptureFailedTitle"),
                 StringsUi.Format("S.Message.CaptureFailed", ex.Message));
@@ -822,6 +863,18 @@ public partial class App : Application
         }
 
         _captureOverlay = null;
+
+        if (_mainWindowHiddenForCapture)
+        {
+            _mainWindowHiddenForCapture = false;
+            HistoryGallery.RestoreAfterCapture();
+        }
+
+        // 截图写入历史后，主窗口若开着图库页要刷新（新记录 + 日期索引）。
+        if (sender is CaptureOverlayWindow { CompletedAction: not null })
+        {
+            HistoryGallery.ReloadIfOpen("截图完成");
+        }
     }
 
     // --- T21 剪贴板贴图 ---
@@ -1025,7 +1078,7 @@ public partial class App : Application
             return;
         }
 
-        var window = HistoryGallery.Show(_historyStore);
+        var window = HistoryGallery.Show(_historyStore, _settingsStore);
         if (window is null)
         {
             AppDialog.Alert(
@@ -1035,6 +1088,8 @@ public partial class App : Application
                 AppDialogKind.Error);
             return;
         }
+
+        window.ShowGalleryPage();
 
         AppLog.Info(
             "History",

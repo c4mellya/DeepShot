@@ -181,7 +181,7 @@ internal static class UiKit
             block.SetResourceReference(TextBlock.ForegroundProperty, brushKey ?? Keys.Foreground);
         }
 
-        // 字体统一走 Theme.FontFamily 资源（与窗口根同一来源）：还没进可视树就测宽的文字（字样方块、自适应行）也按 MiSans 量。
+        // 字体统一走 Theme.FontFamily 资源（与窗口根同一来源）：还没进可视树就测宽的文字（字样方块、自适应行）也按 Inter 量。
         block.SetResourceReference(TextBlock.FontFamilyProperty, ThemeManager.FontFamilyKey);
 
         if (weight is { } value)
@@ -235,7 +235,7 @@ internal static class UiKit
     /// （对话框底部用 <see cref="ButtonBar"/>）。
     /// </summary>
     /// <remarks>
-    /// 内容是 <see cref="TextBlock"/> 而不是裸字符串，保证中文一定按 MiSans 渲染；
+    /// 内容是 <see cref="TextBlock"/> 而不是裸字符串，保证中文一定按当前界面字体渲染；
     /// 文字不单独设颜色，继承按钮的 <c>Foreground</c>，换样式时跟着变。
     /// </remarks>
     internal static Button Button(
@@ -425,23 +425,27 @@ internal static class UiKit
         <ControlTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                          xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                          TargetType="CheckBox">
-          <Grid Width="22" Height="22" Background="Transparent" SnapsToDevicePixels="True">
-            <Border x:Name="Box" CornerRadius="6" BorderThickness="1.5"
+          <Grid Width="20" Height="20" Background="Transparent" SnapsToDevicePixels="True">
+            <Border x:Name="Box" CornerRadius="4" BorderThickness="1"
                     Background="{DynamicResource Theme.Surface}"
-                    BorderBrush="{DynamicResource Theme.Border}" />
-            <Path x:Name="Check" Data="M6,11.4 L9.6,15 L16.2,7.6" Opacity="0" IsHitTestVisible="False"
-                  Stroke="{DynamicResource Theme.OnAccent}" StrokeThickness="2.1"
+                    BorderBrush="{DynamicResource Theme.SecondaryForeground}" />
+            <Border x:Name="Ov" CornerRadius="4" Opacity="0" IsHitTestVisible="False"
+                    Background="{DynamicResource Theme.Foreground}" />
+            <Border x:Name="FocusRing" CornerRadius="6" Margin="-3" BorderThickness="2" Visibility="Collapsed"
+                    IsHitTestVisible="False" BorderBrush="{DynamicResource Theme.FocusRing}" />
+            <Path x:Name="Check" Data="M5.5,10.2 L8.6,13.2 L14.5,7" Opacity="0" IsHitTestVisible="False"
+                  Stroke="{DynamicResource Theme.OnAccent}" StrokeThickness="1.5"
                   StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
-            <Path x:Name="Dash" Data="M6.5,11 H15.5" Opacity="0" IsHitTestVisible="False"
-                  Stroke="{DynamicResource Theme.OnAccent}" StrokeThickness="2.1"
+            <Path x:Name="Dash" Data="M6,10 H14" Opacity="0" IsHitTestVisible="False"
+                  Stroke="{DynamicResource Theme.OnAccent}" StrokeThickness="1.5"
                   StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
           </Grid>
           <ControlTemplate.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
-              <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Theme.Accent}" />
+              <Setter TargetName="Ov" Property="Opacity" Value="0.05" />
             </Trigger>
             <Trigger Property="IsKeyboardFocused" Value="True">
-              <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Theme.Accent}" />
+              <Setter TargetName="FocusRing" Property="Visibility" Value="Visible" />
             </Trigger>
             <Trigger Property="IsChecked" Value="True">
               <Setter TargetName="Box" Property="Background" Value="{DynamicResource Theme.Accent}" />
@@ -458,7 +462,7 @@ internal static class UiKit
         """));
 
     /// <summary>
-    /// 圆角小方框复选框（多选用）：选中 = 强调色底 + 对勾；半选 = 强调色底 + 横杠。
+    /// Fluent 方框复选框（多选用，20×20，圆角 4）：选中 = 强调色底 + 对勾；半选 = 强调色底 + 横杠。
     /// 全局 CheckBox 样式是开关，这里显式换模板。
     /// </summary>
     internal static CheckBox CheckBox(string automationId, string automationName)
@@ -466,9 +470,8 @@ internal static class UiKit
         var box = new CheckBox
         {
             Template = CheckBoxTemplate.Value,
-            Width = 22,
-            Height = 22,
-            Cursor = Cursors.Hand,
+            Width = 20,
+            Height = 20,
             FocusVisualStyle = null,
             ToolTip = automationName,
         };

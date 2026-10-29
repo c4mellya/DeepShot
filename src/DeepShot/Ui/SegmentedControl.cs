@@ -1,7 +1,6 @@
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
-using System.Windows.Input;
 using System.Windows.Markup;
 
 namespace DeepShot.Ui;
@@ -15,7 +14,7 @@ internal static class SegmentedGroupIds
 }
 
 /// <summary>
-/// 分段选择器：几个互斥选项并排，选中项是强调色胶囊。颜色全部走 <c>Theme.*</c> 动态资源，换主题即时生效。
+/// 分段选择器：几个互斥选项并排，选中项是一块浮起的中性底板（与 Windows 11 SelectorBar/Segmented 一致）。颜色全部走 <c>Theme.*</c> 动态资源，换主题即时生效。
 /// </summary>
 internal sealed class SegmentedControl<T> : Border where T : struct, Enum
 {
@@ -24,8 +23,9 @@ internal sealed class SegmentedControl<T> : Border where T : struct, Enum
                          xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                          TargetType="RadioButton">
           <Grid SnapsToDevicePixels="True">
-            <Border x:Name="Pill" CornerRadius="7" Opacity="0" Background="{DynamicResource Theme.Accent}" />
-            <Border x:Name="Ov" CornerRadius="7" Opacity="0" Background="{DynamicResource Theme.Foreground}" />
+            <Border x:Name="Pill" CornerRadius="4" Opacity="0" BorderThickness="1"
+                    Background="{DynamicResource Theme.Surface}" BorderBrush="{DynamicResource Theme.Border}" />
+            <Border x:Name="Ov" CornerRadius="4" Opacity="0" Background="{DynamicResource Theme.Foreground}" />
             <ContentPresenter x:Name="Cp" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}"
                               TextElement.Foreground="{TemplateBinding Foreground}" />
           </Grid>
@@ -34,25 +34,25 @@ internal sealed class SegmentedControl<T> : Border where T : struct, Enum
               <Setter TargetName="Ov" Property="Opacity" Value="0.06" />
             </Trigger>
             <Trigger Property="IsKeyboardFocused" Value="True">
-              <Setter TargetName="Ov" Property="Opacity" Value="0.1" />
+              <Setter TargetName="Pill" Property="BorderBrush" Value="{DynamicResource Theme.FocusRing}" />
             </Trigger>
             <Trigger Property="IsChecked" Value="True">
               <Trigger.EnterActions>
                 <BeginStoryboard>
                   <Storyboard>
-                    <DoubleAnimation Storyboard.TargetName="Pill" Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.14" />
+                    <DoubleAnimation Storyboard.TargetName="Pill" Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.083" />
                   </Storyboard>
                 </BeginStoryboard>
               </Trigger.EnterActions>
               <Trigger.ExitActions>
                 <BeginStoryboard>
                   <Storyboard>
-                    <DoubleAnimation Storyboard.TargetName="Pill" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.1" />
+                    <DoubleAnimation Storyboard.TargetName="Pill" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.083" />
                   </Storyboard>
                 </BeginStoryboard>
               </Trigger.ExitActions>
               <Setter TargetName="Ov" Property="Opacity" Value="0" />
-              <Setter TargetName="Cp" Property="TextElement.Foreground" Value="{DynamicResource Theme.OnAccent}" />
+              <Setter TargetName="Cp" Property="TextElement.Foreground" Value="{DynamicResource Theme.Foreground}" />
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
@@ -65,16 +65,19 @@ internal sealed class SegmentedControl<T> : Border where T : struct, Enum
 
     internal SegmentedControl()
     {
-        // 外框圆角 10、内边距 3、选中胶囊圆角 7：三者同心；整体高度对齐 34px 控件高。
-        CornerRadius = new CornerRadius(Tokens.Radius.Popup);
+        // 外框 36 - 边框 2 - 内边距 6 = 内部 28，正好容纳 28px 按钮。
+        CornerRadius = new CornerRadius(Tokens.Radius.Control + 2);
         Padding = new Thickness(3);
-        MinHeight = Tokens.Height.Control;
+        Height = Tokens.Height.PageControl + 4;
+        MinHeight = Height;
+        ClipToBounds = false;
         BorderThickness = new Thickness(1);
         HorizontalAlignment = HorizontalAlignment.Left;
         VerticalAlignment = VerticalAlignment.Center;
+        _stack.VerticalAlignment = VerticalAlignment.Center;
         Child = _stack;
         SetResourceReference(BackgroundProperty, ThemeManager.BrushKeys.SurfaceAlt);
-        SetResourceReference(BorderBrushProperty, ThemeManager.BrushKeys.Divider);
+        SetResourceReference(BorderBrushProperty, ThemeManager.BrushKeys.Border);
     }
 
     /// <summary>用户点选了某一项（程序调用 <see cref="Select"/> 不触发）。</summary>
@@ -89,11 +92,12 @@ internal sealed class SegmentedControl<T> : Border where T : struct, Enum
             GroupName = _group,
             Content = StringsUi.Get(textKey),
             Template = Template.Value,
-            Padding = new Thickness(14, 0, 14, 1),
-            MinHeight = Tokens.Height.Control - 8,
+            Padding = new Thickness(14, 0, 14, 0),
+            Height = Tokens.Height.PageControl - 4,
+            MinHeight = Tokens.Height.PageControl - 4,
             MinWidth = 56,
             FontSize = Tokens.Text.Body,
-            Cursor = Cursors.Hand,
+            VerticalContentAlignment = VerticalAlignment.Center,
             Focusable = true,
             FocusVisualStyle = null,
         };

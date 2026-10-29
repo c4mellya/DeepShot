@@ -38,6 +38,19 @@ public enum AppTheme
 }
 
 /// <summary>
+/// 主题品牌（配色卡）：组件库里的 Claude 与 DeepSeek 两套色板，各自再配浅色/深色。
+/// 与 <see cref="AppTheme"/> 一起决定实际生效的调色板。
+/// </summary>
+public enum ThemeBrand
+{
+    /// <summary>DeepSeek 蓝（默认，接近原界面的蓝色观感）。</summary>
+    DeepSeek = 0,
+
+    /// <summary>Claude 暖色（组件库默认配色卡）。</summary>
+    Claude = 1,
+}
+
+/// <summary>
 /// 用户设置模型（T29）：<c>%LOCALAPPDATA%\DeepShot\settings.json</c>。
 /// </summary>
 /// <remarks>
@@ -67,7 +80,7 @@ public sealed record AppSettings
     public const string DefaultPinShortcut = "Alt+S";
 
     public const string DefaultQuickViewShortcut = "Alt+Q";
-    public const int CurrentSettingsVersion = 2;
+    public const int CurrentSettingsVersion = 3;
     public const int MinHistoryRetentionDays = 1;
     public const int MaxHistoryRetentionDays = 3650;
 
@@ -91,6 +104,9 @@ public sealed record AppSettings
 
     /// <summary>界面主题（默认跟随系统）。</summary>
     public AppTheme Theme { get; init; } = AppTheme.System;
+
+    /// <summary>主题品牌（默认 DeepSeek；旧设置没有此字段时也用它）。</summary>
+    public ThemeBrand ThemeBrand { get; init; } = ThemeBrand.DeepSeek;
 
     /// <summary>旧设置没有此字段时保持原有的窗口识别行为。</summary>
     public CaptureSelectionMode CaptureMode { get; init; } = CaptureSelectionMode.Window;
@@ -141,10 +157,12 @@ public sealed record AppSettings
                 settings.QuickScreenshotShortcut, DefaultQuickScreenshotShortcut, "快速截图快捷键", warnings),
             PinShortcut = NormalizeShortcut(settings.PinShortcut, DefaultPinShortcut, "贴图快捷键", warnings),
             QuickViewShortcut = NormalizeOptionalShortcut(
-                settings.Version < CurrentSettingsVersion && string.IsNullOrWhiteSpace(settings.QuickViewShortcut)
+                // 只对 v1 升级到 v2 的那批设置补默认快览快捷键；v2 之后用户主动清空要保留。
+                settings.Version < 2 && string.IsNullOrWhiteSpace(settings.QuickViewShortcut)
                     ? DefaultQuickViewShortcut : settings.QuickViewShortcut, warnings),
             Language = NormalizeLanguage(settings.Language, warnings),
             Theme = NormalizeTheme(settings.Theme, warnings),
+            ThemeBrand = NormalizeThemeBrand(settings.ThemeBrand, warnings),
             CaptureMode = NormalizeCaptureMode(settings.CaptureMode, warnings),
             HistoryRetentionDays = NormalizeHistoryRetentionDays(settings.HistoryRetentionDays, warnings),
             LaunchAtStartup = settings.LaunchAtStartup,
@@ -214,6 +232,9 @@ public sealed record AppSettings
     /// <summary>修改主题。</summary>
     public AppSettings WithTheme(AppTheme theme) => this with { Theme = theme };
 
+    /// <summary>修改主题品牌。</summary>
+    public AppSettings WithThemeBrand(ThemeBrand brand) => this with { ThemeBrand = brand };
+
     /// <summary>修改默认截图选区方式。</summary>
     public AppSettings WithCaptureMode(CaptureSelectionMode mode) => this with { CaptureMode = mode };
 
@@ -249,7 +270,7 @@ public sealed record AppSettings
     }
 
     public override string ToString() =>
-        $"截图={ScreenshotShortcut} 快速截图={QuickScreenshotShortcut} 贴图={PinShortcut} 语言={Language} 主题={Theme} 截图方式={CaptureMode} 历史保留={HistoryRetentionDays}天 开机启动={LaunchAtStartup}";
+        $"截图={ScreenshotShortcut} 快速截图={QuickScreenshotShortcut} 贴图={PinShortcut} 语言={Language} 主题={Theme} 品牌={ThemeBrand} 截图方式={CaptureMode} 历史保留={HistoryRetentionDays}天 开机启动={LaunchAtStartup}";
 
     private static int NormalizeHistoryRetentionDays(int days, List<string> warnings)
     {
@@ -273,6 +294,12 @@ public sealed record AppSettings
         string label,
         List<string> warnings)
     {
+        // 空字符串表示用户主动清除该热键（设置页每个快捷键都能清空），保留为空，不回退默认值。
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
         if (Shortcuts.ShortcutSpec.TryParse(value, out var parsed, out var error) && parsed is not null)
         {
             // 统一成规范写法（Ctrl+Alt+F1 顺序固定、主键大写），避免 "alt+a" 与 "Alt+A" 两种写法各存一份。
@@ -310,6 +337,17 @@ public sealed record AppSettings
 
         warnings.Add($"主题值 {(int)theme} 不认识，已回退为跟随系统。");
         return AppTheme.System;
+    }
+
+    private static ThemeBrand NormalizeThemeBrand(ThemeBrand brand, List<string> warnings)
+    {
+        if (Enum.IsDefined(brand))
+        {
+            return brand;
+        }
+
+        warnings.Add($"主题品牌值 {(int)brand} 不认识，已回退为 DeepSeek。");
+        return ThemeBrand.DeepSeek;
     }
 }
 
