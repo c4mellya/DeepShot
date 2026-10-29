@@ -326,12 +326,21 @@ public sealed class CaptureOverlayWindow : Window
         PreviewMouseRightButtonDown += (_, e) =>
         {
             e.Handled = true;
-            CaptureMouse();
+            if (Mouse.Captured is null)
+            {
+                _rightCaptured = CaptureMouse();
+            }
         };
         PreviewMouseRightButtonUp += (_, e) =>
         {
             e.Handled = true;
-            Cancel("鼠标右键");
+            if (_rightCaptured)
+            {
+                _rightCaptured = false;
+                ReleaseMouseCapture();
+            }
+
+            BackOff("鼠标右键");
         };
         PreviewMouseLeftButtonDown += OnPreviewMouseLeftButtonDown;
         PreviewMouseLeftButtonUp += OnPreviewMouseLeftButtonUp;
@@ -389,6 +398,77 @@ public sealed class CaptureOverlayWindow : Window
         }
     }
 
+    /// <summary>
+    /// Esc / 右键逐层后退：文字输入 → 选中标注 → 绘制工具 → 选区 → 退出。
+    /// 有标注时需在 1.5 秒内再按一次才放弃退出，避免误触丢失标注。
+    /// </summary>
+    private void BackOff(string reason)
+    {
+        if (_cancelRequested || _closed)
+        {
+            return;
+        }
+
+        // 拖拽进行中保持原行为：直接退出。
+        if (_pointerDown || _annotationPointerDown || _editorPointerDown)
+        {
+            Cancel(reason);
+            return;
+        }
+
+        if (_session.IsTextEditing)
+        {
+            CancelTextInput(reason);
+            return;
+        }
+
+        if (_editingText is not null)
+        {
+            CancelExistingTextEdit(reason);
+            return;
+        }
+
+        if (_session.Editing is { HasSelection: true } editor)
+        {
+            editor.ClearSelection();
+            _annotationLayer?.InvalidateVisual();
+            UpdateVisuals();
+            return;
+        }
+
+        if (_session.ActiveTool is not null && _selection.IsCaptureReady)
+        {
+            SelectTool(null);
+            return;
+        }
+
+        if (_session.Count == 0 && _selection.IsCaptureReady)
+        {
+            AppLog.Info("Overlay", $"{reason}：清除选区，回到框选");
+            _selection.Cancel();
+            ClearStatus();
+            UpdateVisuals();
+            return;
+        }
+
+        if (_session.Count > 0)
+        {
+            var now = Environment.TickCount64;
+            if (now - _discardArmedTick > DiscardConfirmMilliseconds)
+            {
+                _discardArmedTick = now;
+                SetStatus(StringsUi.Get("S.Overlay.DiscardHint"));
+                return;
+            }
+        }
+
+        Cancel(reason);
+    }
+
+    private const long DiscardConfirmMilliseconds = 1500;
+    private long _discardArmedTick = long.MinValue / 2;
+    private bool _rightCaptured;
+
     private void OnSourceInitialized(object? sender, EventArgs e)
     {
         var hwnd = new WindowInteropHelper(this).Handle;
@@ -408,7 +488,7 @@ public sealed class CaptureOverlayWindow : Window
                 () => !_closed && !_saveDialogOpen && IsVisible && IsEnabled,
                 reason => Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() =>
                 {
-                    if (!_closed && !_saveDialogOpen && IsEnabled) Cancel(reason);
+                    if (!_closed && !_saveDialogOpen && IsEnabled) BackOff(reason);
                 })));
         }
         catch (System.ComponentModel.Win32Exception ex)
@@ -520,11 +600,11 @@ public sealed class CaptureOverlayWindow : Window
         if (key == Key.Escape)
         {
             e.Handled = true;
-            Cancel("Esc");
+            BackOff("Esc");
             return;
         }
 
-        // Enter confirms text without copying. Escape above cancels the entire capture.
+        // Enter confirms text without copying. Escape above backs off one layer.
         if (_session.IsTextEditing)
         {
             if (e.Key == Key.Enter && (Keyboard.Modifiers & ModifierKeys.Shift) != ModifierKeys.Shift)
@@ -1227,7 +1307,7 @@ public sealed class CaptureOverlayWindow : Window
         catch (InvalidOperationException ex)
         {
             AppLog.Warn("Editor", $"无法开始标注：{ex.Message}");
-            SetStatus("当前状态不能绘制标注");
+            SetStatus(StringsUi.Get("S.Overlay.CannotDraw"));
             return;
         }
 
@@ -1281,7 +1361,7 @@ public sealed class CaptureOverlayWindow : Window
         catch (InvalidOperationException ex)
         {
             AppLog.Warn("Editor", $"无法开始文字输入：{ex.Message}");
-            SetStatus("当前状态不能输入文字");
+            SetStatus(StringsUi.Get("S.Overlay.CannotType"));
             return;
         }
 
@@ -1410,7 +1490,7 @@ public sealed class CaptureOverlayWindow : Window
 
         if (!done)
         {
-            SetStatus("没有可撤销的标注");
+            SetStatus(StringsUi.Get("S.Overlay.NothingToUndo"));
             return;
         }
 
@@ -1430,7 +1510,7 @@ public sealed class CaptureOverlayWindow : Window
 
         if (!done)
         {
-            SetStatus("没有可重做的标注");
+            SetStatus(StringsUi.Get("S.Overlay.NothingToRedo"));
             return;
         }
 
@@ -1897,12 +1977,12 @@ public sealed class CaptureOverlayWindow : Window
         catch (COMException ex)
         {
             stopwatch.Stop();
-            FailOutput(CaptureAction.Copy, "复制失败：剪贴板被占用，请稍后重试", ex, isWarning: true);
+            FailOutput(CaptureAction.Copy, StringsUi.Get("S.Message.ClipboardBusy"), ex, isWarning: true);
         }
         catch (Exception ex)
         {
             stopwatch.Stop();
-            FailOutput(CaptureAction.Copy, "复制失败", ex, isWarning: false);
+            FailOutput(CaptureAction.Copy, StringsUi.Get("S.Overlay.CopyFailed"), ex, isWarning: false);
         }
     }
 
@@ -1924,7 +2004,7 @@ public sealed class CaptureOverlayWindow : Window
         }
         catch (Exception ex)
         {
-            FailOutput(CaptureAction.SaveAs, "无法打开保存对话框", ex, isWarning: false);
+            FailOutput(CaptureAction.SaveAs, StringsUi.Get("S.Overlay.SaveDialogFailed"), ex, isWarning: false);
             return;
         }
 
@@ -1944,7 +2024,7 @@ public sealed class CaptureOverlayWindow : Window
         }
         catch (Exception ex)
         {
-            FailOutput(CaptureAction.SaveAs, "无法打开保存对话框", ex, isWarning: false);
+            FailOutput(CaptureAction.SaveAs, StringsUi.Get("S.Overlay.SaveDialogFailed"), ex, isWarning: false);
             return;
         }
         finally
@@ -1982,7 +2062,7 @@ public sealed class CaptureOverlayWindow : Window
         catch (Exception ex)
         {
             stopwatch.Stop();
-            FailOutput(CaptureAction.SaveAs, "保存失败，请重试", ex, isWarning: false);
+            FailOutput(CaptureAction.SaveAs, StringsUi.Get("S.Overlay.SaveFailed"), ex, isWarning: false);
         }
     }
 
@@ -2017,7 +2097,7 @@ public sealed class CaptureOverlayWindow : Window
         catch (Exception ex)
         {
             stopwatch.Stop();
-            FailOutput(CaptureAction.Pin, "贴图失败", ex, isWarning: false);
+            FailOutput(CaptureAction.Pin, StringsUi.Get("S.Overlay.PinFailed"), ex, isWarning: false);
         }
     }
 
@@ -2114,8 +2194,14 @@ public sealed class CaptureOverlayWindow : Window
         }
 
         Close();
-        if (_quickCopy && action == CaptureAction.Copy)
-            ToastWindow.Show(StringsUi.Get("S.Toast.QuickScreenshotCopied"));
+        if (action == CaptureAction.Copy)
+        {
+            ToastWindow.Show(StringsUi.Get(_quickCopy ? "S.Toast.QuickScreenshotCopied" : "S.Overlay.Copied"));
+        }
+        else if (action == CaptureAction.SaveAs && !string.IsNullOrEmpty(filePath))
+        {
+            ToastWindow.Show(StringsUi.Format("S.Overlay.Saved", System.IO.Path.GetFileName(filePath)));
+        }
     }
 
     /// <summary>失败提示：写日志 + 工具栏内联提示，并留在截图状态。</summary>
@@ -2284,13 +2370,26 @@ public sealed class CaptureOverlayWindow : Window
         return button;
     }
 
+    /// <summary>调色板颜色的显示名；不在调色板里的颜色回退为 #RRGGBB。</summary>
+    private static string ColorName(AnnotationColor color) => (color.Argb & 0x00FFFFFF) switch
+    {
+        0xFF3B30 => StringsUi.Get("S.Overlay.Color.Red"),
+        0xFFCC00 => StringsUi.Get("S.Overlay.Color.Yellow"),
+        0x34C759 => StringsUi.Get("S.Overlay.Color.Green"),
+        0x0A84FF => StringsUi.Get("S.Overlay.Color.Blue"),
+        0xFFFFFF => StringsUi.Get("S.Overlay.Color.White"),
+        0x000000 => StringsUi.Get("S.Overlay.Color.Black"),
+        _ => $"#{color.Red:X2}{color.Green:X2}{color.Blue:X2}",
+    };
+
     /// <summary>颜色圆点：选中的带白色外环。</summary>
     private Button CreateColorSwatch(AnnotationColor color)
     {
         var button = OverlayChrome.Swatch(Color.FromArgb(color.Alpha, color.Red, color.Green, color.Blue));
-        button.ToolTip = color.ToString();
+        var name = ColorName(color);
+        button.ToolTip = name;
         button.Click += (_, _) => SelectColor(color);
-        var label = StringsUi.Format("S.Annotation.Color", color);
+        var label = StringsUi.Format("S.Annotation.Color", name);
         AutomationProperties.SetName(button, label);
         _colorSwatches.Add((color, button));
         _toolbarButtons.Add((label, button));
@@ -2417,7 +2516,7 @@ public sealed class CaptureOverlayWindow : Window
         host.SetResourceReference(Border.BackgroundProperty, ThemeManager.BrushKeys.OverlayBar);
         host.SetResourceReference(Border.BorderBrushProperty, UiKit.Keys.Accent);
 
-        AutomationProperties.SetName(host, "标注文字输入框");
+        AutomationProperties.SetName(host, StringsUi.Get("S.Overlay.TextInput"));
         return host;
     }
 

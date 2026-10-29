@@ -47,6 +47,15 @@ public sealed class ThemePalette
     /// <summary>次要文字（时间/尺寸/状态/提示）。</summary>
     public required Color SecondaryForeground { get; init; }
 
+    /// <summary>三级文字（分组标签、等宽说明；比次要文字更淡）。</summary>
+    public required Color TertiaryForeground { get; init; }
+
+    /// <summary>按下态底色（列表行、按钮）。</summary>
+    public required Color PressedBackground { get; init; }
+
+    /// <summary>键盘焦点环（半透明，叠在控件外侧）。</summary>
+    public required Color FocusRing { get; init; }
+
     /// <summary>强调色（选中边框、主按钮底、分段开关选中项）。</summary>
     public required Color Accent { get; init; }
 
@@ -138,6 +147,15 @@ public sealed class ThemePalette
 
     /// <summary>次要文字。</summary>
     public SolidColorBrush SecondaryForegroundBrush => Get(nameof(SecondaryForeground));
+
+    /// <summary>三级文字。</summary>
+    public SolidColorBrush TertiaryForegroundBrush => Get(nameof(TertiaryForeground));
+
+    /// <summary>按下态底色。</summary>
+    public SolidColorBrush PressedBackgroundBrush => Get(nameof(PressedBackground));
+
+    /// <summary>焦点环。</summary>
+    public SolidColorBrush FocusRingBrush => Get(nameof(FocusRing));
 
     /// <summary>强调色。</summary>
     public SolidColorBrush AccentBrush => Get(nameof(Accent));
@@ -232,6 +250,9 @@ public sealed class ThemePalette
         Divider = Rgb(0xE7, 0xE9, 0xEE),
         Foreground = Rgb(0x15, 0x17, 0x1C),
         SecondaryForeground = Rgb(0x67, 0x6C, 0x78),
+        TertiaryForeground = Rgb(0x8A, 0x90, 0x9C),
+        PressedBackground = Rgb(0xE2, 0xE6, 0xEE),
+        FocusRing = Argb(0x73, 0x14, 0x14, 0x13),
         Accent = Rgb(0x25, 0x63, 0xEB),
         OnAccent = Rgb(0xFF, 0xFF, 0xFF),
         AccentHover = Rgb(0x1D, 0x4F, 0xD0),
@@ -271,6 +292,9 @@ public sealed class ThemePalette
         Divider = Rgb(0x2C, 0x2F, 0x36),
         Foreground = Rgb(0xF2, 0xF3, 0xF6),
         SecondaryForeground = Rgb(0xA0, 0xA4, 0xAF),
+        TertiaryForeground = Rgb(0x7C, 0x81, 0x8D),
+        PressedBackground = Rgb(0x35, 0x38, 0x42),
+        FocusRing = Argb(0x99, 0xFA, 0xF9, 0xF5),
         Accent = Rgb(0x6E, 0xA0, 0xFF),
         OnAccent = Rgb(0x08, 0x16, 0x2E),
         AccentHover = Rgb(0x8A, 0xB3, 0xFF),
@@ -316,6 +340,9 @@ public sealed class ThemePalette
         Divider = overrides.Divider,
         Foreground = overrides.Foreground,
         SecondaryForeground = overrides.SecondaryForeground,
+        TertiaryForeground = overrides.TertiaryForeground,
+        PressedBackground = overrides.PressedBackground,
+        FocusRing = overrides.FocusRing,
         Accent = overrides.Accent,
         OnAccent = overrides.OnAccent,
         AccentHover = overrides.AccentHover,
@@ -344,6 +371,12 @@ public sealed class ThemePalette
     /// <summary>按主题枚举取调色板（<see cref="AppTheme.System"/> 由调用方先解析成实际主题）。</summary>
     public static ThemePalette For(AppTheme theme) => theme == AppTheme.Light ? Light : Dark;
 
+    /// <summary>
+    /// 按品牌 + 实际生效的浅/深取组件库调色板（Claude / DeepSeek × 明/暗）。
+    /// </summary>
+    public static ThemePalette For(ThemeBrand brand, AppTheme effectiveTheme) =>
+        ThemePalettes.For(brand, effectiveTheme);
+
     /// <summary>把 <see cref="AppTheme"/> 解析成实际生效的浅/深（跟随系统时读注册表）。</summary>
     public static AppTheme ResolveEffective(AppTheme theme) => theme switch
     {
@@ -352,9 +385,9 @@ public sealed class ThemePalette
         _ => ThemeManager.IsSystemUsingLightTheme() ? AppTheme.Light : AppTheme.Dark,
     };
 
-    /// <summary>按实际主题取调色板。</summary>
-    public static ThemePalette ForEffective(AppTheme effectiveTheme) =>
-        For(effectiveTheme == AppTheme.Light ? AppTheme.Light : AppTheme.Dark);
+    /// <summary>按品牌 + 实际主题取调色板。</summary>
+    public static ThemePalette ForEffective(ThemeBrand brand, AppTheme effectiveTheme) =>
+        For(brand, effectiveTheme == AppTheme.Light ? AppTheme.Light : AppTheme.Dark);
 
     public override string ToString() =>
         $"{(IsDark ? "深色" : "浅色")} 圆角 大{RadiusLarge}/中{RadiusMedium}/小{RadiusSmall}";

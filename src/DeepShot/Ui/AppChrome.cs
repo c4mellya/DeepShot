@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
@@ -14,7 +15,7 @@ namespace DeepShot.Ui;
 /// </summary>
 internal static class AppChrome
 {
-    internal const double TitleBarHeight = 40;
+    internal const double TitleBarHeight = 32;
 
     private static ImageSource? _icon;
 
@@ -146,6 +147,9 @@ internal static class AppChrome
         window.UseLayoutRounding = true;
         window.SnapsToDevicePixels = true;
         TextOptions.SetTextFormattingMode(window, TextFormattingMode.Display);
+        TextOptions.SetTextRenderingMode(window, TextRenderingMode.ClearType);
+        TextOptions.SetTextHintingMode(window, TextHintingMode.Fixed);
+        RenderOptions.SetClearTypeHint(window, ClearTypeHint.Enabled);
 
         var resizable = window.ResizeMode is ResizeMode.CanResize or ResizeMode.CanResizeWithGrip;
         WindowChrome.SetWindowChrome(window, new WindowChrome
@@ -164,9 +168,9 @@ internal static class AppChrome
         bar.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         bar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-        // Win11 风格：18px 图标 + 12px 标题，留出呼吸感。
-        var icon = IconImage(18);
-        icon.Margin = new Thickness(14, 0, 10, 0);
+        // Win11 系统标题栏：16px 图标，左缘 16，与标题间距 12。
+        var icon = IconImage(16);
+        icon.Margin = new Thickness(16, 0, 12, 0);
         icon.VerticalAlignment = VerticalAlignment.Center;
         Grid.SetColumn(icon, 0);
         bar.Children.Add(icon);
@@ -188,17 +192,17 @@ internal static class AppChrome
         Button? maximize = null;
         if (allowMinimize && window.ResizeMode != ResizeMode.NoResize)
         {
-            buttons.Children.Add(CaptionButton("M0,0.5 H10", "最小化", false, () => window.WindowState = WindowState.Minimized));
+            buttons.Children.Add(CaptionButton("M0,0.5 H10", StringsUi.Get("S.Common.Minimize"), false, () => window.WindowState = WindowState.Minimized));
         }
 
         if (allowMaximize && resizable)
         {
-            maximize = CaptionButton("M0.5,0.5 H9.5 V9.5 H0.5 Z", "最大化", false, () =>
+            maximize = CaptionButton("M0.5,0.5 H9.5 V9.5 H0.5 Z", StringsUi.Get("S.Common.Maximize"), false, () =>
                 window.WindowState = window.WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized);
             buttons.Children.Add(maximize);
         }
 
-        buttons.Children.Add(CaptionButton("M0,0 L10,10 M10,0 L0,10", "关闭", true, window.Close));
+        buttons.Children.Add(CaptionButton("M0,0 L10,10 M10,0 L0,10", StringsUi.Get("S.Common.Close"), true, window.Close));
         Grid.SetColumn(buttons, 2);
         bar.Children.Add(buttons);
 
@@ -215,6 +219,23 @@ internal static class AppChrome
         }
 
         window.Content = root;
+
+        // 失去焦点时标题与窗口按钮变淡，和系统标题栏一致。
+        window.Activated += (_, _) =>
+        {
+            title.SetResourceReference(TextBlock.ForegroundProperty, ThemeManager.BrushKeys.SecondaryForeground);
+            buttons.Opacity = 1;
+        };
+        window.Deactivated += (_, _) =>
+        {
+            title.SetResourceReference(TextBlock.ForegroundProperty, ThemeManager.BrushKeys.TertiaryForeground);
+            buttons.Opacity = 0.5;
+        };
+
+        if (maximize is not null)
+        {
+            window.SourceInitialized += (_, _) => HookSnapLayouts(window, maximize);
+        }
 
         window.StateChanged += (_, _) =>
         {
@@ -244,6 +265,84 @@ internal static class AppChrome
         Grid.SetRow(backdrop, 0);
         Grid.SetRowSpan(backdrop, 2);
         root.Children.Insert(0, backdrop);
+    }
+
+    private const int WmNcHitTest = 0x0084;
+    private const int WmNcMouseMove = 0x00A0;
+    private const int WmNcLButtonDown = 0x00A1;
+    private const int WmNcLButtonUp = 0x00A2;
+    private const int WmNcMouseLeave = 0x02A2;
+    private const int HtMaxButton = 9;
+
+    /// <summary>
+    /// Windows 11 贴靠布局：系统只在 <c>WM_NCHITTEST</c> 返回 <c>HTMAXBUTTON</c> 时才在最大化按钮上弹出布局面板。
+    /// 命中后鼠标消息变成非客户区消息，WPF 收不到悬停/点击，所以这里自己维护悬停底色并在抬起时切换最大化。
+    /// </summary>
+    private static void HookSnapLayouts(Window window, Button maximize)
+    {
+        if (HwndSource.FromHwnd(new WindowInteropHelper(window).Handle) is not { } source)
+        {
+            return;
+        }
+
+        var hovered = false;
+        void SetHover(bool value)
+        {
+            if (hovered == value)
+            {
+                return;
+            }
+
+            hovered = value;
+            if (value)
+            {
+                maximize.SetResourceReference(Control.BackgroundProperty, ThemeManager.BrushKeys.HoverBackground);
+            }
+            else
+            {
+                maximize.ClearValue(Control.BackgroundProperty);
+            }
+        }
+
+        bool OverMaximize(IntPtr lParam)
+        {
+            if (!maximize.IsVisible || maximize.ActualWidth <= 0)
+            {
+                return false;
+            }
+
+            var value = lParam.ToInt64();
+            var screen = new Point((short)(value & 0xFFFF), (short)((value >> 16) & 0xFFFF));
+            var local = maximize.PointFromScreen(screen);
+            return local.X >= 0 && local.Y >= 0 && local.X < maximize.ActualWidth && local.Y < maximize.ActualHeight;
+        }
+
+        source.AddHook((IntPtr _, int msg, IntPtr wParam, IntPtr lParam, ref bool handled) =>
+        {
+            switch (msg)
+            {
+                case WmNcHitTest when OverMaximize(lParam):
+                    handled = true;
+                    return new IntPtr(HtMaxButton);
+                case WmNcMouseMove:
+                    SetHover(wParam.ToInt32() == HtMaxButton);
+                    break;
+                case WmNcMouseLeave:
+                    SetHover(false);
+                    break;
+                case WmNcLButtonDown when wParam.ToInt32() == HtMaxButton:
+                    handled = true;
+                    return IntPtr.Zero;
+                case WmNcLButtonUp when wParam.ToInt32() == HtMaxButton:
+                    handled = true;
+                    SetHover(false);
+                    window.WindowState = window.WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+                    return IntPtr.Zero;
+            }
+
+            return IntPtr.Zero;
+        });
+        window.MouseMove += (_, _) => SetHover(false);
     }
 
     private static Button CaptionButton(string glyph, string name, bool close, Action action)

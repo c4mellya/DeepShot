@@ -300,6 +300,13 @@ public sealed class HistoryStore
     /// <summary>图库列表页（T25 用；本轮只提供入口，没有 UI）。</summary>
     public HistoryPage GetPage(HistoryQuery? query = null) => _repository.GetList(query);
 
+    /// <summary>
+    /// 日期索引（图库右侧时间轴 / 日期跳转用）：按本地日期给出每天的条数与偏移。
+    /// 直接转发给 <see cref="HistoryRepository.GetDateIndex"/>，不做额外缓存 ——
+    /// 索引很小（每天一行），每次刷新重新算比维护失效逻辑更不容易错。
+    /// </summary>
+    public HistoryDateIndex GetDateIndex(HistoryQuery? query = null) => _repository.GetDateIndex(query);
+
     /// <summary>记录总数（启动日志/清理统计用）。</summary>
     public int Count() => _repository.Count();
 }

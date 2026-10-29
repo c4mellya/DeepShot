@@ -6,7 +6,6 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
-using Shapes = System.Windows.Shapes;
 using System.Windows.Threading;
 using DeepShot.Capture;
 using DeepShot.Core;
@@ -59,7 +58,6 @@ public sealed class SettingsWindow : Window
     private readonly TextBlock _retentionError;
     private readonly TextBlock _status;
     private readonly TextBlock _header;
-    private readonly TextBlock _subtitle;
     private readonly StackPanel _sections;
     private bool _applying;
 
@@ -83,10 +81,9 @@ public sealed class SettingsWindow : Window
         var settings = _store.Current;
 
         _header = UiKit.Text(StringsUi.Get("S.Settings.Heading"), TextRole.Display);
+        _header.FontSize = 28;
+        _header.FontWeight = AppFonts.Semibold;
         AutomationProperties.SetAutomationId(_header, "settings-heading");
-
-        _subtitle = UiKit.Text(StringsUi.Get("S.Settings.Subtitle"), TextRole.Caption, wrap: true);
-        _subtitle.VerticalAlignment = VerticalAlignment.Center;
 
         _screenshotBox = new ShortcutBox("settings-shortcut-screenshot");
         _screenshotBox.SetValue(settings.ScreenshotShortcut);
@@ -200,14 +197,10 @@ public sealed class SettingsWindow : Window
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-        // 头部：一层从徽标处晕开的强调色淡光 + 徽标（身后柔光）+ 大标题 + "自动保存"副标题 + 版本胶囊。
-        // 底光垫在自绘标题栏身后（AppChrome.AddBackdrop），从窗口顶端一直晕到头部下方的内容里渐隐，标题栏与头部之间都不留接缝。
-        var wash = UiKit.HeaderWash(new Point(0.1, 0.38));
-
+        // 头部：只有页面标题。
         var header = BuildHeader();
         Grid.SetRow(header, 0);
         root.Children.Add(header);
-        header.SizeChanged += (_, _) => wash.Height = AppChrome.TitleBarHeight + header.ActualHeight + 64;
 
         // 滚动后头部下方才出现一条细线；静止时头部与内容浑然一体。
         var headerLine = UiKit.Divider();
@@ -242,7 +235,6 @@ public sealed class SettingsWindow : Window
         root.Children.Add(footer);
         Content = root;
         AppChrome.Apply(this);
-        AppChrome.AddBackdrop(this, wash);
         Loaded += (_, _) => UiKit.Entrance(_sections);
 
         BuildSections();
@@ -259,6 +251,7 @@ public sealed class SettingsWindow : Window
         Deactivated += (_, _) => (Application.Current as App)?.EndShortcutCapture();
         Closed += (_, _) =>
         {
+            _statusTimer?.Stop();
             (Application.Current as App)?.EndShortcutCapture();
             ThemeManager.Changed -= OnThemeChanged;
             StringsUi.Changed -= OnLanguageChanged;
@@ -329,7 +322,7 @@ public sealed class SettingsWindow : Window
     private static string DescribeChannel() =>
         string.IsNullOrWhiteSpace(AppInfo.UpdateManifestUrl)
             ? StringsUi.Get("S.Update.NotConfiguredTitle")
-            : StringsUi.Format("S.Update.Channel", AppInfo.UpdateManifestUrl);
+            : string.Empty;
 
     /// <summary>本次窗口里最后一次操作的结果（验证脚本读日志核对）。</summary>
     internal string StatusText => _status.Text;
@@ -365,37 +358,37 @@ public sealed class SettingsWindow : Window
         clearQuickShortcut.Margin = new Thickness(0, 0, Tokens.Space.XS, 0);
         quickShortcut.Children.Add(clearQuickShortcut);
         quickShortcut.Children.Add(_quickViewBox);
-        _sections.Children.Add(UiKit.Card(
-            IconRow(AppIcons.Keyboard, StringsUi.Get("S.Settings.Shortcut.Screenshot"), null, _screenshotBox),
-            IconRow(AppIcons.Bolt, StringsUi.Get("S.Settings.Shortcut.QuickScreenshot"),
+        _sections.Children.Add(Cards(
+            IconRow(StringsUi.Get("S.Settings.Shortcut.Screenshot"), null, _screenshotBox),
+            IconRow(StringsUi.Get("S.Settings.Shortcut.QuickScreenshot"),
                 StringsUi.Get("S.Settings.Shortcut.QuickScreenshotHint"), _quickScreenshotBox),
-            IconRow(AppIcons.Pin, StringsUi.Get("S.Settings.Shortcut.Pin"), null, _pinBox),
+            IconRow(StringsUi.Get("S.Settings.Shortcut.Pin"), null, _pinBox),
             UiKit.AdaptiveSettingsRow(
-                UiKit.RowLabel(AppIcons.Preview, StringsUi.Get("S.QuickView.Shortcut"), null, out _, out _),
-                quickShortcut, 200, UiKit.RowLeadingIndent)));
+                UiKit.RowLabel(null, StringsUi.Get("S.QuickView.Shortcut"), null, out _, out _),
+                quickShortcut, 200, 0)));
 
         // 截图方式：分段控件较宽，标题被挤窄时整块换到下一行（不再一字一行）。
         AddSection("S.Settings.Section.Capture");
-        _sections.Children.Add(UiKit.Card(
+        _sections.Children.Add(Cards(
             UiKit.AdaptiveSettingsRow(
-                UiKit.RowLabel(AppIcons.Crop, StringsUi.Get("S.Settings.CaptureMode.Label"), StringsUi.Get("S.Settings.CaptureMode.Hint"), out _, out _),
-                _captureMode, 220, UiKit.RowLeadingIndent)));
+                UiKit.RowLabel(null, StringsUi.Get("S.Settings.CaptureMode.Label"), StringsUi.Get("S.Settings.CaptureMode.Hint"), out _, out _),
+                _captureMode, 220, 0)));
 
         // 外观（语言 + 主题）。"当前使用 / 当前外观"说明沿用旧行为：放在说明位、默认折叠。
         AddSection("S.Settings.Section.Appearance");
-        _sections.Children.Add(UiKit.Card(
+        _sections.Children.Add(Cards(
             UiKit.SettingsRow(
-                UiKit.RowLabel(AppIcons.Globe, StringsUi.Get("S.Settings.Section.Language"), null, out _, out _languageLabel),
+                UiKit.RowLabel(null, StringsUi.Get("S.Settings.Section.Language"), null, out _, out _languageLabel),
                 _language),
             UiKit.AdaptiveSettingsRow(
-                UiKit.RowLabel(AppIcons.Moon, StringsUi.Get("S.Settings.Section.Theme"), null, out _, out _themeLabel),
-                _theme, 200, UiKit.RowLeadingIndent)));
+                UiKit.RowLabel(null, StringsUi.Get("S.Settings.Section.Theme"), null, out _, out _themeLabel),
+                _theme, 200, 0)));
         RefreshEffectiveLabels();
 
         // 开机启动
         AddSection("S.Settings.Section.Startup");
-        _sections.Children.Add(UiKit.Card(
-            IconRow(AppIcons.Power, StringsUi.Get("S.Settings.Startup.Enable"), null, _startup)));
+        _sections.Children.Add(Cards(
+            IconRow(StringsUi.Get("S.Settings.Startup.Enable"), null, _startup)));
 
         // 数据目录 + 历史保留
         AddSection("S.Settings.Section.Data");
@@ -406,10 +399,10 @@ public sealed class SettingsWindow : Window
         var openData = UiKit.Button(openText, openText, OpenDataFolder, ButtonKind.Secondary, "settings-open-data");
         openData.HorizontalAlignment = HorizontalAlignment.Right;
 
-        var retentionDetails = new StackPanel { Margin = new Thickness(UiKit.RowLeadingIndent, 0, 0, 0) };
+        var retentionDetails = new StackPanel { Margin = new Thickness(0) };
         retentionDetails.Children.Add(_retentionRule);
         retentionDetails.Children.Add(_retentionError);
-        var retentionRow = IconRow(AppIcons.Clock, StringsUi.Get("S.Settings.Retention.Days"),
+        var retentionRow = IconRow(StringsUi.Get("S.Settings.Retention.Days"),
             StringsUi.Format("S.Settings.Retention.Hint", AppSettings.MinHistoryRetentionDays, AppSettings.MaxHistoryRetentionDays),
             _retentionDays);
         // 说明紧贴在保留天数行下面（同一块，不加分隔线）。
@@ -419,8 +412,8 @@ public sealed class SettingsWindow : Window
         var retentionDetailsRow = UiKit.CardRow(retentionDetails);
         retentionDetailsRow.Padding = new Thickness(Tokens.CardRowPadding.Left, 0, Tokens.CardRowPadding.Right, Tokens.CardRowPadding.Bottom);
         retentionBlock.Children.Add(retentionDetailsRow);
-        _sections.Children.Add(UiKit.Card(
-            UiKit.AdaptiveSettingsRow(WithIcon(AppIcons.Folder, dataTexts), openData, 240, UiKit.RowLeadingIndent),
+        _sections.Children.Add(Cards(
+            UiKit.AdaptiveSettingsRow((dataTexts), openData, 240, 0),
             retentionBlock));
 
         // 更新：版本 + 渠道 + 检查按钮
@@ -431,6 +424,7 @@ public sealed class SettingsWindow : Window
         var channel = UiKit.Text(DescribeChannel(), TextRole.Caption, wrap: true);
         channel.Margin = new Thickness(0, 3, 0, 0);
         AutomationProperties.SetAutomationId(channel, "settings-update-channel");
+        channel.Visibility = channel.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
 
         var updateTexts = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         updateTexts.Children.Add(version);
@@ -439,73 +433,45 @@ public sealed class SettingsWindow : Window
         var checkText = StringsUi.Get("S.Settings.Update.Check");
         var check = UiKit.Button(checkText, checkText, () => CheckUpdates?.Invoke(), ButtonKind.Secondary, "settings-check-update");
         check.HorizontalAlignment = HorizontalAlignment.Right;
-        _sections.Children.Add(UiKit.Card(UiKit.AdaptiveSettingsRow(WithIcon(AppIcons.Refresh, updateTexts), check, 240, UiKit.RowLeadingIndent)));
-
-        // 关于：中文字体致谢（MiSans）。左侧方块直接用 MiSans 写一个"Aa 汉"当字样。
-        AddSection("S.Settings.Section.About");
-        var fontLabel = UiKit.RowLabel(null, StringsUi.Get("S.Settings.About.Font"), StringsUi.Get("S.Settings.About.FontLicense"), out _, out _);
-        var aboutRow = UiKit.CardRow(UiKit.RowLeading(UiKit.TextTile("Aa汉"), fontLabel));
-        AutomationProperties.SetAutomationId(aboutRow, "settings-about-font");
-        _sections.Children.Add(UiKit.Card(aboutRow));
+        _sections.Children.Add(Cards(UiKit.AdaptiveSettingsRow((updateTexts), check, 240, 0)));
 
         ApplyLocalizedLabels();
     }
 
-    /// <summary>分组小标题；第一组紧贴头部，不再额外空出一大段。</summary>
+    /// <summary>分组标题（14 Semibold）；组与组之间 24（含上一张卡片的 4）。</summary>
     private void AddSection(string key, bool first = false)
     {
         var text = StringsUi.Get(key);
-        var header = UiKit.SectionHeader(text, "settings-section-" + text);
-        if (first)
-        {
-            header.Margin = new Thickness(header.Margin.Left, Tokens.Space.S, header.Margin.Right, header.Margin.Bottom);
-        }
-
+        var header = UiKit.Text(text, TextRole.BodyLarge);
+        header.FontWeight = AppFonts.Semibold;
+        header.Margin = new Thickness(0, first ? 0 : Tokens.Space.L + 4, 0, Tokens.Space.S);
+        AutomationProperties.SetAutomationId(header, "settings-section-" + text);
         _sections.Children.Add(header);
     }
 
-    /// <summary>带行首图标方块的设置行（左文右控件）。</summary>
-    private static FrameworkElement IconRow(string iconData, string title, string? description, FrameworkElement control) =>
-        UiKit.SettingsRow(UiKit.RowLabel(iconData, title, description, out _, out _), control);
+    /// <summary>每一行一张卡片，卡片之间 4。</summary>
+    private static Panel Cards(params UIElement[] rows)
+    {
+        var panel = new StackPanel();
+        foreach (var row in rows)
+        {
+            var card = UiKit.CardShell(row);
+            card.Margin = new Thickness(0, 0, 0, Tokens.Space.XS);
+            panel.Children.Add(card);
+        }
 
-    /// <summary>给自定义的左侧文字加上同款行首图标方块。</summary>
-    private static FrameworkElement WithIcon(string iconData, FrameworkElement texts) =>
-        UiKit.RowLeading(UiKit.IconTile(iconData), texts);
+        return panel;
+    }
 
-    /// <summary>
-    /// 头部：徽标（身后一团柔和的强调色光晕，做成兄弟元素，不糊图标）+ 大标题 + 自动保存提示 + 版本胶囊。
-    /// </summary>
+    /// <summary>设置行（左文右控件）。</summary>
+    private static FrameworkElement IconRow(string title, string? description, FrameworkElement control) =>
+        UiKit.SettingsRow(UiKit.RowLabel(null, title, description, out _, out _), control);
+
+    /// <summary>头部：页面标题（28 Semibold）。</summary>
     private FrameworkElement BuildHeader()
     {
-        var markHost = UiKit.BrandMark(52);
-
-        // 副标题前一颗绿色小圆点："改动会自动保存"的状态感。
-        var dot = new Shapes.Ellipse { Width = 6, Height = 6, Margin = new Thickness(1, 0, 7, 0), VerticalAlignment = VerticalAlignment.Center };
-        dot.SetResourceReference(Shapes.Shape.FillProperty, ThemeManager.BrushKeys.Success);
-        var subtitleRow = new DockPanel { Margin = new Thickness(0, 4, 0, 0) };
-        DockPanel.SetDock(dot, Dock.Left);
-        subtitleRow.Children.Add(dot);
-        subtitleRow.Children.Add(_subtitle);
-
-        var texts = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(Tokens.Space.L, 0, Tokens.Space.M, 0) };
-        texts.Children.Add(_header);
-        texts.Children.Add(subtitleRow);
-
-        var pill = UiKit.Pill($"v{UpdateChecker.GetCurrentVersion()}");
-        pill.VerticalAlignment = VerticalAlignment.Top;
-        pill.Margin = new Thickness(0, 10, 0, 0);
-        AutomationProperties.SetAutomationId(pill, "settings-header-version");
-
-        var grid = new Grid { MaxWidth = 640, Margin = new Thickness(28, 10, 28, 18) };
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        Grid.SetColumn(texts, 1);
-        Grid.SetColumn(pill, 2);
-        grid.Children.Add(markHost);
-        grid.Children.Add(texts);
-        grid.Children.Add(pill);
-        return grid;
+        var host = new Border { MaxWidth = 640, Margin = new Thickness(28, 10, 28, 20), Child = _header };
+        return host;
     }
 
     /// <summary>把控件从它的父容器上摘下来（父级是 <see cref="Panel"/>/<see cref="Decorator"/> 时）。</summary>
@@ -876,12 +842,32 @@ public sealed class SettingsWindow : Window
             $"数据目录统计：记录={records} 图片文件={images} 缩略图文件={thumbs} 目录={AppPaths.DataRoot}");
     }
 
+    private DispatcherTimer? _statusTimer;
+
     private void ShowStatus(string message, bool error)
     {
+        _statusTimer?.Stop();
         _status.Text = message;
         _status.SetResourceReference(
             TextBlock.ForegroundProperty,
             error ? ThemeManager.BrushKeys.Error : ThemeManager.BrushKeys.Success);
+
+        // 成功提示 2 秒后自动消失；错误一直留着。
+        if (!error)
+        {
+            if (_statusTimer is null)
+            {
+                _statusTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+                _statusTimer.Tick += (_, _) =>
+                {
+                    _statusTimer.Stop();
+                    _status.Text = string.Empty;
+                };
+            }
+
+            _statusTimer.Start();
+        }
+
         AppLog.Info("Settings", $"设置窗口状态：{message}");
     }
 
@@ -900,7 +886,6 @@ public sealed class SettingsWindow : Window
         Title = StringsUi.Get("S.Settings.WindowTitle");
         AutomationProperties.SetName(this, StringsUi.Get("S.Settings.WindowName"));
         _header.Text = StringsUi.Get("S.Settings.Heading");
-        _subtitle.Text = StringsUi.Get("S.Settings.Subtitle");
         BuildSections();
         SyncControlsFromSettings();
         RefreshEffectiveLabels();
@@ -946,7 +931,6 @@ internal sealed class ShortcutBox : TextBox
         HorizontalContentAlignment = HorizontalAlignment.Center;
         HorizontalAlignment = HorizontalAlignment.Right;
         VerticalAlignment = VerticalAlignment.Center;
-        Cursor = Cursors.Hand;
         ToolTip = StringsUi.Get("S.Settings.Shortcut.Hint");
         AutomationProperties.SetAutomationId(this, automationId);
         AutomationProperties.SetName(this, StringsUi.Get("S.Settings.Shortcut.Hint"));

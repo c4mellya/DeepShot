@@ -28,11 +28,18 @@ public static class HistoryGallery
     internal static HistoryGalleryWindow? Current => _window;
 
     /// <summary>
+    /// 主窗口左侧导航点“设置”且设置页尚未创建时调用（由 App 挂上，走与托盘“设置”相同的完整接线）；
+    /// 未挂时窗口退化为直接创建设置页。
+    /// </summary>
+    internal static Action? OpenSettingsRequested { get; set; }
+
+    /// <summary>
     /// 打开图库（已有实例则激活它）。
     /// </summary>
     /// <param name="store">历史写入器（必须是启动时初始化成功的那一个）。</param>
+    /// <param name="settingsStore">设置存储器（设置页需要；为 null 时设置页只好退化为默认值）。</param>
     /// <returns>图库窗口；创建失败返回 null（调用方提示用户）。</returns>
-    internal static HistoryGalleryWindow? Show(HistoryStore store)
+    internal static HistoryGalleryWindow? Show(HistoryStore store, SettingsStore? settingsStore = null)
     {
         ArgumentNullException.ThrowIfNull(store);
 
@@ -45,7 +52,7 @@ public static class HistoryGallery
 
         try
         {
-            var window = new HistoryGalleryWindow(store);
+            var window = new HistoryGalleryWindow(store, settingsStore);
             window.Closed += OnWindowClosed;
             _window = window;
             window.Show();
@@ -58,6 +65,50 @@ public static class HistoryGallery
             _window = null;
             AppLog.Error("History", "打开历史图库失败", ex);
             return null;
+        }
+    }
+
+    /// <summary>打开主窗口并切到设置页（已有实例则复用）。</summary>
+    internal static HistoryGalleryWindow? ShowSettings(HistoryStore store, SettingsStore settingsStore)
+    {
+        var window = Show(store, settingsStore);
+        if (window is null)
+        {
+            return null;
+        }
+
+        window.EnsureSettingsPage(settingsStore);
+        window.ShowSettingsPage();
+        return window;
+    }
+
+    /// <summary>截图前把主窗口藏起来（避免被拍进冻结图），返回它之前是否可见。</summary>
+    internal static bool HideForCapture()
+    {
+        if (_window is not { IsVisible: true } window)
+        {
+            return false;
+        }
+
+        window.Hide();
+        return true;
+    }
+
+    /// <summary>截图结束后恢复主窗口（只在截图前确实可见时）。</summary>
+    internal static void RestoreAfterCapture()
+    {
+        if (_window is not { IsVisible: false } window)
+        {
+            return;
+        }
+
+        try
+        {
+            window.Show();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn("History", $"截图后恢复主窗口失败（忽略）：{ex.Message}");
         }
     }
 
@@ -77,7 +128,7 @@ public static class HistoryGallery
         try
         {
             _window.ShowRetentionNotice(reason);
-            _window.Reload();
+            _window.NotifyHistoryChanged();
         }
         catch (Exception ex)
         {

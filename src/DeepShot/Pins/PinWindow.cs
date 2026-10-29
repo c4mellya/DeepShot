@@ -252,7 +252,9 @@ public sealed class PinWindow : Window
 
         // 与遮罩一致：工具窗口不出现在任务栏/Alt+Tab，也不进入截图候选。
         var extendedStyle = NativeMethods.GetWindowStyle(_hwnd, NativeMethods.GWL_EXSTYLE);
-        var updatedStyle = extendedStyle | NativeMethods.WS_EX_TOOLWINDOW;
+        // WS_EX_LAYERED：AllowsTransparency=false 时 Window.Opacity 不生效，
+        // 透明度改由 SetLayeredWindowAttributes 整窗混合（不影响 1:1 像素）。
+        var updatedStyle = extendedStyle | NativeMethods.WS_EX_TOOLWINDOW | WsExLayered;
         if (updatedStyle != extendedStyle && !NativeMethods.SetWindowStyle(_hwnd, NativeMethods.GWL_EXSTYLE, updatedStyle))
         {
             AppLog.Warn("Pins", $"设置 WS_EX_TOOLWINDOW 失败（Win32Error={Marshal.GetLastWin32Error()}）");
@@ -260,13 +262,46 @@ public sealed class PinWindow : Window
 
         // 无边框窗口默认没有阴影；给窗口类加 CS_DROPSHADOW，让贴图有轻微投影，
         // 与桌面区分开（比自绘阴影简单，也不会因为 AllowsTransparency 影响 1:1 像素）。
-        var classStyle = NativeMethods.GetWindowLong(_hwnd, NativeMethods.GCL_STYLE);
+        var classStyle = GetClassStyle(_hwnd);
         if ((classStyle & NativeMethods.CS_DROPSHADOW) == 0)
         {
             NativeMethods.SetWindowClassStyle(
                 _hwnd,
                 NativeMethods.GCL_STYLE,
                 classStyle | NativeMethods.CS_DROPSHADOW);
+        }
+
+        ApplyOpacity();
+    }
+
+    private const int WsExLayered = 0x00080000;
+    private const uint LwaAlpha = 0x2;
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint crKey, byte bAlpha, uint dwFlags);
+
+    [DllImport("user32.dll", EntryPoint = "GetClassLongPtrW")]
+    private static extern IntPtr GetClassLongPtr64(IntPtr hWnd, int nIndex);
+
+    [DllImport("user32.dll", EntryPoint = "GetClassLongW")]
+    private static extern uint GetClassLong32(IntPtr hWnd, int nIndex);
+
+    private static int GetClassStyle(IntPtr hwnd) => Environment.Is64BitProcess
+        ? unchecked((int)GetClassLongPtr64(hwnd, NativeMethods.GCL_STYLE).ToInt64())
+        : unchecked((int)GetClassLong32(hwnd, NativeMethods.GCL_STYLE));
+
+    /// <summary>整窗透明度：分层窗口 alpha（窗口自身 Opacity 始终保持 1）。</summary>
+    private void ApplyOpacity()
+    {
+        if (_hwnd == IntPtr.Zero)
+        {
+            return;
+        }
+
+        var alpha = (byte)Math.Clamp(Math.Round(_state.Opacity * 255), 0, 255);
+        if (!SetLayeredWindowAttributes(_hwnd, 0, alpha, LwaAlpha))
+        {
+            AppLog.Warn("Pins", $"设置贴图透明度失败（Win32Error={Marshal.GetLastWin32Error()}）");
         }
     }
 
@@ -383,7 +418,7 @@ public sealed class PinWindow : Window
     /// <summary>把视觉表现（边框颜色、关闭按钮、锁定提示、透明度、鼠标指针）同步到状态。</summary>
     private void ApplyVisualState()
     {
-        Opacity = _state.Opacity;
+        ApplyOpacity();
         _border.BorderBrush = _state.IsLocked ? _lockedBorderBrush : _normalBorderBrush;
         _border.BorderThickness = new Thickness(
             _state.IsLocked ? LockedBorderThicknessValue : BorderThicknessValue);
@@ -706,6 +741,7 @@ public sealed class PinWindow : Window
             AppLog.Info(
                 "Pins",
                 $"右键“复制”：已复制 {_image.PixelWidth}x{_image.PixelHeight} 到剪贴板");
+            ToastWindow.Show(StringsUi.Get("S.Overlay.Copied"));
         }
         catch (COMException ex)
         {
@@ -715,7 +751,7 @@ public sealed class PinWindow : Window
         catch (Exception ex)
         {
             AppLog.Error("Pins", "右键“复制”失败", ex);
-            ToastWindow.Show(ex.Message);
+            ToastWindow.Show(StringsUi.Get("S.Overlay.CopyFailed"));
         }
     }
 

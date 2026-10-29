@@ -115,7 +115,8 @@ internal sealed class AppDialogWindow : Window
         Width = 440;
         SizeToContent = SizeToContent.Height;
         ResizeMode = ResizeMode.NoResize;
-        SetResourceReference(BackgroundProperty, ThemeManager.BrushKeys.WindowBackground);
+        // ContentDialog：内容层在上（浅），按钮区在下（窗口底色）。
+        SetResourceReference(BackgroundProperty, ThemeManager.BrushKeys.Surface);
         SetResourceReference(FontFamilyProperty, ThemeManager.FontFamilyKey);
         AutomationProperties.SetAutomationId(this, "app-dialog");
         AutomationProperties.SetName(this, title);
@@ -135,23 +136,20 @@ internal sealed class AppDialogWindow : Window
             Topmost = true;
         }
 
-        // 图标徽标（统一走 UiKit.StatusBadge：淡色圆底 + 细环 + 同色矢量图标）。
-        var (iconData, toneKey) = ToneFor(kind, destructive);
-        var badge = UiKit.StatusBadge(iconData, toneKey, 44);
-
         // 文字区：标题不是应用名时（如"删除截图"）在正文上方再给一行醒目标题，
         // 让对话框一眼就说清"要做什么"；应用名已经在标题栏里，不重复。
         var textStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         if (!string.IsNullOrWhiteSpace(title) && !string.Equals(title, AppInfo.Name, StringComparison.OrdinalIgnoreCase))
         {
             var heading = UiKit.Text(title, TextRole.Subtitle, wrap: true);
-            heading.Margin = new Thickness(0, 0, 0, Tokens.Space.XS + 2);
+            heading.FontSize = 20;
+            heading.Margin = new Thickness(0, 0, 0, Tokens.Space.M);
             AutomationProperties.SetAutomationId(heading, "app-dialog-heading");
             textStack.Children.Add(heading);
         }
 
         var body = UiKit.Text(message, TextRole.BodyLarge, wrap: true);
-        body.LineHeight = 22;
+        body.LineHeight = 20;
         AutomationProperties.SetAutomationId(body, "app-dialog-message");
         AutomationProperties.SetName(body, message);
         textStack.Children.Add(body);
@@ -163,17 +161,9 @@ internal sealed class AppDialogWindow : Window
             MaxHeight = 300,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            Margin = new Thickness(Tokens.Space.L, 0, 0, 0),
-            VerticalAlignment = VerticalAlignment.Center,
-            MinHeight = 44,
-            VerticalContentAlignment = VerticalAlignment.Center,
         };
 
         var content = new Grid();
-        content.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        Grid.SetColumn(scroller, 1);
-        content.Children.Add(badge);
         content.Children.Add(scroller);
 
         // 按钮：确认 = 主按钮（破坏性操作 = 危险红），取消 = 次按钮；统一 UiKit 规格。
@@ -209,11 +199,14 @@ internal sealed class AppDialogWindow : Window
 
         // 内容区 + 底部操作栏（面板色底 + 顶部分隔线，与设置窗口的底栏同款）。
         var buttons = cancel is null ? UiKit.ButtonBar(ok) : UiKit.ButtonBar(cancel, ok);
-        content.Margin = new Thickness(Tokens.DialogPadding.Left, Tokens.DialogPadding.Top + 4, Tokens.DialogPadding.Right, Tokens.DialogPadding.Bottom);
+        content.Margin = new Thickness(Tokens.DialogPadding.Left, Tokens.Space.S, Tokens.DialogPadding.Right, Tokens.DialogPadding.Bottom);
 
+        var footer = UiKit.FooterBar(buttons, new Thickness(Tokens.DialogPadding.Left, Tokens.DialogPadding.Left, Tokens.DialogPadding.Right, Tokens.DialogPadding.Left));
+        footer.SetResourceReference(Border.BackgroundProperty, ThemeManager.BrushKeys.WindowBackground);
+        footer.SetResourceReference(Border.BorderBrushProperty, ThemeManager.BrushKeys.Border);
         var panel = new StackPanel();
         panel.Children.Add(content);
-        panel.Children.Add(UiKit.FooterBar(buttons));
+        panel.Children.Add(footer);
         Content = panel;
         AppChrome.Apply(this, allowMaximize: false, allowMinimize: false);
 
@@ -234,12 +227,4 @@ internal sealed class AppDialogWindow : Window
     }
 
     private void Accept() => DialogResult = true;
-
-    private static (string Icon, string ToneKey) ToneFor(AppDialogKind kind, bool destructive) => kind switch
-    {
-        AppDialogKind.Error => (AppIcons.Close, ThemeManager.BrushKeys.Error),
-        AppDialogKind.Warning => (AppIcons.Warning, destructive ? ThemeManager.BrushKeys.Error : ThemeManager.BrushKeys.Warning),
-        AppDialogKind.Question => (AppIcons.Help, ThemeManager.BrushKeys.Accent),
-        _ => (AppIcons.Info, ThemeManager.BrushKeys.Accent),
-    };
 }

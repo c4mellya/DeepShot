@@ -1,14 +1,14 @@
 # DeepShot
 
-DeepShot is a screenshot and desktop pin tool for Windows 10 22H2 / Windows 11 x64, built with C#, .NET 10 and WPF. Includes Simplified Chinese and English, light/dark/system themes.
+DeepShot is a screenshot and desktop pin tool for Windows 10 22H2 / Windows 11 x64, built with C#, .NET 10 and WPF. Includes Simplified Chinese and English, plus Claude / DeepSeek palettes in light, dark or system mode.
 
 Repository: [c4mellya/DeepShot](https://github.com/c4mellya/DeepShot) · [简体中文](README.md)
 
 ## Install
 
-Run `DeepShot-0.2.1-Setup-x64.exe` for a per-user installation, or extract `DeepShot-0.2.1-win-x64.zip`, open the `DeepShot` folder, and run `DeepShot.exe`. Both releases include the .NET runtime. Keep all files and the Resources folder together. The installer is unsigned.
+Run `DeepShot-0.4.0-Setup-x64.exe` for a per-user installation, or extract `DeepShot-0.4.0-win-x64.zip`, open the `DeepShot` folder, and run `DeepShot.exe`. Both releases include the .NET runtime. Keep all files and the Resources folder together. The installer is unsigned.
 
-DeepShot lives in the system tray, possibly inside the hidden icons panel. Closing History or Settings keeps the application running; select Exit from the tray menu to stop it. Startup at sign-in is optional and disabled by default. A short guide appears on first launch.
+DeepShot lives in the system tray, possibly inside the hidden icons panel. History and Settings share one main window; closing it keeps the application running. Select Exit from the tray menu to stop it. Startup at sign-in is optional and disabled by default. A short guide appears on first launch.
 
 ## Capture and annotate
 
@@ -35,14 +35,20 @@ Inside quick view, wheel up goes to the previous/newer image and wheel down to t
 
 ## History and settings
 
-History provides date groups, name search, favorites, rename, preview, copy, export, pin, delete, and additional annotations. Regular records expire 30 days after creation by default. In Settings → Data folder, set retention to 1–3650 days; press Enter or leave the field to save. The new value is used at next startup or daily cleanup. Favorites are retained, and renaming or editing does not extend retention.
+The tray History item and the quick-view gear open the same main window: history on the left, Settings on the right via the gear in the history header. Settings uses a sidebar plus content pane (General / Shortcuts / Appearance / Data / About) and saves every change immediately. Closing the main window only hides it; the tray process keeps running.
+
+A **date index** runs down the right side of the gallery: hover a month for its record count and click to jump; the calendar button opens a date popover for a specific year / month / day, with a Today shortcut. The list starts at the chosen date and continues loading older records; “Back to latest” returns to the first page.
+
+History provides date groups, name search (Ctrl+F), favorites, rename, preview, copy, export, pin, delete, and additional annotations. Regular records expire 30 days after creation by default. In Settings → Data, set retention to 1–3650 days; press Enter or leave the field to save. The new value is used at next startup or daily cleanup. Favorites are retained, and renaming or editing does not extend retention.
 
 Drag a history thumbnail or the full preview image into another application or folder to transfer the original PNG as a standard file. Only copying is allowed; the history original is not moved. Press Esc to cancel. The destination application determines whether it accepts, imports, or sends the image.
 
 “Save and overwrite” replaces the same history image without keeping older versions. Existing annotations are flattened pixels. Canceling leaves the image unchanged. Already-open pins keep their original snapshot.
 
-Settings provides configurable shortcuts for capture, quick capture, pins and quick view, plus default capture mode, language, theme and startup at sign-in. Two- and three-key combinations support Ctrl / Alt / Shift / Win plus a letter, digit, function, arrow, space, numpad or punctuation key. Shortcut conflicts are reported. Choose “Draw a rectangle” for manual selection without window detection, or “Detect windows” to select windows on hover/click while retaining manual dragging. The choice is saved automatically and applies to the next capture. Images stay in `%LOCALAPPDATA%\DeepShot`. Automatic cleanup does not delete manually exported files. Uninstall keeps data by default, with an explicit optional deletion prompt. Update checks query the [latest stable GitHub Release](https://github.com/c4mellya/DeepShot/releases/latest), compare versions, and display release notes with a link to the release page. Network failures are reported. Updates are not downloaded or installed automatically.
+Settings provides configurable shortcuts for capture, quick capture, pins and quick view, plus default capture mode, language, theme and startup at sign-in. Two- and three-key combinations support Ctrl / Alt / Shift / Win plus a letter, digit, function, arrow, space, numpad or punctuation key. Shortcut conflicts are reported. Choose “Draw a rectangle” for manual selection without window detection, or “Detect windows” to select windows on hover/click while retaining manual dragging. The choice is saved automatically and applies to the next capture.
+
+Appearance offers two palette brands, **Claude / DeepSeek**, with light / dark / follow-system modes. Changes apply to every window immediately; the dark glass layers of pins and the capture overlay stay fixed for contrast. Images stay in `%LOCALAPPDATA%\DeepShot`. Automatic cleanup does not delete manually exported files. Uninstall keeps data by default, with an explicit optional deletion prompt. Update checks query the [latest stable GitHub Release](https://github.com/c4mellya/DeepShot/releases/latest), compare versions, and display release notes with a link to the release page. Network failures are reported. Updates are not downloaded or installed automatically.
 
 ## Font credit
 
-The UI uses Xiaomi's [MiSans](https://hyperos.mi.com/font/) typeface (Copyright © 2020-2025 Beijing Xiaomi Mobile Software Co.,Ltd.) under the MiSans free commercial license; the Regular and Semibold weights are embedded unmodified. MiSans remains the property of Xiaomi; the notice ships with the app as `Assets\Fonts\MiSans-NOTICE.txt` in the install folder.
+The UI uses the native Windows 11 font Segoe UI Variable (Segoe UI on Windows 10) with Microsoft YaHei UI for Chinese; no third-party fonts are embedded.

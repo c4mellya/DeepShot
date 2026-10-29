@@ -12,6 +12,8 @@
     <sys:String x:Key="S.Common.Ok">OK</sys:String>
     <sys:String x:Key="S.Common.Cancel">Cancel</sys:String>
     <sys:String x:Key="S.Common.Close">Close</sys:String>
+    <sys:String x:Key="S.Common.Minimize">Minimize</sys:String>
+    <sys:String x:Key="S.Common.Maximize">Maximize</sys:String>
     <sys:String x:Key="S.Common.Copy">Copy</sys:String>
     <sys:String x:Key="S.Common.SaveAs">Save as</sys:String>
     <sys:String x:Key="S.Common.Pin">Pin</sys:String>
@@ -66,6 +68,24 @@
     <sys:String x:Key="S.Overlay.Redo">Redo</sys:String>
     <sys:String x:Key="S.Overlay.SizeBadge">{0} × {1}</sys:String>
     <sys:String x:Key="S.Overlay.SelectionLocked">Selection locked ({0} annotations)</sys:String>
+    <sys:String x:Key="S.Overlay.Copied">Copied to clipboard</sys:String>
+    <sys:String x:Key="S.Overlay.Saved">Saved {0}</sys:String>
+    <sys:String x:Key="S.Overlay.DiscardHint">Press Esc again to discard annotations and exit</sys:String>
+    <sys:String x:Key="S.Overlay.CannotDraw">Annotations aren't available right now</sys:String>
+    <sys:String x:Key="S.Overlay.CannotType">Text can't be added right now</sys:String>
+    <sys:String x:Key="S.Overlay.NothingToUndo">Nothing to undo</sys:String>
+    <sys:String x:Key="S.Overlay.NothingToRedo">Nothing to redo</sys:String>
+    <sys:String x:Key="S.Overlay.CopyFailed">Couldn't copy</sys:String>
+    <sys:String x:Key="S.Overlay.SaveDialogFailed">Couldn't open the save dialog</sys:String>
+    <sys:String x:Key="S.Overlay.SaveFailed">Couldn't save. Try again.</sys:String>
+    <sys:String x:Key="S.Overlay.PinFailed">Couldn't pin</sys:String>
+    <sys:String x:Key="S.Overlay.TextInput">Annotation text</sys:String>
+    <sys:String x:Key="S.Overlay.Color.Red">Red</sys:String>
+    <sys:String x:Key="S.Overlay.Color.Yellow">Yellow</sys:String>
+    <sys:String x:Key="S.Overlay.Color.Green">Green</sys:String>
+    <sys:String x:Key="S.Overlay.Color.Blue">Blue</sys:String>
+    <sys:String x:Key="S.Overlay.Color.White">White</sys:String>
+    <sys:String x:Key="S.Overlay.Color.Black">Black</sys:String>
 
     <!-- ===== Pins ===== -->
     <sys:String x:Key="S.Pin.WindowTitle">DeepShot pin {0}</sys:String>
@@ -88,6 +108,24 @@
     <!-- ===== History gallery ===== -->
     <sys:String x:Key="S.History.WindowTitle">History</sys:String>
     <sys:String x:Key="S.History.WindowName">DeepShot history gallery</sys:String>
+    <sys:String x:Key="S.History.PageDesc">Browse, search and manage your screenshots.</sys:String>
+    <sys:String x:Key="S.History.Toolbar.DateJump">Jump to date</sys:String>
+    <sys:String x:Key="S.History.Toolbar.Date">Date</sys:String>
+    <sys:String x:Key="S.History.Toolbar.Select">Select</sys:String>
+    <sys:String x:Key="S.History.Toolbar.SelectDone">Done</sys:String>
+    <sys:String x:Key="S.History.DateIndex.Name">Date index</sys:String>
+    <sys:String x:Key="S.History.DateIndex.ReturnLatest">Back to latest</sys:String>
+    <sys:String x:Key="S.History.DateIndex.MonthTip">{0} · {1} items</sys:String>
+    <sys:String x:Key="S.History.DateJump.Title">Jump to date</sys:String>
+    <sys:String x:Key="S.History.DateJump.Today">Today</sys:String>
+    <sys:String x:Key="S.History.DateJump.Close">Close</sys:String>
+    <sys:String x:Key="S.History.DateJump.BackToMonths">Back to months</sys:String>
+    <sys:String x:Key="S.History.DateJump.NoRecords">No records on this day</sys:String>
+    <sys:String x:Key="S.History.DateJump.Count">{0} items</sys:String>
+    <sys:String x:Key="S.History.DateJump.Year">{0}</sys:String>
+    <sys:String x:Key="S.History.SelectDay">Select this day</sys:String>
+    <sys:String x:Key="S.History.SearchHint">Ctrl+F</sys:String>
+    <sys:String x:Key="S.History.PageHeadCount">{0} records</sys:String>
     <sys:String x:Key="S.History.Title">History</sys:String>
     <sys:String x:Key="S.History.SearchPlaceholder">Search</sys:String>
     <sys:String x:Key="S.History.SearchName">Search history</sys:String>
@@ -129,6 +167,7 @@
 
     <!-- ===== History: empty states ===== -->
     <sys:String x:Key="S.History.EmptyNoRecords">Press {0} to capture; your history will show up here.</sys:String>
+    <sys:String x:Key="S.History.EmptyNoRecordsNoShortcut">The capture shortcut is cleared; start from the tray or Settings.</sys:String>
     <sys:String x:Key="S.History.EmptySearchAndFavorites">No favorites match “{0}”.</sys:String>
     <sys:String x:Key="S.History.EmptyFavorites">Star a capture to see it here.</sys:String>
     <sys:String x:Key="S.History.EmptySearch">Nothing matches “{0}”.</sys:String>
@@ -238,6 +277,7 @@
     <sys:String x:Key="S.Toast.QuickScreenshotCopied">Screenshot copied</sys:String>
     <sys:String x:Key="S.Settings.Shortcut.Pin">Pin shortcut</sys:String>
     <sys:String x:Key="S.Settings.Shortcut.Hint">Press a two- or three-key combination, such as Alt+A or Alt+Shift+A, including Ctrl / Alt / Shift / Win.</sys:String>
+    <sys:String x:Key="S.Settings.Shortcut.Cleared">Shortcut cleared</sys:String>
     <sys:String x:Key="S.Settings.Shortcut.Waiting">Press the combination…</sys:String>
     <sys:String x:Key="S.Settings.Shortcut.NeedModifier">Needs at least one modifier (Ctrl / Alt / Shift / Win) plus a letter, digit, function, arrow, numpad or punctuation key.</sys:String>
     <sys:String x:Key="S.Settings.Shortcut.SecondKey">Choose a supported main key: a letter, digit, function, arrow, numpad or punctuation key.</sys:String>
@@ -264,11 +304,18 @@
     <sys:String x:Key="S.Settings.Theme.Effective">Current look: {0} (system: {1})</sys:String>
     <sys:String x:Key="S.Settings.Section.Startup">Startup</sys:String>
     <sys:String x:Key="S.Settings.Startup.Enable">Start DeepShot when signing in</sys:String>
-    <sys:String x:Key="S.Settings.Startup.Detail">Current user, written to HKCU\Software\Microsoft\Windows\CurrentVersion\Run</sys:String>
-    <sys:String x:Key="S.Settings.Startup.On">Registry startup entry written.</sys:String>
-    <sys:String x:Key="S.Settings.Startup.Off">Registry startup entry removed.</sys:String>
-    <sys:String x:Key="S.Settings.Startup.Failed">Updating the startup entry failed (the registry write was refused, see the log).</sys:String>
-    <sys:String x:Key="S.Settings.Startup.BusyHint">The startup toggle is waiting for the registry, please wait.</sys:String>
+    <sys:String x:Key="S.Settings.Startup.Detail">Starts in the background after you sign in to Windows.</sys:String>
+    <sys:String x:Key="S.Settings.Startup.On">DeepShot will start when you sign in.</sys:String>
+    <sys:String x:Key="S.Settings.Startup.Off">DeepShot won't start when you sign in.</sys:String>
+    <sys:String x:Key="S.Settings.Startup.Failed">Couldn't update the startup setting. See the log for details.</sys:String>
+    <sys:String x:Key="S.Settings.Startup.BusyHint">Updating the startup setting, please wait.</sys:String>
+    <sys:String x:Key="S.Welcome.WindowTitle">Welcome to DeepShot</sys:String>
+    <sys:String x:Key="S.Welcome.Tagline">Capture, annotate, pin</sys:String>
+    <sys:String x:Key="S.Welcome.Capture">Capture</sys:String>
+    <sys:String x:Key="S.Welcome.Pin">Pin from clipboard</sys:String>
+    <sys:String x:Key="S.Welcome.Recent">Recent captures</sys:String>
+    <sys:String x:Key="S.Welcome.TrayIcon">Tray icon</sys:String>
+    <sys:String x:Key="S.Welcome.Start">Get started</sys:String>
     <sys:String x:Key="S.Settings.Update.ManifestUrl">Update channel (AppInfo.UpdateManifestUrl)</sys:String>
     <sys:String x:Key="S.Settings.Update.Check">Check for updates</sys:String>
     <sys:String x:Key="S.Settings.Section.Data">Data folder</sys:String>
@@ -289,8 +336,40 @@
     <sys:String x:Key="S.Settings.Close">Close</sys:String>
     <sys:String x:Key="S.Settings.Version">Version {0}</sys:String>
     <sys:String x:Key="S.Settings.Section.About">About</sys:String>
-    <sys:String x:Key="S.Settings.About.Font">Chinese font: MiSans by Xiaomi</sys:String>
-    <sys:String x:Key="S.Settings.About.FontLicense">Used under the MiSans free commercial license</sys:String>
+    <sys:String x:Key="S.Settings.About.Font">Interface font: Inter / Microsoft YaHei UI</sys:String>
+    <sys:String x:Key="S.Settings.About.FontLicense">Inter is used under the SIL Open Font License 1.1</sys:String>
+    <sys:String x:Key="S.Settings.Nav.BackToGallery">Back to library</sys:String>
+    <sys:String x:Key="S.Settings.Nav.General">General</sys:String>
+    <sys:String x:Key="S.Settings.Nav.Shortcuts">Shortcuts</sys:String>
+    <sys:String x:Key="S.Settings.Nav.Appearance">Appearance</sys:String>
+    <sys:String x:Key="S.Settings.Nav.Data">Data</sys:String>
+    <sys:String x:Key="S.Settings.Nav.About">About</sys:String>
+    <sys:String x:Key="S.Settings.Pane.General.Title">General</sys:String>
+    <sys:String x:Key="S.Settings.Pane.General.Desc">Capture mode, language and startup.</sys:String>
+    <sys:String x:Key="S.Settings.Pane.Shortcuts.Title">Shortcuts</sys:String>
+    <sys:String x:Key="S.Settings.Pane.Shortcuts.Desc">Applied immediately; rolled back if another app owns the combination.</sys:String>
+    <sys:String x:Key="S.Settings.Pane.Appearance.Title">Appearance</sys:String>
+    <sys:String x:Key="S.Settings.Pane.Appearance.Desc">Pick a palette brand and light/dark mode; applied instantly.</sys:String>
+    <sys:String x:Key="S.Settings.Pane.Data.Title">Data</sys:String>
+    <sys:String x:Key="S.Settings.Pane.Data.Desc">History location, record count and retention rules.</sys:String>
+    <sys:String x:Key="S.Settings.Pane.About.Title">About</sys:String>
+    <sys:String x:Key="S.Settings.Pane.About.Desc">Version and updates.</sys:String>
+    <sys:String x:Key="S.Settings.Group.Capture">Capture &amp; startup</sys:String>
+    <sys:String x:Key="S.Settings.Group.Shortcuts">Global shortcuts</sys:String>
+    <sys:String x:Key="S.Settings.Group.Brand">Brand</sys:String>
+    <sys:String x:Key="S.Settings.Group.Mode">Light &amp; dark</sys:String>
+    <sys:String x:Key="S.Settings.Group.Storage">Storage</sys:String>
+    <sys:String x:Key="S.Settings.Group.Retention">History retention</sys:String>
+    <sys:String x:Key="S.Settings.Group.Update">Updates</sys:String>
+    <sys:String x:Key="S.Settings.Group.Font">Fonts</sys:String>
+    <sys:String x:Key="S.Settings.ThemeBrand">Palette brand</sys:String>
+    <sys:String x:Key="S.Settings.ThemeBrand.DeepSeek">DeepSeek</sys:String>
+    <sys:String x:Key="S.Settings.ThemeBrand.Claude">Claude</sys:String>
+    <sys:String x:Key="S.Settings.ThemeBrand.Hint">DeepSeek: cool white + brand blue; Claude: warm white + terracotta.</sys:String>
+    <sys:String x:Key="S.Settings.ThemeMode">Light &amp; dark</sys:String>
+    <sys:String x:Key="S.Settings.ThemeMode.Hint">Follow system uses the Windows app mode.</sys:String>
+    <sys:String x:Key="S.Settings.Theme.Summary">Current: {0} · {1}</sys:String>
+    <sys:String x:Key="S.Settings.Theme.BrandEffective">Current brand: {0}</sys:String>
 
     <!-- ===== Check for updates ===== -->
     <sys:String x:Key="S.Update.Title">Check for updates</sys:String>
@@ -367,4 +446,10 @@
     <sys:String x:Key="S.History.ZoomIn">Zoom in</sys:String>
     <sys:String x:Key="S.History.ZoomOut">Zoom out</sys:String>
     <sys:String x:Key="S.History.PreviewDetails">{0}×{1} px · {2} · {3}</sys:String>
+    <sys:String x:Key="S.History.MoreActions">More</sys:String>
+    <sys:String x:Key="S.Nav.Name">Navigation</sys:String>
+    <sys:String x:Key="S.Nav.All">All</sys:String>
+    <sys:String x:Key="S.Nav.Favorites">Favorites</sys:String>
+    <sys:String x:Key="S.History.PreviewInfo">{0} · {1}×{2}</sys:String>
+    <sys:String x:Key="S.Settings.PageTitle">Settings</sys:String>
 </ResourceDictionary>

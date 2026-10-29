@@ -302,6 +302,67 @@ public sealed class HistoryRepository
         }
     }
 
+    /// <summary>
+    /// 日期索引（图库右侧时间轴 / 日期跳转用）：按**本地日期**汇总当前过滤条件下的记录。
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>过滤 / 排序 / 分页</b>：日期索引只尊重 <paramref name="query"/> 里的搜索与收藏过滤
+    /// （与 <see cref="GetList"/> 用同一个 <see cref="BuildWhere"/>），**忽略排序与分页** ——
+    /// 无论界面怎么排序，"跳到某天"的偏移始终对应创建时间倒序。
+    /// </para>
+    /// <para>
+    /// <b>为什么不在 SQL 里按日期分组</b>：<c>CreatedAtUtc</c> 是 ISO-8601 UTC 文本，
+    /// <c>date()</c> 只能给 UTC 日期，而图库按本地日期分组（与
+    /// <see cref="HistoryGrouping.GroupByDay"/> 一致）。SQL 只按
+    /// <c>CreatedAtUtc DESC, Id DESC</c> 把时间列流式吐出来，本地日期与偏移在 C# 里算。
+    /// </para>
+    /// <para>
+    /// <b>不物化整表</b>：只读 <c>CreatedAtUtc</c> 一列并逐行喂给构建器，内存里每天只剩
+    /// 一个（日期, 条数, 偏移），几千条记录的开销可以忽略；同步查询，调用方决定是否放到后台线程。
+    /// </para>
+    /// </remarks>
+    /// <param name="query">查询条件（null = 默认视图：不过滤）；只有搜索/收藏过滤生效。</param>
+    public HistoryDateIndex GetDateIndex(HistoryQuery? query = null)
+    {
+        var effective = query ?? HistoryQuery.Default;
+
+        using var connection = Open();
+        try
+        {
+            var (where, parameters) = BuildWhere(effective);
+
+            using var command = connection.CreateCommand();
+            command.CommandText =
+                "SELECT CreatedAtUtc FROM history" + where + " ORDER BY CreatedAtUtc DESC, Id DESC;";
+            foreach (var (name, value) in parameters)
+            {
+                command.Parameters.AddWithValue(name, value);
+            }
+
+            var builder = HistoryDateIndex.CreateBuilder();
+            var rowIndex = 0;
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                if (HistoryRecord.TryParseUtc(reader.IsDBNull(0) ? null : reader.GetString(0), out var createdAtUtc))
+                {
+                    // 行号 = 该记录在结果集里的位置；某天首次出现时的行号就是它的 Offset。
+                    builder.AddRow(createdAtUtc, rowIndex);
+                }
+
+                // 时间列损坏的行仍占一个行号，后面的 Offset 不会因此前移。
+                rowIndex++;
+            }
+
+            return builder.Build();
+        }
+        catch (Exception ex) when (ex is not HistoryStoreException)
+        {
+            throw new HistoryStoreException($"读取历史日期索引失败：{ex.Message}", ex);
+        }
+    }
+
     /// <summary>列出全部名称（T24 生成不重名的默认名称用）。</summary>
     public IReadOnlyList<string> GetAllNames()
     {

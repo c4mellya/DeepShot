@@ -26,10 +26,9 @@ internal static class WelcomeGuide
     /// <summary>构建欢迎窗口（不显示、不写标记；预览/截图验证也走这里）。</summary>
     internal static Window Create(string screenshotShortcut, string pinShortcut)
     {
-        var chinese = StringsUi.IsChinese;
         var window = new Window
         {
-            Title = chinese ? "欢迎使用 DeepShot" : "Welcome to DeepShot",
+            Title = StringsUi.Get("S.Welcome.WindowTitle"),
             Width = 460,
             SizeToContent = SizeToContent.Height,
             ResizeMode = ResizeMode.NoResize,
@@ -43,29 +42,23 @@ internal static class WelcomeGuide
 
         var panel = new StackPanel { Margin = new Thickness(Tokens.Space.XXL, Tokens.Space.L, Tokens.Space.XXL, Tokens.Space.XL + 4) };
 
-        // 头部：居中的品牌徽标（带柔光）+ 大标题 + 一句话。
-        var mark = UiKit.BrandMark(64);
-        mark.HorizontalAlignment = HorizontalAlignment.Center;
-        panel.Children.Add(mark);
-
+        // 头部：标题 + 一句话。
         var title = UiKit.Text("DeepShot", TextRole.Display);
-        title.HorizontalAlignment = HorizontalAlignment.Center;
-        title.Margin = new Thickness(0, Tokens.Space.M, 0, 0);
+        title.FontSize = 28;
+        title.FontWeight = AppFonts.Semibold;
         panel.Children.Add(title);
 
-        var tagline = UiKit.Text(chinese ? "截图、标注、贴在桌面" : "Capture, annotate, pin", TextRole.Body, ThemeManager.BrushKeys.SecondaryForeground);
-        tagline.HorizontalAlignment = HorizontalAlignment.Center;
+        var tagline = UiKit.Text(StringsUi.Get("S.Welcome.Tagline"), TextRole.Body, ThemeManager.BrushKeys.SecondaryForeground);
         tagline.Margin = new Thickness(0, Tokens.Space.XS, 0, Tokens.Space.XL);
         panel.Children.Add(tagline);
 
-        // 三件事：行首图标方块 + 说明 + 右侧键帽。
+        // 三件事：说明 + 右侧键帽。
         panel.Children.Add(UiKit.Card(
-            Row(AppIcons.Crop, chinese ? "截图" : "Capture", UiKit.KeyCaps(screenshotShortcut)),
-            Row(AppIcons.Pin, chinese ? "贴图" : "Pin from clipboard", UiKit.KeyCaps(pinShortcut)),
-            Row(AppIcons.Gallery, chinese ? "最近截图" : "Recent captures",
-                UiKit.Text(chinese ? "托盘图标" : "Tray icon", TextRole.Caption))));
+            Row("S.Welcome.Capture", UiKit.KeyCaps(screenshotShortcut)),
+            Row("S.Welcome.Pin", UiKit.KeyCaps(pinShortcut)),
+            Row("S.Welcome.Recent", UiKit.Text(StringsUi.Get("S.Welcome.TrayIcon"), TextRole.Caption))));
 
-        var startText = chinese ? "开始使用" : "Get started";
+        var startText = StringsUi.Get("S.Welcome.Start");
         var button = UiKit.Button(startText, startText, window.Close, ButtonKind.Primary, "welcome-start");
         button.HorizontalAlignment = HorizontalAlignment.Stretch;
         button.Height = Tokens.Height.Large;
@@ -81,7 +74,7 @@ internal static class WelcomeGuide
         return window;
     }
 
-    /// <summary>一行：行首图标方块 + 说明 + 右侧附件（统一走 UiKit 的设置行版式）。</summary>
-    private static FrameworkElement Row(string iconData, string label, FrameworkElement trailing) =>
-        UiKit.SettingsRow(UiKit.RowLeading(UiKit.IconTile(iconData), UiKit.Text(label, TextRole.BodyLarge)), trailing);
+    /// <summary>一行：说明 + 右侧附件（统一走 UiKit 的设置行版式）。</summary>
+    private static FrameworkElement Row(string key, FrameworkElement trailing) =>
+        UiKit.SettingsRow(UiKit.Text(StringsUi.Get(key), TextRole.BodyLarge), trailing);
 }
