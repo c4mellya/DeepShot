@@ -108,6 +108,8 @@ internal sealed class HistoryQuickViewWindow : Window
 
         var heading = UiKit.Text(StringsUi.Get("S.QuickView.Title"), Tokens.Text.BodyLarge, weight: AppFonts.Semibold, measureNaturalWidth: true);
         heading.VerticalAlignment = VerticalAlignment.Center;
+        heading.HorizontalAlignment = HorizontalAlignment.Left;
+        heading.TextAlignment = TextAlignment.Left;
         heading.Margin = new Thickness(Tokens.Space.XS, 0, 0, 0);
         header.Children.Add(heading);
 
